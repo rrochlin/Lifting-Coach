@@ -1,0 +1,4 @@
+
+The key missing piece from other market offerings. Google sheets is the current gold standard that we're seeking to compete with. We need to offer something that has all of the intelligence and organization build in as well as allows AI to manage and update it.
+
+For the initial offering though it will need to just be a csv/excel upload since actually building out the agentic portion will take a lot of testing and refinement. Also crucially the agentic piece can happen outside of the development flow since we can test the agent's ability to modify and refine the plan outside of the UI for doing it in the first phase before shipping the product feature. 
