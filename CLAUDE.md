@@ -19,11 +19,17 @@ Lifting-Coach (working title "Workout App" in the design docs) — a personal iO
 ## Current state (as of this handoff)
 `Concepts.md`'s data model is fleshed out and internally consistent: planned-vs-logged sets are properly split (`PlannedSet`/`WorkoutSet`, `PlannedExercise`/`WorkoutExercise`), and "current block" is derived from `startDate` rather than gated by `endDate`, so it doesn't disappear from view when a block runs long (slipped schedule, unlogged deload week).
 
-The phase 1 project is scaffolded and the Workout Tracker is built — see "Project scaffold" below. `WorkoutSession` (logic), `WorkoutStore` (persistence), and `WorkoutTrackerView`/`TrackerModel` (UI) are all in. 59 tests pass. **The SwiftUI layer has never actually run** — see "Environment gotcha".
+The phase 1 project is scaffolded, and the **Tracker → Planner loop is closed**: workouts can be programmed into a block and started from the plan, with `%1RM` resolving against recorded maxes. Home shows real block progress and set-level adherence. 70 tests pass. **The SwiftUI layer has never actually run** — see "Environment gotcha".
 
-**Next step: the Workout Planner**, which is what makes the tracker useful — right now a workout can only be started ad-hoc, because nothing can author a `PlannedWorkout`. That needs `PlannedWorkoutStore`/`BlockStore` (the `plannedWorkout`/`plannedExercise`/`plannedSet`/`block` tables already exist and are unused), then the planner UI. `WorkoutStore` is the pattern to copy.
+Built: `WorkoutSession` + `WorkoutStore` + tracker UI; `PlanStore` + `UserStore` + planner UI; homepage metrics.
 
-After that, in rough order: History (calendar over `WorkoutStore.fetch(from:to:)`), Homepage metrics (needs a persisted `User` — there's no `UserStore` yet), then data export/import.
+**Next step: Workout History** — the calendar view in `Features/Workout History.md`. `WorkoutStore.fetch(from:to:)` already returns what it needs, so this is mostly UI.
+
+After that, in rough order:
+- **Profile: data export/import.** The one genuinely local part of that screen, and `Ideas.md` calls importing from other apps crucial.
+- **A real exercise catalog** to replace `ExerciseCatalog.seed`'s 10 hardcoded entries.
+- **Recording 1RMs from the UI.** `UserStore.recordMax` exists and is tested but nothing calls it, so `%1RM` prescriptions currently resolve to nothing on a fresh install.
+- **Superset authoring.** Both stores round-trip supersets and the tracker renders them, but the planner can only add exercises as their own group — there's no way to *make* one.
 
 Open items intentionally left unresolved (in the docs, not silently in the model):
 - Exercise catalog/assets are TBD — see `Concepts.md`'s TODO section (Strong/Heavy asset sourcing as an internal-use placeholder, swap before any public release). `ExerciseCatalog.seed` is a 10-entry hardcoded stand-in until then.
@@ -35,7 +41,7 @@ Open items intentionally left unresolved (in the docs, not silently in the model
 ## Project scaffold
 - `LiftingCoachModel/` — local Swift package, the portable core. Two targets:
   - `LiftingCoachModel` — pure domain types mirroring `Concepts.md`, no I/O, no dependencies. Derived logic lives here: `WorkoutPlan.currentBlock`/`nextBlock`, `WorkoutBlock.progress`/`restTime`, `User.resolvedWeight`.
-  - `LiftingCoachPersistence` — GRDB/SQLite. `AppDatabase` opens and migrates; `Migrations.swift` holds the append-only schema; `ExerciseStore` is the one fully-wired store and the pattern to copy for workouts/plans/blocks.
+  - `LiftingCoachPersistence` — GRDB/SQLite. `AppDatabase` opens and migrates; `Migrations.swift` holds the append-only schema. Four stores: `ExerciseStore` (catalog), `WorkoutStore` (logged), `PlanStore` (blocks + programs), `UserStore` (lifter + maxes + bodyweight).
   - `swift test` runs both suites with no Xcode involved — that's the point of keeping this a package. **Run it before `xcodebuild`; it's faster and catches most breakage.**
 - `Sources/App/` — the SwiftUI iOS app. `AppEnvironment` is the composition root (views never build their own store or client). `Backend/BackendClient.swift` is the phase 2 seam, implemented for now by `UnavailableBackend`, which throws on every call rather than quietly returning empty data.
 - `project.yml` + XcodeGen — `LiftingCoach.xcodeproj` is **generated and gitignored**. Edit `project.yml` and run `xcodegen generate`; never hand-edit the pbxproj, and don't commit it.
@@ -48,6 +54,9 @@ Open items intentionally left unresolved (in the docs, not silently in the model
 - `workoutSet.plannedFrom` is a **JSON snapshot of the prescription, not a foreign key**. `Concepts.md` embeds `PlannedSet` by value and that's right for storage too: logged history is self-contained, so `Design.md`'s "never destroy historical data" holds by shape rather than by a delete rule, and a workout can be logged from a plan that was never saved. Tradeoff: prescribed values aren't queryable in SQL — fine while adherence is computed per workout in memory, revisit if plan-wide analytics need to filter on them. Regression tested.
 - The tracker saves after **every** mutation, not on finish, so `fetchInProgress()` can recover a session the OS killed mid-workout.
 - Tests that assert calendar-day behavior pin their `Calendar` to UTC — `Calendar.current` makes "same day" depend on the machine's timezone, which is the thing under test.
+- **`LoadPrescription` persists two different ways on purpose.** In `plannedSet` it's discriminator + value across three columns, so the planner can eventually query it ("every set above 85%"). In `workoutSet.plannedFrom` it's inside the JSON snapshot, because there it's history, not a queryable plan. Don't "unify" these without deciding which need each one serves.
+- Blocks load with `program` populated and `workouts` left `nil`; `PlanStore.attachingLoggedWorkouts` joins them. Opening the planner shouldn't pull in every workout ever logged.
+- Phase 1 has no sign-in, so `UserStore.localUser()` creates a placeholder lifter on first launch. Phase 2's Cognito replaces the *identity*, not the storage.
 - `SetType` has no `failure` case: per `Mid lift thoughts.md`, failure is RPE 10 plus forced partials or a weight drop, and Strong's sticky failure status was a real annoyance.
 
 ### Environment gotcha
