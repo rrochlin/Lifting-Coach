@@ -156,10 +156,20 @@ extension AppDatabase {
                 t.column("rpe", .double)
                 t.column("notes", .text)
                 t.column("usernotes", .text)
-                // Reconciles logged vs. prescribed. setNull, not cascade: editing
-                // a plan must never delete what was actually lifted.
-                t.column("plannedFromId", .text)
-                    .references("plannedSet", onDelete: .setNull)
+                // The prescription this set was performed against, stored as a
+                // JSON snapshot rather than a foreign key into `plannedSet`.
+                //
+                // `Concepts.md` embeds `plannedFrom` by value, and that turns out
+                // to be the right call for storage too: logged history stays
+                // self-contained, so editing or deleting a plan cannot reach into
+                // what was actually lifted. That's Design.md's safety requirement
+                // enforced by shape instead of by a delete rule — and it's also
+                // what lets a workout be logged from a plan that was never saved.
+                //
+                // Tradeoff: prescribed values aren't directly queryable. Fine for
+                // phase 1, where adherence is computed per workout in memory;
+                // revisit if plan-wide analytics need to filter on them in SQL.
+                t.column("plannedFrom", .jsonText)
             }
         }
 

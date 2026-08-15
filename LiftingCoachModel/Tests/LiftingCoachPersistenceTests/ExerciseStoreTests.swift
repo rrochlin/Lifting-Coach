@@ -56,10 +56,12 @@ struct ExerciseStoreTests {
         #expect(results.allSatisfy { $0.name.contains("Squat") })
     }
 
-    @Test("Deleting a logged set's prescription preserves the logged set")
+    @Test("Deleting a plan cannot touch what was actually lifted")
     func editingPlanNeverDeletesHistory() throws {
         // The safety property from Design.md: the coach editing a plan must not
-        // destroy what was actually lifted. Enforced here as ON DELETE SET NULL.
+        // destroy historical data. Logged sets carry their prescription as a JSON
+        // snapshot rather than a foreign key, so there is no reference for a plan
+        // deletion to follow — the property holds by shape, not by a delete rule.
         let database = try AppDatabase.inMemory()
 
         try database.writer.write { db in
@@ -75,18 +77,27 @@ struct ExerciseStoreTests {
                 INSERT INTO workout (id, blockId) VALUES ('w1', 'b1');
                 INSERT INTO workoutExercise (id, workoutId, exerciseId, groupIndex, position)
                     VALUES ('we1', 'w1', 1, 0, 0);
-                INSERT INTO workoutSet (id, workoutExerciseId, position, reps, plannedFromId)
-                    VALUES ('ws1', 'we1', 0, 5, 'ps1');
+                INSERT INTO workoutSet (id, workoutExerciseId, position, reps, plannedFrom)
+                    VALUES ('ws1', 'we1', 0, 5, '{"id":"x","reps":5}');
                 """)
         }
 
+        // Delete the entire block, which cascades through the whole plan.
         try database.writer.write { db in
-            try db.execute(sql: "DELETE FROM plannedSet WHERE id = 'ps1'")
+            try db.execute(sql: "DELETE FROM block WHERE id = 'b1'")
         }
 
         let survived = try database.writer.read { db in
-            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM workoutSet WHERE id = 'ws1'")
+            try Int.fetchOne(db, sql: """
+                SELECT COUNT(*) FROM workoutSet WHERE id = 'ws1' AND plannedFrom IS NOT NULL
+                """)
         }
         #expect(survived == 1)
+
+        // The workout itself outlives its block too, rather than cascading away.
+        let workoutSurvived = try database.writer.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM workout WHERE id = 'w1'")
+        }
+        #expect(workoutSurvived == 1)
     }
 }

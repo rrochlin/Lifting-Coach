@@ -6,6 +6,28 @@ public enum LoadPrescription: Codable, Hashable, Sendable {
     case absolute(Measurement<UnitMass>)
     case percentOf1RM(Double)
     case rpe(Float)
+
+    /// Resolves to a concrete weight given the lifter's max for this exercise.
+    ///
+    /// Only `.percentOf1RM` actually needs `oneRepMax` — an absolute load
+    /// resolves with no lifter data at all, which matters because a plan can be
+    /// followed before any max has been recorded.
+    ///
+    /// `.rpe` deliberately returns `nil`: mapping an RPE target to a weight needs
+    /// historical set data and a rep-range-aware model (per
+    /// `Mid lift thoughts.md`, RPE on a triple and RPE on a set of 10 are not the
+    /// same instrument), so the lifter supplies the number at log time.
+    public func resolvedWeight(oneRepMax: Measurement<UnitMass>?) -> Measurement<UnitMass>? {
+        switch self {
+        case .absolute(let weight):
+            return weight
+        case .percentOf1RM(let percent):
+            guard let oneRepMax else { return nil }
+            return Measurement(value: oneRepMax.value * percent, unit: oneRepMax.unit)
+        case .rpe:
+            return nil
+        }
+    }
 }
 
 /// The prescription: what *should* be done. Distinct from `WorkoutSet`, which is

@@ -14,6 +14,7 @@ import LiftingCoachPersistence
 public final class AppEnvironment {
     public let database: AppDatabase
     public let exercises: ExerciseStore
+    public let workouts: WorkoutStore
 
     /// The seam where the phase 2 AWS backend lands. Nothing is wired up behind
     /// it yet — see `Backend/BackendClient.swift`.
@@ -22,6 +23,7 @@ public final class AppEnvironment {
     public init(database: AppDatabase, backend: any BackendClient) {
         self.database = database
         self.exercises = ExerciseStore(database)
+        self.workouts = WorkoutStore(database)
         self.backend = backend
     }
 
