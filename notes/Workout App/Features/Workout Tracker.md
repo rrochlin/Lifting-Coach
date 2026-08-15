@@ -12,4 +12,3 @@ The heart of the app - any fitness app worth its salt starts here and get's this
 - After a workout is completed a rest timer starts
 - Tracker view is compact and focuses on whats important to the user at the current moment. i.e. what's next and what the current target is
 - User can log notes and RPE for sets and exercises
-- 
