@@ -15,6 +15,12 @@ public final class AppEnvironment {
     public let database: AppDatabase
     public let exercises: ExerciseStore
     public let workouts: WorkoutStore
+    public let plans: PlanStore
+    public let users: UserStore
+
+    /// The single local lifter. Phase 1 has no sign-in, so this is resolved once
+    /// at launch and treated as fixed for the session.
+    public private(set) var currentUser: User?
 
     /// The seam where the phase 2 AWS backend lands. Nothing is wired up behind
     /// it yet — see `Backend/BackendClient.swift`.
@@ -24,6 +30,8 @@ public final class AppEnvironment {
         self.database = database
         self.exercises = ExerciseStore(database)
         self.workouts = WorkoutStore(database)
+        self.plans = PlanStore(database)
+        self.users = UserStore(database)
         self.backend = backend
     }
 
@@ -31,7 +39,7 @@ public final class AppEnvironment {
     public static func live() throws -> AppEnvironment {
         let database = try AppDatabase.onDisk()
         let environment = AppEnvironment(database: database, backend: UnavailableBackend())
-        try environment.seedCatalogIfNeeded()
+        try environment.bootstrap()
         return environment
     }
 
@@ -41,8 +49,19 @@ public final class AppEnvironment {
         // in the scaffold, not a runtime condition to handle.
         let database = try! AppDatabase.inMemory()
         let environment = AppEnvironment(database: database, backend: UnavailableBackend())
-        try! environment.seedCatalogIfNeeded()
+        try! environment.bootstrap()
         return environment
+    }
+
+    private func bootstrap() throws {
+        try seedCatalogIfNeeded()
+        currentUser = try users.localUser()
+    }
+
+    /// Re-reads the lifter after their metrics change, so a newly recorded 1RM
+    /// is reflected the next time a plan resolves a `%1RM` prescription.
+    public func reloadUser() {
+        currentUser = try? users.localUser()
     }
 
     /// Populates the placeholder exercise catalog on first launch.

@@ -10,6 +10,7 @@ struct WorkoutTrackerView: View {
     @State private var model: TrackerModel?
     @State private var isPickingExercise = false
     @State private var isConfirmingFinish = false
+    @State private var todaysPlan: [PlannedWorkout] = []
 
     var body: some View {
         NavigationStack {
@@ -29,6 +30,7 @@ struct WorkoutTrackerView: View {
                 model.resumeIfNeeded()
                 self.model = model
             }
+            todaysPlan = (try? environment.plans.fetchPlanned(on: Date())) ?? []
         }
         .sheet(isPresented: $isPickingExercise) {
             ExercisePicker { exercise in
@@ -39,15 +41,47 @@ struct WorkoutTrackerView: View {
 
     // MARK: States
 
+    @ViewBuilder
     private var idle: some View {
-        ContentUnavailableView {
-            Label("No workout in progress", systemImage: "figure.strengthtraining.traditional")
-        } description: {
-            Text("Start an empty session and add lifts as you go.")
-        } actions: {
-            Button("Start Workout") { model?.startAdHoc() }
-                .buttonStyle(.borderedProminent)
+        if todaysPlan.isEmpty {
+            ContentUnavailableView {
+                Label("No workout in progress", systemImage: "figure.strengthtraining.traditional")
+            } description: {
+                Text("Nothing programmed for today. Start an empty session and add lifts as you go.")
+            } actions: {
+                Button("Start Empty Workout") { model?.startAdHoc() }
+                    .buttonStyle(.borderedProminent)
+            }
+        } else {
+            List {
+                Section("Programmed Today") {
+                    ForEach(todaysPlan) { planned in
+                        Button {
+                            start(planned)
+                        } label: {
+                            PlannedSummaryRow(workout: planned)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                Section {
+                    Button("Start Empty Workout") { model?.startAdHoc() }
+                }
+            }
         }
+    }
+
+    /// Starts from the plan, handing over the block and lifter so `%1RM`
+    /// prescriptions resolve to real weights and rest defaults apply.
+    private func start(_ planned: PlannedWorkout) {
+        let block = environment.currentUser
+            .flatMap { try? environment.plans.fetchPlan(userId: $0.id) }
+            .flatMap { plan in
+                plan.scheduledBlocks.last { block in
+                    block.program?.values.contains { $0.contains(where: { $0.id == planned.id }) } == true
+                }
+            }
+        model?.start(from: planned, block: block, user: environment.currentUser)
     }
 
     private func activeWorkout(_ model: TrackerModel) -> some View {
@@ -165,6 +199,31 @@ private struct ActiveWorkoutList: View {
         } else {
             model.completeSet(id: set.id)
         }
+    }
+}
+
+// MARK: - Planned summary
+
+private struct PlannedSummaryRow: View {
+    let workout: PlannedWorkout
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(names.isEmpty ? "Empty workout" : names.joined(separator: ", "))
+                .font(.headline)
+            Text("\(workout.allSets.count) sets")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            if let notes = workout.notes, !notes.isEmpty {
+                Text(notes)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private var names: [String] {
+        (workout.exercises ?? []).flatMap { $0 }.map(\.exercise.name)
     }
 }
 

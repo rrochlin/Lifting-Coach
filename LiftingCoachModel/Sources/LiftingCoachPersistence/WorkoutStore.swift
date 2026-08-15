@@ -235,7 +235,7 @@ public struct WorkoutStore: Sendable {
         WorkoutSet(
             id: UUID(uuidString: row.id) ?? UUID(),
             reps: row.reps,
-            weight: weight(value: row.weightValue, symbol: row.weightUnit),
+            weight: optionalMeasurement(value: row.weightValue, symbol: row.weightUnit),
             complete: row.complete,
             type: row.setType.flatMap(SetType.init(rawValue:)),
             timeComplete: row.timeComplete,
@@ -263,21 +263,3 @@ private func decodePlannedSet(_ json: String) -> PlannedSet? {
     try? plannedSetDecoder.decode(PlannedSet.self, from: Data(json.utf8))
 }
 
-/// Rebuilds a weight from its stored value and unit symbol.
-///
-/// Weights are stored with their original unit rather than normalized, so a set
-/// logged in pounds reads back in pounds instead of as a converted decimal.
-private func weight(value: Double?, symbol: String?) -> Measurement<UnitMass>? {
-    guard let value else { return nil }
-    guard let symbol else { return Measurement(value: value, unit: .kilograms) }
-
-    let unit: UnitMass = switch symbol {
-    case UnitMass.pounds.symbol: .pounds
-    case UnitMass.kilograms.symbol: .kilograms
-    case UnitMass.grams.symbol: .grams
-    case UnitMass.ounces.symbol: .ounces
-    case UnitMass.stones.symbol: .stones
-    default: UnitMass(symbol: symbol)
-    }
-    return Measurement(value: value, unit: unit)
-}
