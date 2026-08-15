@@ -19,9 +19,11 @@ Lifting-Coach (working title "Workout App" in the design docs) — a personal iO
 ## Current state (as of this handoff)
 `Concepts.md`'s data model is fleshed out and internally consistent: planned-vs-logged sets are properly split (`PlannedSet`/`WorkoutSet`, `PlannedExercise`/`WorkoutExercise`), and "current block" is derived from `startDate` rather than gated by `endDate`, so it doesn't disappear from view when a block runs long (slipped schedule, unlogged deload week).
 
-The phase 1 project is now scaffolded — see "Project scaffold" below. The domain model and SQLite layer are real and tested; the five feature screens are honest placeholders.
+The phase 1 project is scaffolded and the Workout Tracker is built — see "Project scaffold" below. `WorkoutSession` (logic), `WorkoutStore` (persistence), and `WorkoutTrackerView`/`TrackerModel` (UI) are all in. 59 tests pass. **The SwiftUI layer has never actually run** — see "Environment gotcha".
 
-**Next step: build the Workout Tracker for real.** `Roadmap.md` names it first because it's fully device-local. Everything it needs is in place: the domain types, the schema, and a worked `ExerciseStore` to copy the store pattern from.
+**Next step: the Workout Planner**, which is what makes the tracker useful — right now a workout can only be started ad-hoc, because nothing can author a `PlannedWorkout`. That needs `PlannedWorkoutStore`/`BlockStore` (the `plannedWorkout`/`plannedExercise`/`plannedSet`/`block` tables already exist and are unused), then the planner UI. `WorkoutStore` is the pattern to copy.
+
+After that, in rough order: History (calendar over `WorkoutStore.fetch(from:to:)`), Homepage metrics (needs a persisted `User` — there's no `UserStore` yet), then data export/import.
 
 Open items intentionally left unresolved (in the docs, not silently in the model):
 - Exercise catalog/assets are TBD — see `Concepts.md`'s TODO section (Strong/Heavy asset sourcing as an internal-use placeholder, swap before any public release). `ExerciseCatalog.seed` is a 10-entry hardcoded stand-in until then.
@@ -43,11 +45,25 @@ Open items intentionally left unresolved (in the docs, not silently in the model
 - **iOS 18** deployment target, **portrait iPhone only** for phase 1.
 - Weights persist as value + unit symbol rather than normalizing to kg, so a set logged in pounds reads back in pounds.
 - Superset nesting (`[[WorkoutExercise]]`) flattens in SQLite to `groupIndex` + `position`; rebuilding the arrays is the store's job.
-- `workoutSet.plannedFromId` is `ON DELETE SET NULL`, never cascade — editing a plan must never delete what was actually lifted (the safety requirement in `Design.md`). There's a regression test for exactly this.
+- `workoutSet.plannedFrom` is a **JSON snapshot of the prescription, not a foreign key**. `Concepts.md` embeds `PlannedSet` by value and that's right for storage too: logged history is self-contained, so `Design.md`'s "never destroy historical data" holds by shape rather than by a delete rule, and a workout can be logged from a plan that was never saved. Tradeoff: prescribed values aren't queryable in SQL — fine while adherence is computed per workout in memory, revisit if plan-wide analytics need to filter on them. Regression tested.
+- The tracker saves after **every** mutation, not on finish, so `fetchInProgress()` can recover a session the OS killed mid-workout.
+- Tests that assert calendar-day behavior pin their `Calendar` to UTC — `Calendar.current` makes "same day" depend on the machine's timezone, which is the thing under test.
 - `SetType` has no `failure` case: per `Mid lift thoughts.md`, failure is RPE 10 plus forced partials or a weight drop, and Strong's sticky failure status was a real annoyance.
 
 ### Environment gotcha
-This machine's Xcode 26.3 has not completed its first-launch setup, so **`xcodebuild` cannot build any iOS target** — it fails loading `IDESimulatorFoundation`, and `simctl` hangs. Fix with `sudo xcodebuild -runFirstLaunch` (needs an admin password, so it can't be run unattended). Until then, `swift test` works fine, and app sources can be typechecked against the macOS SDK as a fallback.
+This machine's Xcode 26.3 has not completed its first-launch setup, so **`xcodebuild` cannot build any iOS target** — it fails loading `IDESimulatorFoundation`, and `simctl` hangs. Fix with `sudo xcodebuild -runFirstLaunch`; it needs an interactive password prompt, which a remote session can't provide, so it has to be run from an SSH TTY or at the machine.
+
+**Consequence: no SwiftUI code in this repo has ever been compiled for iOS, laid out, or run.** Treat every view as unverified until someone builds it. Two fallbacks in the meantime:
+- `swift test` in `LiftingCoachModel/` — fully works, and covers all the real logic.
+- Typechecking the app sources against the macOS SDK, which does catch API misuse:
+  ```sh
+  BIN=LiftingCoachModel/.build/arm64-apple-macosx/debug
+  xcrun swiftc -typecheck -swift-version 6 -target arm64-apple-macos15.0 \
+    -sdk "$(xcrun --sdk macosx --show-sdk-path)" -I "$BIN/Modules" -I "$BIN" \
+    -Xcc -fmodule-map-file=LiftingCoachModel/.build/checkouts/GRDB.swift/Sources/GRDBSQLite/module.modulemap \
+    $(find Sources/App -name '*.swift')
+  ```
+  This is why the toolbar uses `.navigation`/`.primaryAction` over `.topBarLeading`/`.topBarTrailing` (identical on iOS, but they exist on macOS too), and why the one genuinely iOS-only modifier is behind `#if os(iOS)`. Keep new view code typecheckable this way until the build works.
 
 ## Working conventions from this project
 - The notes docs are living working files, not archives — once a design conversation converges on a direction, implement it directly in the relevant `.md` (or, going forward, the actual Swift code). Don't leave agreed decisions sitting only in chat.
