@@ -1,0 +1,168 @@
+import Foundation
+import GRDB
+
+extension AppDatabase {
+    /// Schema history. Migrations are append-only and never edited once they
+    /// have shipped to a device — add a new one instead.
+    ///
+    /// The schema mirrors the types in `LiftingCoachModel` (and therefore
+    /// `notes/Workout App/Concepts.md`). Two shape notes:
+    ///
+    /// - The `[[Exercise]]` superset nesting in `Workout`/`PlannedWorkout` is
+    ///   flattened here into `group_index` (which superset group) plus
+    ///   `position` (order within the group). Rebuilding the nested arrays is
+    ///   the store's job, not the schema's.
+    /// - Weights are stored as a value plus a unit symbol rather than
+    ///   normalizing to kilograms, so a set logged in pounds reads back in
+    ///   pounds without a lossy round trip.
+    static var migrator: DatabaseMigrator {
+        var migrator = DatabaseMigrator()
+
+        #if DEBUG
+        // Recreate the database from scratch when a shipped migration changes.
+        // Safe only while phase 1 has no real user data to lose.
+        migrator.eraseDatabaseOnSchemaChange = true
+        #endif
+
+        migrator.registerMigration("v1_core") { db in
+            try db.create(table: "exercise") { t in
+                t.primaryKey("id", .integer)
+                t.column("name", .text).notNull()
+                t.column("muscleGroup", .text).notNull()
+            }
+
+            try db.create(table: "user") { t in
+                t.primaryKey("id", .text)
+                t.column("name", .text).notNull()
+                t.column("email", .text).notNull()
+            }
+
+            try db.create(table: "bodyWeight") { t in
+                t.autoIncrementedPrimaryKey("rowid")
+                t.column("userId", .text).notNull()
+                    .references("user", onDelete: .cascade)
+                // Start of day.
+                t.column("day", .datetime).notNull()
+                t.column("value", .double).notNull()
+                t.column("unit", .text).notNull()
+                t.uniqueKey(["userId", "day"])
+            }
+
+            try db.create(table: "maxLift") { t in
+                t.autoIncrementedPrimaryKey("rowid")
+                t.column("userId", .text).notNull()
+                    .references("user", onDelete: .cascade)
+                t.column("exerciseId", .integer).notNull()
+                    .references("exercise", onDelete: .cascade)
+                t.column("value", .double).notNull()
+                t.column("unit", .text).notNull()
+                t.uniqueKey(["userId", "exerciseId"])
+            }
+
+            try db.create(table: "block") { t in
+                t.primaryKey("id", .text)
+                t.column("userId", .text).notNull()
+                    .references("user", onDelete: .cascade)
+                t.column("startDate", .datetime)
+                // Planned end only — never treat this as "the block is over".
+                t.column("endDate", .datetime)
+                t.column("notes", .text)
+                t.column("journal", .text)
+            }
+            try db.create(index: "block_on_userId_startDate", on: "block", columns: ["userId", "startDate"])
+
+            try db.create(table: "blockDefaultRest") { t in
+                t.autoIncrementedPrimaryKey("rowid")
+                t.column("blockId", .text).notNull()
+                    .references("block", onDelete: .cascade)
+                t.column("setType", .text).notNull()
+                t.column("seconds", .integer).notNull()
+                t.uniqueKey(["blockId", "setType"])
+            }
+
+            try db.create(table: "plannedWorkout") { t in
+                t.primaryKey("id", .text)
+                t.column("blockId", .text).notNull()
+                    .references("block", onDelete: .cascade)
+                // Start of day.
+                t.column("date", .datetime)
+                t.column("notes", .text)
+            }
+            try db.create(index: "plannedWorkout_on_blockId_date", on: "plannedWorkout", columns: ["blockId", "date"])
+
+            try db.create(table: "plannedExercise") { t in
+                t.primaryKey("id", .text)
+                t.column("plannedWorkoutId", .text).notNull()
+                    .references("plannedWorkout", onDelete: .cascade)
+                t.column("exerciseId", .integer).notNull()
+                    .references("exercise")
+                t.column("groupIndex", .integer).notNull()
+                t.column("position", .integer).notNull()
+                t.column("notes", .text)
+            }
+
+            try db.create(table: "plannedSet") { t in
+                t.primaryKey("id", .text)
+                t.column("plannedExerciseId", .text).notNull()
+                    .references("plannedExercise", onDelete: .cascade)
+                t.column("position", .integer).notNull()
+                t.column("reps", .integer)
+                t.column("setType", .text)
+                // LoadPrescription, flattened: kind is absolute | percentOf1RM | rpe.
+                t.column("loadKind", .text)
+                t.column("loadValue", .double)
+                t.column("loadUnit", .text)
+                t.column("restTime", .integer)
+                t.column("notes", .text)
+            }
+
+            try db.create(table: "workout") { t in
+                t.primaryKey("id", .text)
+                t.column("blockId", .text)
+                    .references("block", onDelete: .setNull)
+                // Start of day, for calendar lookups.
+                t.column("day", .datetime)
+                t.column("startTime", .datetime)
+                t.column("endTime", .datetime)
+                t.column("notes", .text)
+                t.column("usernotes", .text)
+            }
+            try db.create(index: "workout_on_day", on: "workout", columns: ["day"])
+
+            try db.create(table: "workoutExercise") { t in
+                t.primaryKey("id", .text)
+                t.column("workoutId", .text).notNull()
+                    .references("workout", onDelete: .cascade)
+                t.column("exerciseId", .integer).notNull()
+                    .references("exercise")
+                t.column("groupIndex", .integer).notNull()
+                t.column("position", .integer).notNull()
+                t.column("notes", .text)
+                t.column("usernotes", .text)
+            }
+
+            try db.create(table: "workoutSet") { t in
+                t.primaryKey("id", .text)
+                t.column("workoutExerciseId", .text).notNull()
+                    .references("workoutExercise", onDelete: .cascade)
+                t.column("position", .integer).notNull()
+                t.column("reps", .integer)
+                t.column("weightValue", .double)
+                t.column("weightUnit", .text)
+                t.column("complete", .boolean)
+                t.column("setType", .text)
+                t.column("timeComplete", .datetime)
+                t.column("restTime", .integer)
+                t.column("rpe", .double)
+                t.column("notes", .text)
+                t.column("usernotes", .text)
+                // Reconciles logged vs. prescribed. setNull, not cascade: editing
+                // a plan must never delete what was actually lifted.
+                t.column("plannedFromId", .text)
+                    .references("plannedSet", onDelete: .setNull)
+            }
+        }
+
+        return migrator
+    }
+}

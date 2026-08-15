@@ -38,7 +38,7 @@ The execution of an #Exercise within a specific #Workout — tracks the sets act
 ```swift
 struct WorkoutExercise {
 	var exercise: Exercise
-	var sets: Array<Array<WorkoutSet>>?
+	var sets: Array<WorkoutSet>?
 	var notes: String?
 	var usernotes: String?
 }
@@ -49,7 +49,7 @@ The planned counterpart to #WorkoutExercise — pairs an #Exercise with the #Pla
 ```swift
 struct PlannedExercise {
 	var exercise: Exercise
-	var sets: Array<Array<PlannedSet>>?
+	var sets: Array<PlannedSet>?
 	var notes: String?
 }
 ```

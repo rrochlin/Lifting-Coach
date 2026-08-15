@@ -1,0 +1,56 @@
+name: LiftingCoach
+
+options:
+  bundleIdPrefix: com.rrochlin
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+  generateEmptyDirectories: true
+
+packages:
+  LiftingCoachModel:
+    path: LiftingCoachModel
+
+targets:
+  LiftingCoach:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources/App
+    dependencies:
+      - package: LiftingCoachModel
+        product: LiftingCoachModel
+      - package: LiftingCoachModel
+        product: LiftingCoachPersistence
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.rrochlin.LiftingCoach
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "6.0"
+        # Phase 1 is portrait-only on iPhone; revisit if an iPad planner view lands.
+        TARGETED_DEVICE_FAMILY: "1"
+        ENABLE_USER_SCRIPT_SANDBOXING: YES
+    info:
+      path: Sources/App/Resources/Info.plist
+      properties:
+        CFBundleDisplayName: Lifting Coach
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        # HealthKit is in Backend/Overview.md as a phase 1 local concern, but
+        # nothing reads Health yet — these are declared when that work starts,
+        # not before, so the app doesn't prompt for access it never uses.
+
+schemes:
+  LiftingCoach:
+    build:
+      targets:
+        LiftingCoach: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - package: LiftingCoachModel/LiftingCoachModelTests
+        - package: LiftingCoachModel/LiftingCoachPersistenceTests
