@@ -48,7 +48,9 @@ extension AppDatabase {
                 t.uniqueKey(["userId", "day"])
             }
 
-            try db.create(table: "maxLift") { t in
+            // Achieved maxes are events — append-only history, never upserted;
+            // the newest by date is what an `.achieved` reference resolves to.
+            try db.create(table: "achievedMax") { t in
                 t.autoIncrementedPrimaryKey("rowid")
                 t.column("userId", .text).notNull()
                     .references("user", onDelete: .cascade)
@@ -56,6 +58,22 @@ extension AppDatabase {
                     .references("exercise", onDelete: .cascade)
                 t.column("value", .double).notNull()
                 t.column("unit", .text).notNull()
+                t.column("date", .datetime).notNull()
+                t.column("notes", .text)
+            }
+            try db.create(index: "achievedMax_on_user_exercise", on: "achievedMax", columns: ["userId", "exerciseId"])
+
+            // Goal maxes are settings — one per lift, replaced when a new goal
+            // is set deliberately.
+            try db.create(table: "goalMax") { t in
+                t.autoIncrementedPrimaryKey("rowid")
+                t.column("userId", .text).notNull()
+                    .references("user", onDelete: .cascade)
+                t.column("exerciseId", .integer).notNull()
+                    .references("exercise", onDelete: .cascade)
+                t.column("value", .double).notNull()
+                t.column("unit", .text).notNull()
+                t.column("dateSet", .datetime)
                 t.uniqueKey(["userId", "exerciseId"])
             }
 
@@ -98,6 +116,9 @@ extension AppDatabase {
                     .references("exercise")
                 t.column("groupIndex", .integer).notNull()
                 t.column("position", .integer).notNull()
+                // the exercise-level effort target ("5x2 @ RPE 7" is one
+                // instruction); sets override via their own effortRPE
+                t.column("effortRPE", .double)
                 t.column("notes", .text)
             }
 
@@ -108,10 +129,14 @@ extension AppDatabase {
                 t.column("position", .integer).notNull()
                 t.column("reps", .integer)
                 t.column("setType", .text)
-                // LoadPrescription, flattened: kind is absolute | percentOf1RM | rpe.
+                // LoadPrescription, flattened: kind is absolute | percentOf.
+                // maxRef (achieved | goal | theoretical) applies to percentOf.
                 t.column("loadKind", .text)
                 t.column("loadValue", .double)
                 t.column("loadUnit", .text)
+                t.column("loadMaxRef", .text)
+                // per-set effort override; nil defers to the exercise's target
+                t.column("effortRPE", .double)
                 t.column("restTime", .integer)
                 t.column("notes", .text)
             }

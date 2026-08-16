@@ -422,16 +422,23 @@ private struct SetRow: View {
     /// what they actually rated the set, then the target they were chasing, then
     /// a deviation from the prescribed reps.
     private var prescription: String? {
-        let target: Float? = if case .rpe(let value) = set.plannedFrom?.load { value } else { nil }
+        // The effort target rides in the snapshot, materialized from the
+        // exercise at workout start.
+        let target = set.plannedFrom?.effort?.rpe
 
         // A logged RPE is the whole point of logging RPE — show it whatever the
-        // prescription was, not only when the set was prescribed by RPE.
+        // prescription was, alongside the target when there is one.
         if let logged = set.rpe {
             guard let target else { return "RPE \(logged.rpeDescription)" }
             return "RPE \(logged.rpeDescription) / \(target.rpeDescription)"
         }
         if let target {
             return "RPE \(target.rpeDescription)"
+        }
+        // A percentage that didn't resolve to a weight still shows what was
+        // asked — "80% goal" beats a blank row (Core Tenets §10).
+        if set.weight == nil, let load = set.plannedFrom?.load {
+            return load.prescriptionDescription
         }
         if let plannedReps = set.plannedFrom?.reps, let actual = set.reps, plannedReps != actual {
             return "planned \(plannedReps)"

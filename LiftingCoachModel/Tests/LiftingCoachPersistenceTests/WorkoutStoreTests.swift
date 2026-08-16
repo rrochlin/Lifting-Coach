@@ -106,7 +106,7 @@ struct WorkoutStoreTests {
     func preservesPrescriptionSnapshot() throws {
         let (store, _) = try makeStore()
 
-        let prescribed = PlannedSet(reps: 5, type: .working, load: .percentOf1RM(0.85))
+        let prescribed = PlannedSet(reps: 5, type: .working, load: .percentOf(0.85, of: .goal))
         var session = WorkoutSession.start(
             from: PlannedWorkout(exercises: [[PlannedExercise(exercise: squat, sets: [prescribed])]]),
             at: noon
@@ -120,7 +120,7 @@ struct WorkoutStoreTests {
         let set = loaded?.allSets.first
         #expect(set?.reps == 3)
         #expect(set?.plannedFrom?.reps == 5)
-        #expect(set?.plannedFrom?.load == .percentOf1RM(0.85))
+        #expect(set?.plannedFrom?.load == .percentOf(0.85, of: .goal))
     }
 
     @Test("Saving the same workout twice replaces rather than duplicates")

@@ -1,46 +1,28 @@
 import Foundation
 
-/// How a planned set's intensity is defined — resolved to an absolute weight
-/// when the plan is turned into a live `Workout`.
-public enum LoadPrescription: Codable, Hashable, Sendable {
-    case absolute(Measurement<UnitMass>)
-    case percentOf1RM(Double)
-    case rpe(Float)
-
-    /// Resolves to a concrete weight given the lifter's max for this exercise.
-    ///
-    /// Only `.percentOf1RM` actually needs `oneRepMax` — an absolute load
-    /// resolves with no lifter data at all, which matters because a plan can be
-    /// followed before any max has been recorded.
-    ///
-    /// `.rpe` deliberately returns `nil`: mapping an RPE target to a weight needs
-    /// historical set data and a rep-range-aware model (per
-    /// `Mid lift thoughts.md`, RPE on a triple and RPE on a set of 10 are not the
-    /// same instrument), so the lifter supplies the number at log time.
-    public func resolvedWeight(oneRepMax: Measurement<UnitMass>?) -> Measurement<UnitMass>? {
-        switch self {
-        case .absolute(let weight):
-            return weight
-        case .percentOf1RM(let percent):
-            guard let oneRepMax else { return nil }
-            return Measurement(value: oneRepMax.value * percent, unit: oneRepMax.unit)
-        case .rpe:
-            return nil
-        }
-    }
-}
-
 /// The prescription: what *should* be done. Distinct from `WorkoutSet`, which is
 /// what was actually logged.
+///
+/// Load and effort are independent optional axes — either alone is a legitimate
+/// prescription, not a gap to fill in (Core Tenets §2). A warmup usually carries
+/// load with no effort target; an accessory can be "3×10 @ RPE 8, pick your
+/// weight" with no load at all.
 public struct PlannedSet: Codable, Hashable, Identifiable, Sendable {
     public var id: UUID
     public var reps: Int?
     public var type: SetType?
+    /// What to put on the bar.
     public var load: LoadPrescription?
+    /// Override for the odd set out (a top single, a back-off). `nil` means "use
+    /// the containing `PlannedExercise`'s effort" — resolve with
+    /// `set.effort ?? exercise.effort`, the same shape as `restTime`'s fallback.
+    public var effort: EffortTarget?
     /// Seconds. `nil` falls back to the containing `WorkoutBlock`'s
     /// `defaultRestTimes` for this `SetType`, then an app-level default — most
     /// sets shouldn't need this configured explicitly.
     public var restTime: Int?
+    /// Carries programming intent that has no structural home: "work up, stop at
+    /// 9", "last set AMRAP", tempo, pauses.
     public var notes: String?
 
     public init(
@@ -48,6 +30,7 @@ public struct PlannedSet: Codable, Hashable, Identifiable, Sendable {
         reps: Int? = nil,
         type: SetType? = nil,
         load: LoadPrescription? = nil,
+        effort: EffortTarget? = nil,
         restTime: Int? = nil,
         notes: String? = nil
     ) {
@@ -55,6 +38,7 @@ public struct PlannedSet: Codable, Hashable, Identifiable, Sendable {
         self.reps = reps
         self.type = type
         self.load = load
+        self.effort = effort
         self.restTime = restTime
         self.notes = notes
     }
@@ -69,11 +53,15 @@ public struct WorkoutSet: Codable, Hashable, Identifiable, Sendable {
     public var type: SetType?
     public var timeComplete: Date?
     public var restTime: Int?
+    /// Achieved effort as the lifter rated it, per set — never defaulted from
+    /// the prescription. Same 1–10 scale as `EffortTarget`.
     public var rpe: Float?
     public var notes: String?
     public var usernotes: String?
     /// What this set was prescribed as, if any — lets planned vs. actual be
     /// reconciled without needing user context wherever a `WorkoutSet` is read.
+    /// The snapshot's `effort` is materialized (set-or-exercise resolved) at
+    /// workout start, so history stays self-contained.
     public var plannedFrom: PlannedSet?
 
     public init(

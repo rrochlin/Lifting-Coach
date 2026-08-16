@@ -34,15 +34,15 @@ struct WorkoutSessionStartTests {
         #expect(session.workout.startTime == noon)
     }
 
-    @Test("A %1RM prescription resolves against the lifter's recorded max")
+    @Test("A goal-percentage prescription resolves against the goal max")
     func resolvesPercentOfMax() {
         let user = User(
             name: "Rob",
             email: "r@example.com",
-            maxLifts: [bench.id: Measurement(value: 300, unit: .pounds)]
+            goalMaxes: [bench.id: GoalMax(weight: Measurement(value: 300, unit: .pounds))]
         )
         let session = WorkoutSession.start(
-            from: plannedWorkout([(bench, [PlannedSet(reps: 3, load: .percentOf1RM(0.9))])]),
+            from: plannedWorkout([(bench, [PlannedSet(reps: 3, load: .percentOf(0.9, of: .goal))])]),
             user: user,
             at: noon
         )
@@ -50,20 +50,42 @@ struct WorkoutSessionStartTests {
         #expect(session.workout.allSets.first?.weight?.value == 270)
     }
 
-    @Test("An RPE prescription intentionally leaves the weight unset")
-    func rpeLeavesWeightBlank() {
-        // Choosing a weight for an RPE target needs rep-range-aware history that
-        // the model doesn't have. The prescription stays on the set for the
-        // tracker to display; the lifter supplies the number.
+    @Test("An effort-only prescription leaves the weight unset")
+    func effortOnlyLeavesWeightBlank() {
+        // "3x8 @ RPE 8, pick your weight" — a legitimate prescription with no
+        // load axis at all. The effort stays visible; the lifter supplies the
+        // number.
         let session = WorkoutSession.start(
-            from: plannedWorkout([(bench, [PlannedSet(reps: 8, load: .rpe(8))])]),
+            from: plannedWorkout([(bench, [PlannedSet(reps: 8, effort: EffortTarget(rpe: 8))])]),
             user: User(name: "Rob", email: "r@example.com"),
             at: noon
         )
 
         let set = session.workout.allSets.first
         #expect(set?.weight == nil)
-        #expect(set?.plannedFrom?.load == .rpe(8))
+        #expect(set?.plannedFrom?.effort == EffortTarget(rpe: 8))
+    }
+
+    @Test("Exercise-level effort is materialized into each set's snapshot")
+    func materializesExerciseEffort() {
+        // "5x2 @ RPE 7" is one instruction on the exercise. History keeps only
+        // the per-set snapshot, so the resolved target must be baked in at start.
+        let override = PlannedSet(reps: 1, effort: EffortTarget(rpe: 9))
+        let planned = PlannedWorkout(exercises: [[
+            PlannedExercise(
+                exercise: squat,
+                sets: [PlannedSet(reps: 2), PlannedSet(reps: 2), override],
+                effort: EffortTarget(rpe: 7)
+            )
+        ]])
+
+        let session = WorkoutSession.start(from: planned, at: noon)
+        let snapshots = session.workout.allSets.map(\.plannedFrom)
+
+        #expect(snapshots[0]?.effort == EffortTarget(rpe: 7))
+        #expect(snapshots[1]?.effort == EffortTarget(rpe: 7))
+        // the per-set override wins over the exercise target
+        #expect(snapshots[2]?.effort == EffortTarget(rpe: 9))
     }
 
     @Test("An absolute prescription resolves with no lifter on file")

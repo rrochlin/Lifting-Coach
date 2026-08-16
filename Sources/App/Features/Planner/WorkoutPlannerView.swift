@@ -343,16 +343,15 @@ private struct PlannedSetRow: View {
     }
 
     private var loadSummary: String {
-        switch set.load {
-        case .absolute(let weight):
-            weight.liftedDescription
-        case .percentOf1RM(let percent):
-            "\(Int(percent * 100))% 1RM"
-        case .rpe(let rpe):
-            "RPE \(rpe.rpeDescription)"
-        case nil:
-            "no load"
+        // Load and effort are independent axes; show whichever are prescribed.
+        var parts: [String] = []
+        if let load = set.load {
+            parts.append(load.prescriptionDescription)
         }
+        if let effort = set.effort {
+            parts.append("RPE \(effort.rpe.rpeDescription)")
+        }
+        return parts.isEmpty ? "no load" : parts.joined(separator: " · ")
     }
 }
 

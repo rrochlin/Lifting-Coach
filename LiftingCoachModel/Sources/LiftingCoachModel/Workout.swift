@@ -30,18 +30,29 @@ public struct PlannedExercise: Codable, Hashable, Identifiable, Sendable {
     public var id: UUID
     public var exercise: Exercise
     public var sets: [PlannedSet]?
+    /// The default effort target for every set of this exercise — "5×2 @ RPE 7"
+    /// is one instruction, written once here. Individual sets override via their
+    /// own `effort`; consumers resolve `set.effort ?? exercise.effort`.
+    public var effort: EffortTarget?
     public var notes: String?
 
     public init(
         id: UUID = UUID(),
         exercise: Exercise,
         sets: [PlannedSet]? = nil,
+        effort: EffortTarget? = nil,
         notes: String? = nil
     ) {
         self.id = id
         self.exercise = exercise
         self.sets = sets
+        self.effort = effort
         self.notes = notes
+    }
+
+    /// The effort target in force for a given set of this exercise.
+    public func resolvedEffort(for set: PlannedSet) -> EffortTarget? {
+        set.effort ?? effort
     }
 }
 

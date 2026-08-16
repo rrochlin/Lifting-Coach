@@ -109,15 +109,18 @@ struct HomeView: View {
 
     @ViewBuilder
     private var metricsSection: some View {
-        SectionLabel(text: "one rep max").panelRow()
+        // Achieved and goal are different data points and read as two columns —
+        // never silently substituted for each other (Core Tenets §6).
+        SectionLabel(text: "maxes · achieved / goal").panelRow()
 
         Panel {
             VStack(spacing: 9) {
                 ForEach(bigThree, id: \.self) { id in
                     Readout(
                         label: name(for: id),
-                        value: maxLift(id)?.liftedDescription ?? "——",
-                        accent: maxLift(id) == nil ? Theme.inkFaint : Theme.ink,
+                        value: maxSummary(id),
+                        accent: environment.currentUser?.max(.achieved, for: id) == nil
+                            ? Theme.inkMuted : Theme.ink,
                         size: 17
                     )
                 }
@@ -177,8 +180,12 @@ struct HomeView: View {
         return Adherence(completed: completed, planned: planned)
     }
 
-    private func maxLift(_ id: Int) -> Measurement<UnitMass>? {
-        environment.currentUser?.maxLifts?[id]
+    /// "achieved / goal", each blank where unrecorded — "— / 495 lb" is an
+    /// honest state, not a display bug.
+    private func maxSummary(_ id: Int) -> String {
+        let achieved = environment.currentUser?.max(.achieved, for: id)?.liftedDescription ?? "—"
+        let goal = environment.currentUser?.max(.goal, for: id)?.liftedDescription ?? "—"
+        return "\(achieved) / \(goal)"
     }
 
     private func name(for id: Int) -> String {

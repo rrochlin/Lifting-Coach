@@ -51,11 +51,14 @@ public struct WorkoutSession: Equatable, Sendable {
     ///
     /// Each `PlannedSet` becomes a `WorkoutSet` that carries its prescription
     /// forward in `plannedFrom`, so planned-vs-actual can be compared later
-    /// without needing the plan in hand. Weights are pre-filled where they can be
-    /// resolved — an absolute load, or a `%1RM` against a recorded max. An RPE
-    /// prescription resolves to no weight on purpose: picking a number for it
-    /// needs rep-range-aware history the model doesn't have yet, so the lifter
-    /// enters it and the prescription stays visible alongside.
+    /// without needing the plan in hand. Two resolutions happen here:
+    ///
+    /// - **Weight** is pre-filled where the load resolves — an absolute load, or
+    ///   a percentage against a max the lifter actually has recorded. A load that
+    ///   can't resolve stays blank and the prescription displays as-is.
+    /// - **Effort** is materialized into the snapshot (`set.effort ??
+    ///   exercise.effort`), because the snapshot is all history keeps — an
+    ///   exercise-level target would otherwise be lost with the plan.
     public static func start(
         from planned: PlannedWorkout,
         block: WorkoutBlock? = nil,
@@ -68,15 +71,17 @@ public struct WorkoutSession: Equatable, Sendable {
                 WorkoutExercise(
                     exercise: plannedExercise.exercise,
                     sets: (plannedExercise.sets ?? []).map { plannedSet in
-                        WorkoutSet(
+                        var snapshot = plannedSet
+                        snapshot.effort = plannedExercise.resolvedEffort(for: plannedSet)
+                        return WorkoutSet(
                             reps: plannedSet.reps,
-                            weight: plannedSet.load?.resolvedWeight(
-                                oneRepMax: user?.maxLifts?[plannedExercise.exercise.id]
-                            ),
+                            weight: plannedSet.load?.resolvedWeight { reference in
+                                user?.max(reference, for: plannedExercise.exercise.id)
+                            },
                             complete: false,
                             type: plannedSet.type,
                             notes: plannedSet.notes,
-                            plannedFrom: plannedSet
+                            plannedFrom: snapshot
                         )
                     },
                     notes: plannedExercise.notes

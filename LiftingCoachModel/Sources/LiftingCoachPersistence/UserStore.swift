@@ -19,13 +19,25 @@ private struct BodyWeightRow: Codable, FetchableRecord, PersistableRecord {
     var unit: String
 }
 
-private struct MaxLiftRow: Codable, FetchableRecord, PersistableRecord {
-    static let databaseTableName = "maxLift"
+private struct AchievedMaxRow: Codable, FetchableRecord, PersistableRecord {
+    static let databaseTableName = "achievedMax"
 
     var userId: String
     var exerciseId: Int
     var value: Double
     var unit: String
+    var date: Date
+    var notes: String?
+}
+
+private struct GoalMaxRow: Codable, FetchableRecord, PersistableRecord {
+    static let databaseTableName = "goalMax"
+
+    var userId: String
+    var exerciseId: Int
+    var value: Double
+    var unit: String
+    var dateSet: Date?
 }
 
 /// Read/write access to the lifter and their tracked metrics.
@@ -64,15 +76,31 @@ public struct UserStore: Sendable {
                 ).insert(db)
             }
 
-            try db.execute(sql: "DELETE FROM maxLift WHERE userId = ?", arguments: [user.id.uuidString])
-            for (exerciseId, max) in user.maxLifts ?? [:] {
+            try db.execute(sql: "DELETE FROM achievedMax WHERE userId = ?", arguments: [user.id.uuidString])
+            for (exerciseId, history) in user.achievedMaxes ?? [:] {
                 // The catalog row has to exist for the foreign key to hold.
                 guard try ExerciseRecord.fetchOne(db, key: exerciseId) != nil else { continue }
-                try MaxLiftRow(
+                for max in history {
+                    try AchievedMaxRow(
+                        userId: user.id.uuidString,
+                        exerciseId: exerciseId,
+                        value: max.weight.value,
+                        unit: max.weight.unit.symbol,
+                        date: max.date,
+                        notes: max.notes
+                    ).insert(db)
+                }
+            }
+
+            try db.execute(sql: "DELETE FROM goalMax WHERE userId = ?", arguments: [user.id.uuidString])
+            for (exerciseId, goal) in user.goalMaxes ?? [:] {
+                guard try ExerciseRecord.fetchOne(db, key: exerciseId) != nil else { continue }
+                try GoalMaxRow(
                     userId: user.id.uuidString,
                     exerciseId: exerciseId,
-                    value: max.value,
-                    unit: max.unit.symbol
+                    value: goal.weight.value,
+                    unit: goal.weight.unit.symbol,
+                    dateSet: goal.dateSet
                 ).insert(db)
             }
         }
@@ -117,18 +145,39 @@ public struct UserStore: Sendable {
         }
     }
 
-    /// Records a 1RM for an exercise without rewriting the rest of the user.
-    public func recordMax(
-        _ weight: Measurement<UnitMass>,
+    /// Appends an achieved max — an event, so this never replaces history.
+    public func recordAchievedMax(
+        _ max: AchievedMax,
         exerciseId: Int,
         for userId: UUID
     ) throws {
         try database.writer.write { db in
-            try MaxLiftRow(
+            try AchievedMaxRow(
                 userId: userId.uuidString,
                 exerciseId: exerciseId,
-                value: weight.value,
-                unit: weight.unit.symbol
+                value: max.weight.value,
+                unit: max.weight.unit.symbol,
+                date: max.date,
+                notes: max.notes
+            ).insert(db)
+        }
+    }
+
+    /// Sets the goal max for a lift — a setting, so this replaces any previous
+    /// goal. upsert, not save: the table is keyed by an autoincrement rowid with
+    /// uniqueness on (userId, exerciseId), and save would insert a duplicate.
+    public func setGoalMax(
+        _ goal: GoalMax,
+        exerciseId: Int,
+        for userId: UUID
+    ) throws {
+        try database.writer.write { db in
+            try GoalMaxRow(
+                userId: userId.uuidString,
+                exerciseId: exerciseId,
+                value: goal.weight.value,
+                unit: goal.weight.unit.symbol,
+                dateSet: goal.dateSet
             ).upsert(db)
         }
     }
@@ -137,17 +186,36 @@ public struct UserStore: Sendable {
         let weights = try BodyWeightRow
             .filter(Column("userId") == row.id)
             .fetchAll(db)
-        let maxes = try MaxLiftRow
+        let achieved = try AchievedMaxRow
+            .filter(Column("userId") == row.id)
+            .order(Column("date"))
+            .fetchAll(db)
+        let goals = try GoalMaxRow
             .filter(Column("userId") == row.id)
             .fetchAll(db)
+
+        var achievedByExercise: [Int: [AchievedMax]] = [:]
+        for row in achieved {
+            achievedByExercise[row.exerciseId, default: []].append(
+                AchievedMax(
+                    weight: measurement(value: row.value, symbol: row.unit),
+                    date: row.date,
+                    notes: row.notes
+                )
+            )
+        }
 
         return User(
             id: UUID(uuidString: row.id) ?? UUID(),
             name: row.name,
             email: row.email,
-            maxLifts: maxes.isEmpty ? nil : Dictionary(
-                uniqueKeysWithValues: maxes.map {
-                    ($0.exerciseId, measurement(value: $0.value, symbol: $0.unit))
+            achievedMaxes: achievedByExercise.isEmpty ? nil : achievedByExercise,
+            goalMaxes: goals.isEmpty ? nil : Dictionary(
+                uniqueKeysWithValues: goals.map {
+                    ($0.exerciseId, GoalMax(
+                        weight: measurement(value: $0.value, symbol: $0.unit),
+                        dateSet: $0.dateSet
+                    ))
                 }
             ),
             bodyWeight: weights.isEmpty ? nil : Dictionary(

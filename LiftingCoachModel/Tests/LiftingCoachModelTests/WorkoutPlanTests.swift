@@ -140,32 +140,71 @@ struct WorkoutBlockTests {
 @Suite("User")
 struct UserTests {
 
-    @Test("percentOf1RM resolves against a recorded max")
-    func resolvesPercentOfMax() {
+    @Test("A goal percentage resolves against the goal max, plate-rounded")
+    func resolvesPercentOfGoal() {
         let bench = ExerciseCatalog.seed[1]
         let user = User(
             name: "Rob",
             email: "steelr3@gmail.com",
-            maxLifts: [bench.id: Measurement(value: 300, unit: .pounds)]
+            goalMaxes: [bench.id: GoalMax(weight: Measurement(value: 365, unit: .pounds))]
         )
 
-        let resolved = user.resolvedWeight(for: .percentOf1RM(0.8), exercise: bench)
-        #expect(resolved?.value == 240)
+        // 0.725 * 365 = 264.625, rounded to the 5 lb plate increment — the same
+        // MROUND(x, 5) the source spreadsheet applies.
+        let resolved = user.resolvedWeight(for: .percentOf(0.725, of: .goal), exercise: bench)
+        #expect(resolved?.value == 265)
         #expect(resolved?.unit == UnitMass.pounds)
     }
 
-    @Test("percentOf1RM is unresolvable without a recorded max")
+    @Test("An achieved percentage resolves against the newest achieved max")
+    func resolvesPercentOfAchieved() {
+        let bench = ExerciseCatalog.seed[1]
+        let user = User(
+            name: "Rob",
+            email: "steelr3@gmail.com",
+            achievedMaxes: [bench.id: [
+                AchievedMax(weight: Measurement(value: 300, unit: .pounds), date: day(2026, 1, 1)),
+                AchievedMax(weight: Measurement(value: 315, unit: .pounds), date: day(2026, 6, 1)),
+            ]]
+        )
+
+        let resolved = user.resolvedWeight(for: .percentOf(0.8, of: .achieved), exercise: bench)
+        // 0.8 * 315 = 252 → 250 at the 5 lb increment; the newer max wins.
+        #expect(resolved?.value == 250)
+    }
+
+    @Test("A percentage of a max the user doesn't have stays unresolved")
     func percentWithoutMaxIsNil() {
         let user = User(name: "Rob", email: "steelr3@gmail.com")
 
-        #expect(user.resolvedWeight(for: .percentOf1RM(0.8), exercise: ExerciseCatalog.seed[1]) == nil)
+        #expect(user.resolvedWeight(for: .percentOf(0.8, of: .goal), exercise: ExerciseCatalog.seed[1]) == nil)
+        #expect(user.resolvedWeight(for: .percentOf(0.8, of: .achieved), exercise: ExerciseCatalog.seed[1]) == nil)
     }
 
-    @Test("RPE is deliberately not resolved at the model layer")
-    func rpeIsNotResolvedHere() {
-        let user = User(name: "Rob", email: "steelr3@gmail.com")
+    @Test("Theoretical max is unresolvable until an estimation model exists")
+    func theoreticalIsNotResolved() {
+        let bench = ExerciseCatalog.seed[1]
+        let user = User(
+            name: "Rob",
+            email: "steelr3@gmail.com",
+            goalMaxes: [bench.id: GoalMax(weight: Measurement(value: 365, unit: .pounds))]
+        )
 
-        #expect(user.resolvedWeight(for: .rpe(8), exercise: ExerciseCatalog.seed[1]) == nil)
+        #expect(user.resolvedWeight(for: .percentOf(0.8, of: .theoretical), exercise: bench) == nil)
+    }
+
+    @Test("Goal and achieved maxes are distinct data points")
+    func maxKindsAreDistinct() {
+        let bench = ExerciseCatalog.seed[1]
+        let user = User(
+            name: "Rob",
+            email: "steelr3@gmail.com",
+            achievedMaxes: [bench.id: [AchievedMax(weight: Measurement(value: 315, unit: .pounds), date: day(2026, 1, 1))]],
+            goalMaxes: [bench.id: GoalMax(weight: Measurement(value: 365, unit: .pounds))]
+        )
+
+        #expect(user.max(.achieved, for: bench.id)?.value == 315)
+        #expect(user.max(.goal, for: bench.id)?.value == 365)
     }
 
     @Test("currentBodyWeight is the most recent entry")

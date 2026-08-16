@@ -53,25 +53,45 @@ struct UserStoreTests {
     func roundTripsMetrics() throws {
         let fixture = try makeFixture()
 
-        try fixture.users.recordMax(Measurement(value: 315, unit: .pounds), exerciseId: squat.id, for: fixture.user.id)
+        try fixture.users.recordAchievedMax(
+            AchievedMax(weight: Measurement(value: 315, unit: .pounds), date: day(2026, 2, 1)),
+            exerciseId: squat.id, for: fixture.user.id)
+        try fixture.users.setGoalMax(
+            GoalMax(weight: Measurement(value: 495, unit: .pounds), dateSet: day(2026, 1, 1)),
+            exerciseId: squat.id, for: fixture.user.id)
         try fixture.users.recordBodyWeight(Measurement(value: 198, unit: .pounds), for: fixture.user.id, on: day(2026, 3, 1))
 
         let loaded = try fixture.users.fetch(id: fixture.user.id)
-        #expect(loaded?.maxLifts?[squat.id]?.value == 315)
-        #expect(loaded?.maxLifts?[squat.id]?.unit == UnitMass.pounds)
+        #expect(loaded?.max(.achieved, for: squat.id)?.value == 315)
+        #expect(loaded?.max(.goal, for: squat.id)?.value == 495)
         #expect(loaded?.currentBodyWeight?.value == 198)
     }
 
-    @Test("Recording a max twice replaces rather than duplicating")
-    func maxIsUpsert() throws {
+    @Test("Achieved maxes append as history; goal maxes replace")
+    func achievedAppendsGoalReplaces() throws {
         let fixture = try makeFixture()
 
-        try fixture.users.recordMax(Measurement(value: 315, unit: .pounds), exerciseId: squat.id, for: fixture.user.id)
-        try fixture.users.recordMax(Measurement(value: 325, unit: .pounds), exerciseId: squat.id, for: fixture.user.id)
+        // Achieved is an event — both lifts are kept, newest resolves.
+        try fixture.users.recordAchievedMax(
+            AchievedMax(weight: Measurement(value: 315, unit: .pounds), date: day(2026, 1, 1)),
+            exerciseId: squat.id, for: fixture.user.id)
+        try fixture.users.recordAchievedMax(
+            AchievedMax(weight: Measurement(value: 325, unit: .pounds), date: day(2026, 6, 1)),
+            exerciseId: squat.id, for: fixture.user.id)
+
+        // Goal is a setting — the second replaces the first.
+        try fixture.users.setGoalMax(
+            GoalMax(weight: Measurement(value: 475, unit: .pounds)),
+            exerciseId: squat.id, for: fixture.user.id)
+        try fixture.users.setGoalMax(
+            GoalMax(weight: Measurement(value: 495, unit: .pounds)),
+            exerciseId: squat.id, for: fixture.user.id)
 
         let loaded = try fixture.users.fetch(id: fixture.user.id)
-        #expect(loaded?.maxLifts?.count == 1)
-        #expect(loaded?.maxLifts?[squat.id]?.value == 325)
+        #expect(loaded?.achievedMaxes?[squat.id]?.count == 2)
+        #expect(loaded?.max(.achieved, for: squat.id)?.value == 325)
+        #expect(loaded?.goalMaxes?.count == 1)
+        #expect(loaded?.max(.goal, for: squat.id)?.value == 495)
     }
 }
 
@@ -86,10 +106,14 @@ struct PlanStoreTests {
                     PlannedWorkout(
                         date: day(2026, 3, 2),
                         exercises: [[
-                            PlannedExercise(exercise: squat, sets: [
-                                PlannedSet(reps: 5, type: .warmup, load: .percentOf1RM(0.5)),
-                                PlannedSet(reps: 3, type: .working, load: .percentOf1RM(0.85), restTime: 240),
-                            ])
+                            PlannedExercise(
+                                exercise: squat,
+                                sets: [
+                                    PlannedSet(reps: 5, type: .warmup, load: .percentOf(0.5, of: .goal)),
+                                    PlannedSet(reps: 3, type: .working, load: .percentOf(0.85, of: .goal), effort: EffortTarget(rpe: 9), restTime: 240),
+                                ],
+                                effort: EffortTarget(rpe: 7)
+                            )
                         ]],
                         notes: "Heavy squat day"
                     )
@@ -98,9 +122,11 @@ struct PlanStoreTests {
                     PlannedWorkout(
                         date: day(2026, 3, 4),
                         exercises: [[
-                            PlannedExercise(exercise: bench, sets: [
-                                PlannedSet(reps: 8, type: .working, load: .rpe(8)),
-                            ]),
+                            PlannedExercise(
+                                exercise: bench,
+                                sets: [PlannedSet(reps: 8, type: .working)],
+                                effort: EffortTarget(rpe: 8)
+                            ),
                             PlannedExercise(exercise: row, sets: [
                                 PlannedSet(reps: 8, type: .working, load: .absolute(Measurement(value: 135, unit: .pounds))),
                             ]),
@@ -133,7 +159,7 @@ struct PlanStoreTests {
         #expect(loaded?.program?.count == 2)
     }
 
-    @Test("Every load prescription kind survives storage")
+    @Test("Every load and effort combination survives storage")
     func roundTripsEachLoadKind() throws {
         let fixture = try makeFixture()
         let original = block()
@@ -141,17 +167,26 @@ struct PlanStoreTests {
 
         let loaded = try fixture.plans.fetchBlock(id: original.id)
 
-        let squatSets = loaded?.program?[day(2026, 3, 2)]?.first?.allSets ?? []
+        let squatDay = loaded?.program?[day(2026, 3, 2)]?.first
+        let squatExercise = squatDay?.exercises?[0][0]
+        let squatSets = squatExercise?.sets ?? []
         #expect(squatSets.count == 2)
-        #expect(squatSets[0].load == .percentOf1RM(0.5))
-        #expect(squatSets[1].load == .percentOf1RM(0.85))
+        #expect(squatSets[0].load == .percentOf(0.5, of: .goal))
+        #expect(squatSets[1].load == .percentOf(0.85, of: .goal))
         #expect(squatSets[1].restTime == 240)
         #expect(squatSets[1].type == .working)
+        // exercise-level target survives; only the override is stored per set
+        #expect(squatExercise?.effort == EffortTarget(rpe: 7))
+        #expect(squatSets[0].effort == nil)
+        #expect(squatSets[1].effort == EffortTarget(rpe: 9))
+        #expect(squatExercise.map { $0.resolvedEffort(for: squatSets[0]) } == EffortTarget(rpe: 7))
 
         let benchDay = loaded?.program?[day(2026, 3, 4)]?.first
-        let benchSets = benchDay?.exercises?[0][0].sets ?? []
+        let benchExercise = benchDay?.exercises?[0][0]
         let rowSets = benchDay?.exercises?[0][1].sets ?? []
-        #expect(benchSets.first?.load == .rpe(8))
+        // effort-only prescription: no load axis at all
+        #expect(benchExercise?.sets?.first?.load == nil)
+        #expect(benchExercise?.effort == EffortTarget(rpe: 8))
         #expect(rowSets.first?.load == .absolute(Measurement(value: 135, unit: .pounds)))
     }
 
@@ -195,7 +230,7 @@ struct PlanStoreTests {
 
         let edited = PlannedWorkout(
             date: day(2026, 3, 2),
-            exercises: [[PlannedExercise(exercise: squat, sets: [PlannedSet(reps: 1, load: .percentOf1RM(0.95))])]],
+            exercises: [[PlannedExercise(exercise: squat, sets: [PlannedSet(reps: 1, load: .percentOf(0.95, of: .goal))])]],
             notes: "Changed to a single"
         )
         try fixture.plans.save(edited, in: original.id)

@@ -26,6 +26,11 @@ let package = Package(
             dependencies: [
                 "LiftingCoachModel",
                 .product(name: "GRDB", package: "GRDB.swift"),
+            ],
+            resources: [
+                // The owner's real 12-week program, extracted from the source
+                // spreadsheet — the sample block ProgramImporter ingests.
+                .copy("Resources/Block1.json"),
             ]
         ),
         .testTarget(

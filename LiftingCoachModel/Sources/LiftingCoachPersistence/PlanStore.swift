@@ -40,6 +40,7 @@ private struct PlannedExerciseRow: Codable, FetchableRecord, PersistableRecord {
     var exerciseId: Int
     var groupIndex: Int
     var position: Int
+    var effortRPE: Double?
     var notes: String?
 }
 
@@ -54,6 +55,8 @@ private struct PlannedSetRow: Codable, FetchableRecord, PersistableRecord {
     var loadKind: String?
     var loadValue: Double?
     var loadUnit: String?
+    var loadMaxRef: String?
+    var effortRPE: Double?
     var restTime: Int?
     var notes: String?
 }
@@ -165,6 +168,7 @@ public struct PlanStore: Sendable {
                     exerciseId: exercise.exercise.id,
                     groupIndex: groupIndex,
                     position: position,
+                    effortRPE: exercise.effort.map { Double($0.rpe) },
                     notes: exercise.notes
                 ).insert(db)
 
@@ -179,6 +183,8 @@ public struct PlanStore: Sendable {
                         loadKind: load.kind,
                         loadValue: load.value,
                         loadUnit: load.unit,
+                        loadMaxRef: load.maxRef,
+                        effortRPE: set.effort.map { Double($0.rpe) },
                         restTime: set.restTime,
                         notes: set.notes
                     ).insert(db)
@@ -297,6 +303,7 @@ public struct PlanStore: Sendable {
                 id: UUID(uuidString: exerciseRow.id) ?? UUID(),
                 exercise: catalog,
                 sets: sets,
+                effort: exerciseRow.effortRPE.map { EffortTarget(rpe: Float($0)) },
                 notes: exerciseRow.notes
             )
 
@@ -322,7 +329,13 @@ public struct PlanStore: Sendable {
             id: UUID(uuidString: row.id) ?? UUID(),
             reps: row.reps,
             type: row.setType.flatMap(SetType.init(rawValue:)),
-            load: decodeLoad(kind: row.loadKind, value: row.loadValue, unit: row.loadUnit),
+            load: decodeLoad(
+                kind: row.loadKind,
+                value: row.loadValue,
+                unit: row.loadUnit,
+                maxRef: row.loadMaxRef
+            ),
+            effort: row.effortRPE.map { EffortTarget(rpe: Float($0)) },
             restTime: row.restTime,
             notes: row.notes
         )
@@ -331,34 +344,40 @@ public struct PlanStore: Sendable {
 
 // MARK: - Load encoding
 
-/// `LoadPrescription` flattened into three columns.
+/// `LoadPrescription` flattened into columns.
 ///
 /// Stored as discriminator + value rather than as JSON so the planner can filter
 /// and aggregate on it in SQL later — "every set programmed above 85%" is a query
 /// this app will eventually want, and it's the reason this doesn't reuse the
 /// snapshot approach that `workoutSet.plannedFrom` uses.
-private func encode(_ load: LoadPrescription?) -> (kind: String?, value: Double?, unit: String?) {
+private func encode(
+    _ load: LoadPrescription?
+) -> (kind: String?, value: Double?, unit: String?, maxRef: String?) {
     switch load {
     case nil:
-        return (nil, nil, nil)
+        return (nil, nil, nil, nil)
     case .absolute(let weight):
-        return ("absolute", weight.value, weight.unit.symbol)
-    case .percentOf1RM(let percent):
-        return ("percentOf1RM", percent, nil)
-    case .rpe(let rpe):
-        return ("rpe", Double(rpe), nil)
+        return ("absolute", weight.value, weight.unit.symbol, nil)
+    case .percentOf(let percent, let reference):
+        return ("percentOf", percent, nil, reference.rawValue)
     }
 }
 
-private func decodeLoad(kind: String?, value: Double?, unit: String?) -> LoadPrescription? {
+private func decodeLoad(
+    kind: String?,
+    value: Double?,
+    unit: String?,
+    maxRef: String?
+) -> LoadPrescription? {
     guard let kind, let value else { return nil }
     switch kind {
     case "absolute":
         return .absolute(measurement(value: value, symbol: unit))
-    case "percentOf1RM":
-        return .percentOf1RM(value)
-    case "rpe":
-        return .rpe(Float(value))
+    case "percentOf":
+        // A percentage without a legible reference is unresolvable by definition
+        // — drop the load rather than guess which max was meant.
+        guard let reference = maxRef.flatMap(MaxReference.init(rawValue:)) else { return nil }
+        return .percentOf(value, of: reference)
     default:
         // An unknown discriminator means a newer version wrote this row. Dropping
         // the load is better than guessing a weight for it.

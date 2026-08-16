@@ -56,6 +56,29 @@ public final class AppEnvironment {
     private func bootstrap() throws {
         try seedCatalogIfNeeded()
         currentUser = try users.localUser()
+        try importSampleBlockIfNeeded()
+        // The import writes goal maxes, so re-read the lifter with them attached.
+        currentUser = try users.localUser()
+    }
+
+    /// First launch only: loads the owner's real 12-week program (Block 1) so
+    /// the app opens with an actual training block instead of an empty plan.
+    ///
+    /// Week 1 starts on the Monday of the current week — the program's
+    /// week/dayOfWeek grid is Monday-anchored.
+    private func importSampleBlockIfNeeded() throws {
+        guard let user = currentUser else { return }
+        guard try plans.fetchPlan(userId: user.id).blocks == nil else { return }
+
+        var calendar = Calendar.current
+        calendar.firstWeekday = 2  // Monday
+        let thisWeek = calendar.dateInterval(of: .weekOfYear, for: Date())?.start ?? Date()
+
+        try ProgramImporter(database).importProgram(
+            try ProgramImporter.bundledBlock1,
+            for: user.id,
+            startDate: thisWeek
+        )
     }
 
     /// Re-reads the lifter after their metrics change, so a newly recorded 1RM
