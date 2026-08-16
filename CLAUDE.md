@@ -27,15 +27,17 @@ The model went through a design pass driven by that import (see Core Tenets): `L
 
 Built: `WorkoutSession` + `WorkoutStore` + tracker UI; `PlanStore` + `UserStore` + planner UI; homepage metrics; theme; importer. 79 tests.
 
-**Next step: Workout History** — the calendar view in `Features/Workout History.md`. `WorkoutStore.fetch(from:to:)` already returns what it needs, so this is mostly UI.
+Achieved maxes now auto-record from logged sets (`AchievedMaxUpdate`, wired into `TrackerModel.completeSet`) — a heavier working-set weight than the current best becomes the new best, no manual entry. Bodyweight is logged explicitly via a sheet on Home (it's a distinct action, not derived). Home also has an honest "Health" placeholder (HealthKit not connected) and a minimal reverse-chronological Workout History list — deliberately not the calendar `Features/Workout History.md` specifies; that's staying deferred (low priority, other screens may still change shape under it) per explicit direction.
 
-After that, in rough order:
-- **Recording achieved maxes and bodyweight from the UI.** `UserStore.recordAchievedMax`/`recordBodyWeight` exist and are tested but nothing calls them — the home screen's "achieved" column reads "—" until then. (Goal maxes come in via the program import.)
-- **Profile: data export/import.** The one genuinely local part of that screen, and `Ideas.md` calls importing from other apps crucial.
+**`Core Tenets.md` §11 (new): the app never parses a spreadsheet, and never will.** `ProgramImporter` is a dev-time seeding tool, not the start of an in-app import feature. The only import paths this app will ever offer a lifter: a documented JSON/CSV schema, or handing a file to the phase 2 AI coach. If a request looks like "support importing format X," it resolves to one of those two, not a new parser.
+
+Next, in rough order:
+- **Profile: data export/import.** The one genuinely local part of that screen, and `Ideas.md` calls importing from other apps crucial. (This is the JSON/CSV-schema door from Tenet §11, not a format-specific parser.)
 - **A real exercise catalog** to replace the seed + import-created entries (no assets, muscle-group naming is ad hoc).
 - **Superset authoring.** Stores and tracker handle supersets; the planner can't author one. Note the real program uses none.
 - **Adherence denominator**: home counts all 644 sets of the 12-week block; should probably scope to elapsed days.
-- **UI test target** — simctl can't tap, so sheets/editor/rest timer are still only verifiable by hand.
+- **Real HealthKit integration** — scope (which metrics, a new page vs. Home, entitlements) is an open decision, not started. The Home placeholder just names what's missing.
+- **UI test target** — simctl can't tap, so sheets, the planner editor, the rest timer, and now the achieved-max banner are only verifiable by hand. Worth prioritizing: the completeSet → banner → Home-refresh path has never actually been exercised end-to-end, only its pieces individually.
 
 Open items intentionally left unresolved (in the docs, not silently in the model):
 - Exercise catalog/assets are TBD — see `Concepts.md`'s TODO section (Strong/Heavy asset sourcing as an internal-use placeholder, swap before any public release). `ExerciseCatalog.seed` is a 10-entry hardcoded stand-in until then.
