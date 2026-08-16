@@ -292,11 +292,11 @@ private struct PlannedSetRow: View {
     private var loadSummary: String {
         switch set.load {
         case .absolute(let weight):
-            weight.formatted(.measurement(width: .abbreviated, usage: .personWeight))
+            weight.liftedDescription
         case .percentOf1RM(let percent):
             "\(Int(percent * 100))% 1RM"
         case .rpe(let rpe):
-            "RPE \(rpe.formatted())"
+            "RPE \(rpe.rpeDescription)"
         case nil:
             "no load"
         }

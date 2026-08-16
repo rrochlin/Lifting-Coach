@@ -90,13 +90,13 @@ struct HomeView: View {
         Section("Metrics") {
             ForEach(bigThree, id: \.self) { id in
                 LabeledContent(name(for: id)) {
-                    Text(maxLift(id)?.formatted(.measurement(width: .abbreviated, usage: .personWeight)) ?? "—")
+                    Text(maxLift(id)?.liftedDescription ?? "—")
                         .foregroundStyle(maxLift(id) == nil ? .secondary : .primary)
                 }
             }
             LabeledContent("Bodyweight") {
                 let weight = environment.currentUser?.currentBodyWeight
-                Text(weight?.formatted(.measurement(width: .abbreviated, usage: .personWeight)) ?? "—")
+                Text(weight?.liftedDescription ?? "—")
                     .foregroundStyle(weight == nil ? .secondary : .primary)
             }
             if let loadError {

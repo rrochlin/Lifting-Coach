@@ -308,19 +308,25 @@ private struct SetRow: View {
     private var summary: String {
         let reps = set.reps.map { "\($0)" } ?? "—"
         guard let weight = set.weight else { return "\(reps) reps" }
-        return "\(reps) × \(weight.formatted(.measurement(width: .abbreviated, usage: .personWeight)))"
+        return "\(reps) × \(weight.liftedDescription)"
     }
 
-    /// Shown only when the prescription is something the logged numbers don't
-    /// already say — an RPE target the lifter still has to hit, or a set that
-    /// deviated from what was asked for.
+    /// The trailing label. Priority is what the lifter most needs to see:
+    /// what they actually rated the set, then the target they were chasing, then
+    /// a deviation from the prescribed reps.
     private var prescription: String? {
-        guard let planned = set.plannedFrom else { return nil }
-        if case .rpe(let target) = planned.load {
-            return set.rpe.map { "RPE \($0.formatted()) / \(target.formatted())" }
-                ?? "RPE \(target.formatted())"
+        let target: Float? = if case .rpe(let value) = set.plannedFrom?.load { value } else { nil }
+
+        // A logged RPE is the whole point of logging RPE — show it whatever the
+        // prescription was, not only when the set was prescribed by RPE.
+        if let logged = set.rpe {
+            guard let target else { return "RPE \(logged.rpeDescription)" }
+            return "RPE \(logged.rpeDescription) / \(target.rpeDescription)"
         }
-        if let plannedReps = planned.reps, let actual = set.reps, plannedReps != actual {
+        if let target {
+            return "RPE \(target.rpeDescription)"
+        }
+        if let plannedReps = set.plannedFrom?.reps, let actual = set.reps, plannedReps != actual {
             return "planned \(plannedReps)"
         }
         return nil
