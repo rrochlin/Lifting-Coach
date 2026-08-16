@@ -74,15 +74,32 @@ xcodebuild -project LiftingCoach.xcodeproj -target LiftingCoach \
 
 Regenerate the project first if `project.yml` changed: `xcodegen generate`.
 
-**Still unverified: the app has never been *run*.** The only installed simulator runtime is iOS 17.0, and the deployment target is iOS 18 — so nothing can launch it, and no view has been laid out on a screen. Note that dropping to iOS 17 to use the existing runtime is *not* a free workaround: `RootView` uses the iOS 17+... specifically the `Tab { }` builder syntax in `TabView`, which is iOS 18+. To actually run it, install a newer runtime:
+`swift test` in `LiftingCoachModel/` covers all the real logic and is the fast inner loop — run it before `xcodebuild`.
+
+### Running it
+An iOS 26.3 simulator runtime is installed, and **all five tabs have been verified on screen**. Full loop:
 
 ```sh
-xcodebuild -downloadPlatform iOS      # multi-GB; may prompt for admin
+D=$(xcrun simctl list devices available | grep -m1 'iPhone 17 Pro' | grep -o '[0-9A-F-]\{36\}')
+xcodegen generate                       # only if project.yml or files changed
+# ...build as above...
+xcrun simctl boot "$D"                  # no-op if already booted
+xcrun simctl install "$D" "$DD/Products/Debug-iphonesimulator/LiftingCoach.app"
+xcrun simctl launch "$D" com.rrochlin.LiftingCoach -initialTab plan
+xcrun simctl io "$D" screenshot /tmp/shot.png
 ```
 
-Until then, treat layout and runtime behavior as unproven even though it compiles. `swift test` in `LiftingCoachModel/` covers all the real logic and is the fast inner loop — run it before `xcodebuild`.
+**Note "iPhone 17 Pro" is a device model, not an OS version** — it runs iOS 26.3. The stale iOS 17.0 runtime is also installed but nothing here can run on it (deployment target is 18).
 
-There is also a macOS-SDK typecheck fallback (see git history for the invocation), which is why the toolbar uses `.navigation`/`.primaryAction` over `.topBarLeading`/`.topBarTrailing` and why one iOS-only modifier sits behind `#if os(iOS)`. That's no longer necessary now that the real build works, but the existing code is harmless as written.
+`-initialTab home|workout|plan|history|profile` picks the starting tab. It exists because simctl can install, launch, and screenshot but **cannot tap** — without it, only Home is reachable from the command line. Interaction-dependent states (rest timer, sheets, the planned-workout editor) still can't be reached this way; that needs a UI test target, which doesn't exist yet.
+
+**Seeding data to see populated views:** write directly to the app's SQLite.
+```sh
+DB="$(xcrun simctl get_app_container "$D" com.rrochlin.LiftingCoach data)/Library/Application Support/LiftingCoach/db.sqlite"
+```
+The container UUID **changes on reinstall**, so re-resolve it every time. GRDB stores dates as `'YYYY-MM-DD HH:MM:SS.SSS'` in **UTC**, while the app normalizes days with the *local* calendar — so a local start-of-day is e.g. `07:00:00.000` at UTC-7. Get this wrong and rows silently don't match "today". `workoutSet.plannedFrom` is Swift-encoded JSON; generate it with the real encoder rather than hand-writing it (`LoadPrescription` encodes as `{"rpe":{"_0":8}}`).
+
+Lesson worth keeping: running the app immediately found two bugs that compiled fine — weights rounding 157.5 lb to 158 lb, and logged RPE never displaying. **Screenshot new views; don't trust a green build.**
 
 ## Working conventions from this project
 - The notes docs are living working files, not archives — once a design conversation converges on a direction, implement it directly in the relevant `.md` (or, going forward, the actual Swift code). Don't leave agreed decisions sitting only in chat.
