@@ -31,6 +31,11 @@ let package = Package(
                 // The owner's real 12-week program, extracted from the source
                 // spreadsheet — the sample block ProgramImporter ingests.
                 .copy("Resources/Block1.json"),
+                // A vendored snapshot of yuhonas/free-exercise-db (public
+                // domain), backing the real exercise catalog. See
+                // Resources/FreeExerciseDB.LICENSE.txt for provenance.
+                .copy("Resources/FreeExerciseDB.json"),
+                .copy("Resources/FreeExerciseDB.LICENSE.txt"),
             ]
         ),
         .testTarget(

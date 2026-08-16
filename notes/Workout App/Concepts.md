@@ -24,11 +24,29 @@ struct PlannedWorkout {
 
 ## #Exercise
 Exercises are catalog entries for specific lifts/activities (bench press, deadlift) — the reusable definition, not a specific instance of doing them. String names and id's can be used to index into workout history to look for historical trends.
+
+`muscleGroup` is the one field every exercise has always carried. Everything else is catalog metadata that only a vendored-catalog entry (or one enriched from one — see "Exercise Catalog" below) carries; a manually-created exercise legitimately has all of it nil, and that's not a gap to fill in.
 ```swift
 struct Exercise {
 	var name: String
 	var id: Int
 	var muscleGroup: String
+
+	var equipment: String?
+	var primaryMuscles: Array<String>?
+	var secondaryMuscles: Array<String>?
+	var instructions: Array<String>?
+	var level: String?      // beginner / intermediate / expert
+	var category: String?   // strength / cardio / stretching / powerlifting / ...
+	var mechanic: String?   // compound / isolation
+	var force: String?      // push / pull / static
+	// identity: this row IS that vendored-catalog entry. Unique when present —
+	// lets a re-import upsert instead of duplicating rows.
+	var sourceSlug: String?
+	// provenance, not identity: the catalog entry CatalogMatcher best-effort
+	// matched this exercise against to borrow its metadata. NOT unique — several
+	// program exercises can and do legitimately match the same canonical entry.
+	var matchedSlug: String?
 }
 ```
 
@@ -228,5 +246,11 @@ struct User {
 }
 ```
 
-## TODO — Exercise Catalog
-Still need a real exercise catalog backing #Exercise (assets, muscle group diagrams, equipment type, etc.). Strong/Heavy appear to draw from a similar free/shared asset set — worth using as a placeholder source while the app stays internal, with a plan to swap in properly licensed assets before any public release.
+## Exercise Catalog
+Resolved: backed by a vendored snapshot of `yuhonas/free-exercise-db` (public domain, ~870 exercises — equipment, muscle groups, instructions, category). See `notes/Workout App/workout_assets_overview.md` for the license survey this came out of, and `LiftingCoachModel/Sources/LiftingCoachPersistence/Resources/FreeExerciseDB.LICENSE.txt` for exact provenance. Vendored, not fetched live — a shipped app depending on a third-party GitHub URL for its own catalog is an availability/integrity risk not worth taking for data this static.
+
+**Images were deliberately not vendored.** The full image set is ~90-100MB of JPEGs; no screen in the app displays an exercise photo yet, so that cost isn't justified today. Worth revisiting once something actually needs them — the upstream repo still has them, keyed by the same slug this app already stores as `sourceSlug`.
+
+**Names don't line up 1:1 with real programming.** A spreadsheet-authored program names exercises the way a lifter thinks about them ("Bench press — heavy (paused, comp grip)"), not the way a canonical database names them ("Barbell Bench Press - Medium Grip"). `CatalogMatcher` does one-time, best-effort keyword matching to enrich a manually-named exercise with the canonical entry's metadata **without changing its name or id** — see its doc comment for exactly how, and for the real false positives (a "heavy" deadlift nearly matching "Heavy Bag Thrust") that shaped the current movement-word-gated approach. It's explicitly low-precision-tolerant: several real program exercises are legitimately unmatchable (they describe more than one movement, or none), and are left alone rather than guessed at.
+
+**This is where "more advanced searching down the line" belongs**, if the keyword matcher's misses ever become worth fixing — embeddings or an LLM call, not more hand-tuned heuristics.

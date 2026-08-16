@@ -57,7 +57,13 @@ public final class AppEnvironment {
         try seedCatalogIfNeeded()
         currentUser = try users.localUser()
         try importSampleBlockIfNeeded()
-        // The import writes goal maxes, so re-read the lifter with them attached.
+        // Runs after the program import, not before: reconciliation enriches
+        // whatever exercises already exist with no catalog link, which
+        // includes the ones the program import just created. Running it first
+        // would mean reconciling against an empty program.
+        try importCatalogIfNeeded()
+        // Both imports can touch the lifter's goal maxes / catalog links —
+        // re-read once at the end rather than after each.
         currentUser = try users.localUser()
     }
 
@@ -87,13 +93,23 @@ public final class AppEnvironment {
         currentUser = try? users.localUser()
     }
 
-    /// Populates the placeholder exercise catalog on first launch.
-    ///
-    /// Temporary: `Concepts.md` calls for a real catalog with assets and
-    /// equipment data. When that exists this becomes a bundled-resource import,
-    /// not a hardcoded array.
+    /// Seeds the big-three placeholder entries (`ExerciseCatalog.seed`, ids
+    /// 1-10) that `HomeView` and `ProgramImporter` reference by id. Superseded
+    /// in richness by `importCatalogIfNeeded` below, but kept as the very
+    /// first thing to exist — those ids need to be stable before anything else
+    /// runs, and the seed's own id range never collides with the catalog
+    /// import's (which starts at 1000).
     func seedCatalogIfNeeded() throws {
         guard try exercises.fetchAll().isEmpty else { return }
         try exercises.save(ExerciseCatalog.seed)
+    }
+
+    /// First launch only: imports the vendored `free-exercise-db` catalog
+    /// (~870 exercises, see `CatalogImporter`) and, in the same pass,
+    /// best-effort-enriches whatever exercises don't already have catalog
+    /// metadata — the seed entries and anything the program import created.
+    private func importCatalogIfNeeded() throws {
+        guard try !exercises.hasCatalogImport() else { return }
+        try CatalogImporter(database).importAndReconcile(try CatalogImporter.bundledCatalog)
     }
 }

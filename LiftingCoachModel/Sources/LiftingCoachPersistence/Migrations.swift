@@ -19,8 +19,17 @@ extension AppDatabase {
         var migrator = DatabaseMigrator()
 
         #if DEBUG
-        // Recreate the database from scratch when a shipped migration changes.
-        // Safe only while phase 1 has no real user data to lose.
+        // Recreate the database from scratch if the actual on-disk schema ever
+        // stops matching what a fresh run of these migrations would produce.
+        //
+        // This used to be an unconditionally safe convenience — phase 1 had no
+        // real user data anywhere. That stopped being true the moment the app
+        // went on a real device: erasing now means erasing someone's logged
+        // workouts and maxes, not just simulator scratch data. It stays on
+        // because it's still a useful safety net against a genuine local dev
+        // mistake, but it only stays *safe* if migrations are strictly
+        // additive from here — see the docstring above. Edit one in place and
+        // this is exactly the mechanism that will silently wipe a real device.
         migrator.eraseDatabaseOnSchemaChange = true
         #endif
 
@@ -196,6 +205,49 @@ extension AppDatabase {
                 // revisit if plan-wide analytics need to filter on them in SQL.
                 t.column("plannedFrom", .jsonText)
             }
+        }
+
+        // Additive: the first migration since a real device started carrying
+        // real data. Alters existing tables rather than editing v1_core, so a
+        // phone that already has rows keeps them — see the note on
+        // eraseDatabaseOnSchemaChange above for what editing v1 in place would
+        // have done instead.
+        //
+        // Backs `Exercise`'s new catalog-metadata fields (see Exercise.swift
+        // and Concepts.md's #Exercise section). Array-typed fields
+        // (primaryMuscles, secondaryMuscles, instructions) are JSON-encoded
+        // text, the same pattern `workoutSet.plannedFrom` already established,
+        // rather than new child tables — this is read-mostly reference data,
+        // not something queried by muscle group from SQL today.
+        migrator.registerMigration("v2_exerciseCatalog") { db in
+            try db.alter(table: "exercise") { t in
+                t.add(column: "equipment", .text)
+                t.add(column: "primaryMuscles", .jsonText)
+                t.add(column: "secondaryMuscles", .jsonText)
+                t.add(column: "instructions", .jsonText)
+                t.add(column: "level", .text)
+                t.add(column: "category", .text)
+                t.add(column: "mechanic", .text)
+                t.add(column: "force", .text)
+                t.add(column: "sourceSlug", .text)
+                // Not unique, deliberately: many program-specific exercises can
+                // legitimately best-effort-match the same canonical entry (two
+                // bench variants both matching "Barbell Bench Press"). This is
+                // provenance for what CatalogMatcher picked, not an identity
+                // claim like sourceSlug is — see Exercise.swift.
+                t.add(column: "matchedSlug", .text)
+            }
+            // Unique only where present — lets a re-import upsert a
+            // catalog-sourced row by identity instead of duplicating it, while
+            // manually-created exercises (sourceSlug nil) are unconstrained by
+            // it. SQLite treats every NULL as distinct for uniqueness, so any
+            // number of nil rows coexist fine.
+            try db.create(
+                index: "exercise_on_sourceSlug",
+                on: "exercise",
+                columns: ["sourceSlug"],
+                unique: true
+            )
         }
 
         return migrator

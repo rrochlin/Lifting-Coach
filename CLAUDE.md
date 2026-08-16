@@ -25,22 +25,27 @@ The phase 1 project is scaffolded, the **Tracker → Planner loop is closed**, t
 
 The model went through a design pass driven by that import (see Core Tenets): `LoadPrescription` is `.absolute | .percentOf(_, of: MaxReference)`; `EffortTarget` is a separate axis living on `PlannedExercise` with per-set override; maxes are split into achieved (event history) / goal (setting) / theoretical (derived, unimplemented). Session start materializes resolved effort into each set's `plannedFrom` snapshot.
 
-Built: `WorkoutSession` + `WorkoutStore` + tracker UI; `PlanStore` + `UserStore` + planner UI; homepage metrics; theme; importer. 79 tests.
+Built: `WorkoutSession` + `WorkoutStore` + tracker UI; `PlanStore` + `UserStore` + planner UI; homepage metrics; theme; importer. 103 tests.
 
 Achieved maxes now auto-record from logged sets (`AchievedMaxUpdate`, wired into `TrackerModel.completeSet`) — a heavier working-set weight than the current best becomes the new best, no manual entry. Bodyweight is logged explicitly via a sheet on Home (it's a distinct action, not derived). Home also has an honest "Health" placeholder (HealthKit not connected) and a minimal reverse-chronological Workout History list — deliberately not the calendar `Features/Workout History.md` specifies; that's staying deferred (low priority, other screens may still change shape under it) per explicit direction.
 
 **`ProgramImporter` is a one-off dev tool, not a feature to extend** (see `Roadmap.md`'s deferred list) — it seeded the owner's real program as sample data and its job ends there. Don't generalize it or spend effort keeping it in sync as the model changes.
 
+**The exercise catalog is now real** — a vendored, public-domain snapshot of `yuhonas/free-exercise-db` (~870 exercises), imported by `CatalogImporter` on first launch. Unlike `ProgramImporter`, this one *is* ongoing infrastructure, not a dev-only tool. Two pieces:
+- `CatalogMatcher` (pure, in `LiftingCoachModel`) — low-grade keyword matching that enriches a manually-named exercise (program-imported or hand-typed) with a canonical entry's metadata, *without* changing its name or id. Deliberately conservative: several real program exercises are genuinely unmatchable and are left alone rather than guessed at. See its doc comment before touching the matching heuristic — it documents real false positives that shaped the current approach.
+- Images were **not** vendored (~90-100MB, nothing displays them yet) — see `FreeExerciseDB.LICENSE.txt` for the reasoning and how to get them later if needed.
+
+**⚠️ A real device now holds real data (the owner's iPhone 13).** `Migrations.swift`'s `eraseDatabaseOnSchemaChange` (DEBUG-only) used to be a safe convenience because nothing real existed anywhere. It is no longer safe to edit a migration in place — GRDB will detect the phone's schema no longer matches a fresh run of the migrations and **silently wipe the phone's database** on next launch. `v2_exerciseCatalog` is the first migration added *after* this stopped being true, and it's additive (`ALTER TABLE`) for exactly this reason. Keep doing that.
+
 Next, in rough order:
 - **Profile: data export/import.** The one genuinely local part of that screen, and `Ideas.md` calls importing from other apps crucial. If/when real program import happens, it's a documented JSON/CSV schema (or the phase 2 AI coach), not a spreadsheet parser.
-- **A real exercise catalog** to replace the seed + import-created entries (no assets, muscle-group naming is ad hoc).
 - **Superset authoring.** Stores and tracker handle supersets; the planner can't author one. Note the real program uses none.
 - **Adherence denominator**: home counts all 644 sets of the 12-week block; should probably scope to elapsed days.
 - **Real HealthKit integration** — scope (which metrics, a new page vs. Home, entitlements) is an open decision, not started. The Home placeholder just names what's missing.
-- **UI test target** — simctl can't tap, so sheets, the planner editor, the rest timer, and now the achieved-max banner are only verifiable by hand. Worth prioritizing: the completeSet → banner → Home-refresh path has never actually been exercised end-to-end, only its pieces individually.
+- **UI test target** — simctl can't tap, so sheets, the planner editor, the rest timer, and the achieved-max banner are only verifiable by hand. Worth prioritizing: the completeSet → banner → Home-refresh path has never actually been exercised end-to-end, only its pieces individually.
+- **Exercise catalog search stays substring-only.** `CatalogMatcher`'s heuristic is fine for a one-time enrichment pass but not built for interactive search over ~900 entries — if the picker needs to get smarter, that's real search work (embeddings/LLM), not a bigger keyword table.
 
 Open items intentionally left unresolved (in the docs, not silently in the model):
-- Exercise catalog/assets are TBD — see `Concepts.md`'s TODO section (Strong/Heavy asset sourcing as an internal-use placeholder, swap before any public release). `ExerciseCatalog.seed` is a 10-entry hardcoded stand-in until then.
 - Whether `Exercise`/`WorkoutSet` need non-strength fields (cardio incline/duration/etc.) — currently barbell/strength-shaped only. May be fine for a phase 1 MVP scoped to the owner's own training (bench/squat/deadlift), but not decided as permanent scope.
 - **The theoretical-max estimation model doesn't exist.** `MaxReference.theoretical` deliberately resolves to `nil` — estimating a max from logged work needs the rep-range-aware model `Ideas.md` calls for (standard formulas are explicitly distrusted there). Decide that model before the app starts predicting strength anywhere.
 - `Backend/Overview.md`'s two Open Questions (S3/CloudFront for a possible web planner UI; Lambda implementation language) — both phase 2, not blocking.
@@ -49,7 +54,7 @@ Open items intentionally left unresolved (in the docs, not silently in the model
 ## Project scaffold
 - `LiftingCoachModel/` — local Swift package, the portable core. Two targets:
   - `LiftingCoachModel` — pure domain types mirroring `Concepts.md`, no I/O, no dependencies. Derived logic lives here: `WorkoutPlan.currentBlock`/`nextBlock`, `WorkoutBlock.progress`/`restTime`, `User.resolvedWeight`.
-  - `LiftingCoachPersistence` — GRDB/SQLite. `AppDatabase` opens and migrates; `Migrations.swift` holds the append-only schema. Four stores: `ExerciseStore` (catalog), `WorkoutStore` (logged), `PlanStore` (blocks + programs), `UserStore` (lifter + maxes + bodyweight).
+  - `LiftingCoachPersistence` — GRDB/SQLite. `AppDatabase` opens and migrates; `Migrations.swift` holds the schema, **additive only past `v1_core`** (see the ⚠️ above — a real device now depends on this). Four stores: `ExerciseStore` (catalog), `WorkoutStore` (logged), `PlanStore` (blocks + programs), `UserStore` (lifter + maxes + bodyweight). Two importers: `ProgramImporter` (one-off, the owner's program), `CatalogImporter` (ongoing, the vendored exercise database).
   - `swift test` runs both suites with no Xcode involved — that's the point of keeping this a package. **Run it before `xcodebuild`; it's faster and catches most breakage.**
 - `Sources/App/` — the SwiftUI iOS app. `AppEnvironment` is the composition root (views never build their own store or client). `Backend/BackendClient.swift` is the phase 2 seam, implemented for now by `UnavailableBackend`, which throws on every call rather than quietly returning empty data.
 - `project.yml` + XcodeGen — `LiftingCoach.xcodeproj` is **generated and gitignored**. Edit `project.yml` and run `xcodegen generate`; never hand-edit the pbxproj, and don't commit it.
@@ -66,6 +71,7 @@ Open items intentionally left unresolved (in the docs, not silently in the model
 - Blocks load with `program` populated and `workouts` left `nil`; `PlanStore.attachingLoggedWorkouts` joins them. Opening the planner shouldn't pull in every workout ever logged.
 - Phase 1 has no sign-in, so `UserStore.localUser()` creates a placeholder lifter on first launch. Phase 2's Cognito replaces the *identity*, not the storage.
 - `SetType` has no `failure` case: per `Mid lift thoughts.md`, failure is RPE 10 plus forced partials or a weight drop, and Strong's sticky failure status was a real annoyance.
+- `Exercise.sourceSlug` (identity, unique) and `Exercise.matchedSlug` (provenance, not unique) look similar but mean different things — don't collapse them. Two program exercises legitimately matching the same canonical entry is normal; two rows claiming to *be* the same canonical entry is a bug the unique index on `sourceSlug` exists to catch.
 
 ### Building
 **The iOS build works.** It compiles and links cleanly (`** BUILD SUCCEEDED **`, universal simulator binary). Two quirks to know:

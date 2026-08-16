@@ -540,11 +540,16 @@ private struct ExercisePicker: View {
                     onPick(exercise)
                     dismiss()
                 } label: {
-                    VStack(alignment: .leading) {
+                    VStack(alignment: .leading, spacing: 2) {
                         Text(exercise.name)
-                        Text(exercise.muscleGroup)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                        HStack(spacing: 4) {
+                            Text(exercise.muscleGroup)
+                            if let equipment = exercise.equipment {
+                                Text("· \(equipment.capitalized)")
+                            }
+                        }
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                     }
                 }
                 .buttonStyle(.plain)

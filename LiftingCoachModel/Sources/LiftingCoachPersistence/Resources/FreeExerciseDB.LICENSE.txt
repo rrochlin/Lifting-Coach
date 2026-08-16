@@ -1,0 +1,33 @@
+Source: yuhonas/free-exercise-db
+https://github.com/yuhonas/free-exercise-db
+
+Vendored file: FreeExerciseDB.json
+Fetched from: https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/dist/exercises.json
+Fetched on: 2026-08-16
+Upstream commit: main branch, HEAD at fetch time (see git blame on this file
+for exactly when — the source repo itself is not pinned to a tag/commit hash).
+
+License: The Unlicense (public domain equivalent). No attribution required,
+commercial use is explicitly permitted. Full text: https://unlicense.org
+
+Modifications from upstream:
+- The `images` field has been stripped from every record. This app does not
+  vendor the corresponding image files (a full set is roughly 90-100MB of
+  JPEGs, more than is justified before any screen in the app actually
+  displays exercise photos), so keeping image paths that point at nothing
+  vendored here would be misleading. The upstream images are still fetchable
+  by exercise slug from the source repo's `exercises/<slug>/{0,1}.jpg` if
+  that becomes worth doing later.
+- JSON has been minified (no formatting change to keys/values).
+
+Why this dataset: see notes/Workout App/workout_assets_overview.md for the
+full survey this choice came out of. Short version — it's the only
+structured, well-maintained exercise database with a license that has zero
+commercial/attribution friction (contrast wger's CC-BY-SA share-alike
+requirement, or ExerciseDB's AGPL-3.0 code).
+
+Vendored rather than fetched live at runtime — a shipped app calling out to a
+third-party GitHub raw URL for its own exercise catalog is an availability and
+integrity risk the app shouldn't carry for data this static. This file is a
+one-time snapshot, not a live sync; re-fetch by hand from the source URL above
+if the upstream dataset improves and it's worth pulling in updates.
