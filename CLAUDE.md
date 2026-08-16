@@ -59,20 +59,30 @@ Open items intentionally left unresolved (in the docs, not silently in the model
 - Phase 1 has no sign-in, so `UserStore.localUser()` creates a placeholder lifter on first launch. Phase 2's Cognito replaces the *identity*, not the storage.
 - `SetType` has no `failure` case: per `Mid lift thoughts.md`, failure is RPE 10 plus forced partials or a weight drop, and Strong's sticky failure status was a real annoyance.
 
-### Environment gotcha
-This machine's Xcode 26.3 has not completed its first-launch setup, so **`xcodebuild` cannot build any iOS target** — it fails loading `IDESimulatorFoundation`, and `simctl` hangs. Fix with `sudo xcodebuild -runFirstLaunch`; it needs an interactive password prompt, which a remote session can't provide, so it has to be run from an SSH TTY or at the machine.
+### Building
+**The iOS build works.** It compiles and links cleanly (`** BUILD SUCCEEDED **`, universal simulator binary). Two quirks to know:
 
-**Consequence: no SwiftUI code in this repo has ever been compiled for iOS, laid out, or run.** Treat every view as unverified until someone builds it. Two fallbacks in the meantime:
-- `swift test` in `LiftingCoachModel/` — fully works, and covers all the real logic.
-- Typechecking the app sources against the macOS SDK, which does catch API misuse:
-  ```sh
-  BIN=LiftingCoachModel/.build/arm64-apple-macosx/debug
-  xcrun swiftc -typecheck -swift-version 6 -target arm64-apple-macos15.0 \
-    -sdk "$(xcrun --sdk macosx --show-sdk-path)" -I "$BIN/Modules" -I "$BIN" \
-    -Xcc -fmodule-map-file=LiftingCoachModel/.build/checkouts/GRDB.swift/Sources/GRDBSQLite/module.modulemap \
-    $(find Sources/App -name '*.swift')
-  ```
-  This is why the toolbar uses `.navigation`/`.primaryAction` over `.topBarLeading`/`.topBarTrailing` (identical on iOS, but they exist on macOS too), and why the one genuinely iOS-only modifier is behind `#if os(iOS)`. Keep new view code typecheckable this way until the build works.
+1. **Derived data must go outside the repo** — the agent sandbox denies writes to `./build/`.
+2. **Use `-target`, not `-scheme`** — scheme-based builds fail destination resolution because no *runnable* simulator matches (see below).
+
+```sh
+DD=/tmp/lifting-coach-build   # anywhere outside the repo
+xcodebuild -project LiftingCoach.xcodeproj -target LiftingCoach \
+  -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO \
+  SYMROOT="$DD/Products" OBJROOT="$DD/Intermediates" SHARED_PRECOMPS_DIR="$DD/PCH" build
+```
+
+Regenerate the project first if `project.yml` changed: `xcodegen generate`.
+
+**Still unverified: the app has never been *run*.** The only installed simulator runtime is iOS 17.0, and the deployment target is iOS 18 — so nothing can launch it, and no view has been laid out on a screen. Note that dropping to iOS 17 to use the existing runtime is *not* a free workaround: `RootView` uses the iOS 17+... specifically the `Tab { }` builder syntax in `TabView`, which is iOS 18+. To actually run it, install a newer runtime:
+
+```sh
+xcodebuild -downloadPlatform iOS      # multi-GB; may prompt for admin
+```
+
+Until then, treat layout and runtime behavior as unproven even though it compiles. `swift test` in `LiftingCoachModel/` covers all the real logic and is the fast inner loop — run it before `xcodebuild`.
+
+There is also a macOS-SDK typecheck fallback (see git history for the invocation), which is why the toolbar uses `.navigation`/`.primaryAction` over `.topBarLeading`/`.topBarTrailing` and why one iOS-only modifier sits behind `#if os(iOS)`. That's no longer necessary now that the real build works, but the existing code is harmless as written.
 
 ## Working conventions from this project
 - The notes docs are living working files, not archives — once a design conversation converges on a direction, implement it directly in the relevant `.md` (or, going forward, the actual Swift code). Don't leave agreed decisions sitting only in chat.
