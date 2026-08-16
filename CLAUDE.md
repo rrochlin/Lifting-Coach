@@ -5,6 +5,8 @@ Guidance for Claude Code when working in this repository.
 ## What this is
 Lifting-Coach (working title "Workout App" in the design docs) — a personal iOS SwiftUI app for tracking powerlifting workouts, with a longer-term AI coach that helps author and adapt training plans. Built by and for the repo owner's own training.
 
+**Read `notes/Workout App/Core Tenets.md` before designing anything.** It holds the principles that decide arguments, with reasoning attached. The ones most often violated by well-meaning changes: the app never adjusts a prescription on the lifter's behalf (§1); load and effort are independent axes, both first-class (§2); RPE is exertion, NOT reps-in-reserve — RIR appears nowhere in the app (§3); achieved/goal/theoretical maxes are distinct and never silently substituted (§6).
+
 ## Repo layout
 - `notes/` — a synced snapshot of the design/planning vault (Obsidian). **Read these before making architectural decisions**, especially:
   - `notes/Workout App/Concepts.md` — the Swift data model (`Workout`, `Exercise`/`WorkoutExercise`, `PlannedWorkout`/`PlannedExercise`/`PlannedSet`, `WorkoutSet`, `WorkoutBlock`, `WorkoutPlan`, `User`). Source of truth for how the domain is modeled — implement against it, don't silently redesign it.
@@ -19,22 +21,26 @@ Lifting-Coach (working title "Workout App" in the design docs) — a personal iO
 ## Current state (as of this handoff)
 `Concepts.md`'s data model is fleshed out and internally consistent: planned-vs-logged sets are properly split (`PlannedSet`/`WorkoutSet`, `PlannedExercise`/`WorkoutExercise`), and "current block" is derived from `startDate` rather than gated by `endDate`, so it doesn't disappear from view when a block runs long (slipped schedule, unlogged deload week).
 
-The phase 1 project is scaffolded, and the **Tracker → Planner loop is closed**: workouts can be programmed into a block and started from the plan, with `%1RM` resolving against recorded maxes. Home shows real block progress and set-level adherence. 70 tests pass. **The SwiftUI layer has never actually run** — see "Environment gotcha".
+The phase 1 project is scaffolded, the **Tracker → Planner loop is closed**, the app **runs verified on the iOS 26.3 simulator** with a dark-first HUD theme (`Sources/App/Theme/Theme.swift` — panels, readouts, one cyan accent, amber only for the live moment), and **the owner's real 12-week program is imported as the sample block** on first launch (`ProgramImporter` + the bundled `Block1.json`, extracted from `notes/Block1 Program 6day v19.xlsx`).
 
-Built: `WorkoutSession` + `WorkoutStore` + tracker UI; `PlanStore` + `UserStore` + planner UI; homepage metrics.
+The model went through a design pass driven by that import (see Core Tenets): `LoadPrescription` is `.absolute | .percentOf(_, of: MaxReference)`; `EffortTarget` is a separate axis living on `PlannedExercise` with per-set override; maxes are split into achieved (event history) / goal (setting) / theoretical (derived, unimplemented). Session start materializes resolved effort into each set's `plannedFrom` snapshot.
+
+Built: `WorkoutSession` + `WorkoutStore` + tracker UI; `PlanStore` + `UserStore` + planner UI; homepage metrics; theme; importer. 79 tests.
 
 **Next step: Workout History** — the calendar view in `Features/Workout History.md`. `WorkoutStore.fetch(from:to:)` already returns what it needs, so this is mostly UI.
 
 After that, in rough order:
+- **Recording achieved maxes and bodyweight from the UI.** `UserStore.recordAchievedMax`/`recordBodyWeight` exist and are tested but nothing calls them — the home screen's "achieved" column reads "—" until then. (Goal maxes come in via the program import.)
 - **Profile: data export/import.** The one genuinely local part of that screen, and `Ideas.md` calls importing from other apps crucial.
-- **A real exercise catalog** to replace `ExerciseCatalog.seed`'s 10 hardcoded entries.
-- **Recording 1RMs from the UI.** `UserStore.recordMax` exists and is tested but nothing calls it, so `%1RM` prescriptions currently resolve to nothing on a fresh install.
-- **Superset authoring.** Both stores round-trip supersets and the tracker renders them, but the planner can only add exercises as their own group — there's no way to *make* one.
+- **A real exercise catalog** to replace the seed + import-created entries (no assets, muscle-group naming is ad hoc).
+- **Superset authoring.** Stores and tracker handle supersets; the planner can't author one. Note the real program uses none.
+- **Adherence denominator**: home counts all 644 sets of the 12-week block; should probably scope to elapsed days.
+- **UI test target** — simctl can't tap, so sheets/editor/rest timer are still only verifiable by hand.
 
 Open items intentionally left unresolved (in the docs, not silently in the model):
 - Exercise catalog/assets are TBD — see `Concepts.md`'s TODO section (Strong/Heavy asset sourcing as an internal-use placeholder, swap before any public release). `ExerciseCatalog.seed` is a 10-entry hardcoded stand-in until then.
 - Whether `Exercise`/`WorkoutSet` need non-strength fields (cardio incline/duration/etc.) — currently barbell/strength-shaped only. May be fine for a phase 1 MVP scoped to the owner's own training (bench/squat/deadlift), but not decided as permanent scope.
-- **RPE is rep-range-blind.** `LoadPrescription.rpe` carries a bare `Float`, but per `Mid lift thoughts.md` an RPE on a triple and an RPE on a set of 10 aren't the same instrument. `User.resolvedWeight` deliberately returns `nil` for `.rpe` rather than guessing — resolving it needs historical set data and a rep-range-aware model. Decide the shape before the tracker starts suggesting weights.
+- **The theoretical-max estimation model doesn't exist.** `MaxReference.theoretical` deliberately resolves to `nil` — estimating a max from logged work needs the rep-range-aware model `Ideas.md` calls for (standard formulas are explicitly distrusted there). Decide that model before the app starts predicting strength anywhere.
 - `Backend/Overview.md`'s two Open Questions (S3/CloudFront for a possible web planner UI; Lambda implementation language) — both phase 2, not blocking.
 - The `FitnessAppNetworkDiagram.drawio` vs. `Backend/Overview.md` table-naming mismatch noted above.
 
