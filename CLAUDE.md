@@ -29,10 +29,10 @@ Built: `WorkoutSession` + `WorkoutStore` + tracker UI; `PlanStore` + `UserStore`
 
 Achieved maxes now auto-record from logged sets (`AchievedMaxUpdate`, wired into `TrackerModel.completeSet`) — a heavier working-set weight than the current best becomes the new best, no manual entry. Bodyweight is logged explicitly via a sheet on Home (it's a distinct action, not derived). Home also has an honest "Health" placeholder (HealthKit not connected) and a minimal reverse-chronological Workout History list — deliberately not the calendar `Features/Workout History.md` specifies; that's staying deferred (low priority, other screens may still change shape under it) per explicit direction.
 
-**`Core Tenets.md` §11 (new): the app never parses a spreadsheet, and never will.** `ProgramImporter` is a dev-time seeding tool, not the start of an in-app import feature. The only import paths this app will ever offer a lifter: a documented JSON/CSV schema, or handing a file to the phase 2 AI coach. If a request looks like "support importing format X," it resolves to one of those two, not a new parser.
+**`ProgramImporter` is a one-off dev tool, not a feature to extend** (see `Roadmap.md`'s deferred list) — it seeded the owner's real program as sample data and its job ends there. Don't generalize it or spend effort keeping it in sync as the model changes.
 
 Next, in rough order:
-- **Profile: data export/import.** The one genuinely local part of that screen, and `Ideas.md` calls importing from other apps crucial. (This is the JSON/CSV-schema door from Tenet §11, not a format-specific parser.)
+- **Profile: data export/import.** The one genuinely local part of that screen, and `Ideas.md` calls importing from other apps crucial. If/when real program import happens, it's a documented JSON/CSV schema (or the phase 2 AI coach), not a spreadsheet parser.
 - **A real exercise catalog** to replace the seed + import-created entries (no assets, muscle-group naming is ad hoc).
 - **Superset authoring.** Stores and tracker handle supersets; the planner can't author one. Note the real program uses none.
 - **Adherence denominator**: home counts all 644 sets of the 12-week block; should probably scope to elapsed days.

@@ -13,6 +13,7 @@ Goal: verify the core premise — a device-local workout tracking app — before
 - [[Coach Conversation]] and any AI-assisted plan generation/adjustment
 - The web-UI question for [[Workout Planner]] (and the S3/CloudFront decision it drives — see [[Backend/Overview]] Open Questions)
 - Full Cognito/DynamoDB/Bedrock/websocket buildout
+- **Spreadsheet/xlsx import as an app feature.** `ProgramImporter` is a one-off dev tool that pulled the owner's own program in as sample data — don't extend it, generalize it, or spend time keeping it in sync with the model as things change. If real program import ever becomes a feature, it's a documented JSON/CSV schema, or the phase 2 AI coach.
 
 ## Phase 2 — Server + AI (not scheduled)
 Once phase 1 validates the tracker itself:
