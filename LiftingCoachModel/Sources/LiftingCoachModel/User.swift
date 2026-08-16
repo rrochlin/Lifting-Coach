@@ -66,13 +66,21 @@ public struct User: Codable, Hashable, Identifiable, Sendable {
         bodyWeight?.max { $0.key < $1.key }?.value
     }
 
+    /// The most recent achieved max on record for an exercise, or `nil` if
+    /// none has been logged. Exposed as the full event (not just the weight) so
+    /// callers deciding whether a new set beats it — see `AchievedMaxUpdate` —
+    /// don't need to reimplement "most recent by date".
+    public func latestAchievedMax(for exerciseID: Int) -> AchievedMax? {
+        achievedMaxes?[exerciseID]?.max { $0.date < $1.date }
+    }
+
     /// The lifter's max for an exercise under a given reference:
     /// `.achieved` → the most recent achieved max; `.goal` → the goal;
     /// `.theoretical` → `nil` until the estimation model exists.
     public func max(_ reference: MaxReference, for exerciseID: Int) -> Measurement<UnitMass>? {
         switch reference {
         case .achieved:
-            return achievedMaxes?[exerciseID]?.max { $0.date < $1.date }?.weight
+            return latestAchievedMax(for: exerciseID)?.weight
         case .goal:
             return goalMaxes?[exerciseID]?.weight
         case .theoretical:

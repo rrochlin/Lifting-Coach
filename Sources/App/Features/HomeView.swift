@@ -14,6 +14,7 @@ struct HomeView: View {
     @State private var todaysPlan: [PlannedWorkout] = []
     @State private var adherence: Adherence?
     @State private var loadError: String?
+    @State private var isLoggingBodyWeight = false
 
     private let bigThree = [1, 2, 3]  // squat, bench, deadlift — Homepage.md
 
@@ -23,12 +24,18 @@ struct HomeView: View {
                 todaySection
                 blockSection
                 metricsSection
+                vitalsSection
             }
             .listStyle(.plain)
             .screenGround()
             .navigationTitle("Lifting Coach")
             .refreshable { load() }
             .task { load() }
+        }
+        .sheet(isPresented: $isLoggingBodyWeight) {
+            LogBodyWeightSheet { weight in
+                logBodyWeight(weight)
+            }
         }
     }
 
@@ -124,12 +131,6 @@ struct HomeView: View {
                         size: 17
                     )
                 }
-                Rectangle().fill(Theme.hairline).frame(height: 1)
-                Readout(
-                    label: "bodyweight",
-                    value: environment.currentUser?.currentBodyWeight?.liftedDescription ?? "——",
-                    accent: environment.currentUser?.currentBodyWeight == nil ? Theme.inkFaint : Theme.ink
-                )
             }
         }
         .panelRow()
@@ -141,6 +142,62 @@ struct HomeView: View {
                     .foregroundStyle(Theme.alert)
             }
             .panelRow()
+        }
+    }
+
+    /// Bodyweight is a separate concern from lift maxes: it's logged by
+    /// explicit action, never inferred from a set. HealthKit metrics are named
+    /// here rather than silently absent — `Backend/Overview.md` scopes them for
+    /// phase 1, but the sync itself isn't wired up, and an honest "not
+    /// connected" beats a missing section (Core Tenets §10).
+    @ViewBuilder
+    private var vitalsSection: some View {
+        SectionLabel(text: "body").panelRow()
+
+        Panel {
+            VStack(spacing: 9) {
+                Readout(
+                    label: "bodyweight",
+                    value: environment.currentUser?.currentBodyWeight?.liftedDescription ?? "——",
+                    accent: environment.currentUser?.currentBodyWeight == nil ? Theme.inkFaint : Theme.ink,
+                    size: 17
+                )
+                Rectangle().fill(Theme.hairline).frame(height: 1)
+                Button { isLoggingBodyWeight = true } label: {
+                    Label("Log Weight", systemImage: "plus")
+                        .font(Theme.data(12, weight: .medium))
+                        .foregroundStyle(Theme.signal)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .panelRow()
+
+        SectionLabel(text: "health", accent: Theme.inkFaint).panelRow()
+
+        Panel {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("NOT CONNECTED")
+                    .font(Theme.label)
+                    .tracking(1.4)
+                    .foregroundStyle(Theme.inkFaint)
+                Text("Heart rate, steps, and HRV sync via HealthKit isn't wired up yet.")
+                    .font(Theme.caption)
+                    .foregroundStyle(Theme.inkMuted)
+            }
+        }
+        .panelRow()
+    }
+
+    private func logBodyWeight(_ weight: Measurement<UnitMass>) {
+        guard let user = environment.currentUser else { return }
+        do {
+            try environment.users.recordBodyWeight(weight, for: user.id)
+            environment.reloadUser()
+            loadError = nil
+        } catch {
+            loadError = error.localizedDescription
         }
     }
 
@@ -200,6 +257,47 @@ struct HomeView: View {
     struct Adherence {
         var completed: Int
         var planned: Int
+    }
+}
+
+// MARK: - Log bodyweight
+
+private struct LogBodyWeightSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    let onSave: (Measurement<UnitMass>) -> Void
+
+    @State private var text = ""
+    @State private var unit: UnitMass = .pounds
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                HStack {
+                    TextField("Weight", text: $text)
+                        .keyboardType(.decimalPad)
+                    Picker("Unit", selection: $unit) {
+                        Text("lb").tag(UnitMass.pounds)
+                        Text("kg").tag(UnitMass.kilograms)
+                    }
+                    .pickerStyle(.segmented)
+                    .frame(width: 130)
+                }
+            }
+            .navigationTitle("Log Bodyweight")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        guard let value = Double(text) else { return }
+                        onSave(Measurement(value: value, unit: unit))
+                        dismiss()
+                    }
+                    .disabled(Double(text) == nil)
+                }
+            }
+        }
     }
 }
 

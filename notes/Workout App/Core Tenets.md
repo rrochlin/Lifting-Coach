@@ -103,3 +103,15 @@ A feature that only makes sense once an AI is driving belongs in phase 2. A feat
 A screen that isn't built says so and names the spec it came from. A number that can't be computed shows as absent, not as zero. A placeholder that looks finished is harder to reason about than a visible gap — and much harder to notice you've been trusting.
 
 Same rule for data: a weight the app can't resolve (an RPE-only prescription, a percentage of a max that was never recorded) stays blank and shows the prescription beside it. Guessing a plausible number is worse than showing none.
+
+## 11. Data enters through one door
+
+The app never parses a spreadsheet, and never will. Arbitrary-format import (xlsx, whatever someone's coach happens to hand them) is not a feature — it's an open-ended parsing problem with no stable shape to build against, and every format is a new one.
+
+`ProgramImporter` exists to bring the owner's own program in as sample data during development. It is a dev-time tool, not a user-facing capability, and its scope ends there — it is **not** the seed of an in-app "upload your spreadsheet" feature.
+
+The only import paths this app will ever offer a real lifter:
+- A **standardized JSON/CSV schema** that mirrors [[Concepts]] directly — documented, stable, versioned. A program that fits the schema imports; one that doesn't, doesn't.
+- **Handing a file to the AI coach** (phase 2) and having it interview the lifter to map their format onto the schema. This is where "make sense of whatever format someone shows up with" belongs — it's a conversation, not a parser.
+
+If a feature request looks like "support importing format X," the answer is one of the two doors above, not a new parser.

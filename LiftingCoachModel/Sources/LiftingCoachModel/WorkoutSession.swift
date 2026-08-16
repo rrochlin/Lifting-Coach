@@ -149,6 +149,14 @@ public struct WorkoutSession: Equatable, Sendable {
         return exercise(at: address)?.sets?.first { $0.complete != true }
     }
 
+    /// The exercise a given logged set belongs to, wherever it sits in the
+    /// grouping — used to resolve which lift a completed set counts toward
+    /// (e.g. for achieved-max tracking) without the caller needing to know the
+    /// superset structure.
+    public func exercise(containingSetID id: UUID) -> WorkoutExercise? {
+        exerciseGroups.flatMap { $0 }.first { ($0.sets ?? []).contains { $0.id == id } }
+    }
+
     public func exercise(at address: ExerciseAddress) -> WorkoutExercise? {
         guard address.group < exerciseGroups.count else { return nil }
         let group = exerciseGroups[address.group]

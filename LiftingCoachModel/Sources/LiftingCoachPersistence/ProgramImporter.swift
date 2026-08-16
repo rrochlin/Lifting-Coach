@@ -4,6 +4,12 @@ import LiftingCoachModel
 /// Imports a training block from the extracted-program JSON format (see
 /// `Resources/Block1.json`, extracted from the owner's real spreadsheet).
 ///
+/// **Dev-time tool, not a user feature.** Per Core Tenets §11, the app never
+/// parses a spreadsheet and never will — this exists solely to seed the
+/// owner's own program as sample data. It is not the start of an in-app
+/// "upload your xlsx" capability; a real import feature is either a documented
+/// JSON/CSV schema or the phase 2 AI coach interviewing the lifter, never a parser.
+///
 /// Mapping decisions, per Core Tenets:
 /// - The sheet's percentages multiply *goal* maxes — the plan is written against
 ///   targets, not verified lifts — so `percentOf1RM` maps to

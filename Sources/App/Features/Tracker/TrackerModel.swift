@@ -18,10 +18,28 @@ final class TrackerModel {
     /// When the current rest period is due to end. `nil` when not resting.
     private(set) var restEndsAt: Date?
 
-    private let workouts: WorkoutStore
+    /// A just-recorded achieved max, for a transient banner. The lifter should
+    /// know the PR was actually captured, not just quietly written to disk.
+    private(set) var newAchievedMax: (exercise: Exercise, max: AchievedMax)?
 
-    init(workouts: WorkoutStore) {
+    private let workouts: WorkoutStore
+    private let users: UserStore
+    private let userID: UUID
+    /// Called after an achieved max is recorded, so the view can refresh
+    /// `AppEnvironment.currentUser` — TrackerModel doesn't hold a reference to
+    /// the environment itself, to keep it independently testable.
+    private let onAchievedMaxRecorded: () -> Void
+
+    init(
+        workouts: WorkoutStore,
+        users: UserStore,
+        userID: UUID,
+        onAchievedMaxRecorded: @escaping () -> Void = {}
+    ) {
         self.workouts = workouts
+        self.users = users
+        self.userID = userID
+        self.onAchievedMaxRecorded = onAchievedMaxRecorded
     }
 
     var isActive: Bool { session != nil }
@@ -77,6 +95,36 @@ final class TrackerModel {
         if let session, session.workout.allSets.contains(where: { $0.id == id }) {
             restEndsAt = date.addingTimeInterval(TimeInterval(session.restTarget(afterSetWith: id)))
         }
+
+        recordAchievedMaxIfNeeded(setID: id, at: date)
+    }
+
+    /// Achieved maxes come from sets, not manual entry (Core Tenets §6) — a
+    /// heavier weight than the current best *is* the new best, checked every
+    /// time a set is completed.
+    private func recordAchievedMaxIfNeeded(setID: UUID, at date: Date) {
+        guard let session,
+              let exercise = session.exercise(containingSetID: setID)?.exercise,
+              let set = session.workout.allSets.first(where: { $0.id == setID })
+        else { return }
+
+        do {
+            let currentBest = try users.fetch(id: userID)?.latestAchievedMax(for: exercise.id)
+            guard let update = AchievedMaxUpdate.evaluate(set: set, currentBest: currentBest, at: date) else {
+                return
+            }
+            try users.recordAchievedMax(update, exerciseId: exercise.id, for: userID)
+            newAchievedMax = (exercise, update)
+            onAchievedMaxRecorded()
+        } catch {
+            // A missed max update shouldn't interrupt logging the set itself —
+            // the workout write already succeeded via `persist()`.
+            saveError = error.localizedDescription
+        }
+    }
+
+    func dismissAchievedMaxBanner() {
+        newAchievedMax = nil
     }
 
     func uncompleteSet(id: UUID) {

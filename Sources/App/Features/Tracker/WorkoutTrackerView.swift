@@ -25,8 +25,13 @@ struct WorkoutTrackerView: View {
             .toolbar { toolbar }
         }
         .task {
-            if model == nil {
-                let model = TrackerModel(workouts: environment.workouts)
+            if model == nil, let userID = environment.currentUser?.id {
+                let model = TrackerModel(
+                    workouts: environment.workouts,
+                    users: environment.users,
+                    userID: userID,
+                    onAchievedMaxRecorded: { environment.reloadUser() }
+                )
                 model.resumeIfNeeded()
                 self.model = model
             }
@@ -182,6 +187,12 @@ private struct ActiveWorkoutList: View {
         if let restEndsAt = model.restEndsAt {
             RestTimerRow(endsAt: restEndsAt) { model.dismissRest() }
                 .panelRow()
+        }
+        if let record = model.newAchievedMax {
+            AchievedMaxBanner(exercise: record.exercise, max: record.max) {
+                model.dismissAchievedMaxBanner()
+            }
+            .panelRow()
         }
     }
 
@@ -444,6 +455,39 @@ private struct SetRow: View {
             return "planned \(plannedReps)"
         }
         return nil
+    }
+}
+
+// MARK: - Achieved max banner
+
+private struct AchievedMaxBanner: View {
+    let exercise: Exercise
+    let max: AchievedMax
+    let onDismiss: () -> Void
+
+    var body: some View {
+        Panel(accent: Theme.live) {
+            HStack(spacing: 10) {
+                Image(systemName: "bolt.fill")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.live)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("NEW MAX")
+                        .font(Theme.label)
+                        .tracking(1.6)
+                        .foregroundStyle(Theme.live)
+                    Text("\(exercise.name.uppercased()) — \(max.weight.liftedDescription)")
+                        .font(Theme.data(15, weight: .semibold))
+                        .foregroundStyle(Theme.ink)
+                }
+                Spacer()
+                Button("OK", action: onDismiss)
+                    .font(Theme.label)
+                    .tracking(1.2)
+                    .foregroundStyle(Theme.inkMuted)
+                    .buttonStyle(.plain)
+            }
+        }
     }
 }
 
