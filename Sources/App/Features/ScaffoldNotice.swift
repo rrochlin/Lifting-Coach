@@ -11,27 +11,40 @@ struct ScaffoldNotice: View {
     let requirements: [String]
 
     var body: some View {
-        ContentUnavailableView {
-            Label(feature, systemImage: "hammer.fill")
-        } description: {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Not built yet. Specified in \(doc).")
-                    .font(.subheadline)
-                    .frame(maxWidth: .infinity, alignment: .center)
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                SectionLabel(text: "not built", accent: Theme.live)
 
-                if !requirements.isEmpty {
-                    VStack(alignment: .leading, spacing: 6) {
-                        ForEach(requirements, id: \.self) { requirement in
-                            Label(requirement, systemImage: "circle.dashed")
-                                .font(.caption)
-                                .labelStyle(.titleAndIcon)
+                Panel {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(feature)
+                            .font(Theme.title)
+                            .foregroundStyle(Theme.ink)
+                        Text("Specified in \(doc)")
+                            .font(Theme.data(11))
+                            .foregroundStyle(Theme.inkFaint)
+
+                        if !requirements.isEmpty {
+                            Rectangle().fill(Theme.hairline).frame(height: 1)
+                            VStack(alignment: .leading, spacing: 8) {
+                                ForEach(requirements, id: \.self) { requirement in
+                                    HStack(alignment: .top, spacing: 9) {
+                                        Text("—")
+                                            .font(Theme.data(11))
+                                            .foregroundStyle(Theme.signalDim)
+                                        Text(requirement)
+                                            .font(Theme.caption)
+                                            .foregroundStyle(Theme.inkMuted)
+                                    }
+                                }
+                            }
                         }
                     }
-                    .padding(.top, 4)
                 }
             }
-            .padding(.horizontal)
+            .padding(16)
         }
+        .screenGround()
     }
 }
 

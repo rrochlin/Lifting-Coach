@@ -9,6 +9,21 @@ struct RootView: View {
     @State private var selection = RootTab.initialFromLaunchArguments
 
     var body: some View {
+        tabs
+            .tint(Theme.signal)
+            .onAppear {
+                // The tab bar is the one surface UIKit still paints, and its
+                // default material reads as a light-grey slab against the void.
+                let appearance = UITabBarAppearance()
+                appearance.configureWithOpaqueBackground()
+                appearance.backgroundColor = UIColor(Theme.panel)
+                appearance.shadowColor = UIColor(Theme.hairline)
+                UITabBar.appearance().standardAppearance = appearance
+                UITabBar.appearance().scrollEdgeAppearance = appearance
+            }
+    }
+
+    private var tabs: some View {
         TabView(selection: $selection) {
             Tab("Home", systemImage: "house.fill", value: RootTab.home) {
                 HomeView()

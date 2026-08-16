@@ -93,63 +93,101 @@ private struct BlockDetail: View {
     let block: WorkoutBlock
 
     @State private var isPickingDay = false
+    @State private var editing: EditorTarget?
+
+    /// Identifies which planned workout the editor is open on.
+    struct EditorTarget: Hashable, Identifiable {
+        let id: UUID
+        let day: Date
+    }
 
     var body: some View {
         List {
             headerSection
             daySections
-            Section {
-                Button("Add Workout Day", systemImage: "calendar.badge.plus") {
-                    isPickingDay = true
-                }
+            Button { isPickingDay = true } label: {
+                Label("Add Workout Day", systemImage: "calendar.badge.plus")
+                    .font(Theme.body)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 11)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .strokeBorder(Theme.hairline, lineWidth: 1)
+                    )
             }
+            .buttonStyle(.plain)
+            .foregroundStyle(Theme.ink)
+            .padding(.top, 6)
+            .panelRow()
         }
+        .listStyle(.plain)
+        .screenGround()
         .sheet(isPresented: $isPickingDay) {
             DayPickerSheet(block: block) { day in
                 model.addPlannedWorkout(on: day)
             }
         }
+        .navigationDestination(item: $editing) { target in
+            PlannedWorkoutEditor(model: model, workoutID: target.id, day: target.day)
+        }
     }
 
+    @ViewBuilder
     private var headerSection: some View {
-        Section {
-            if let progress = block.progress() {
-                LabeledContent("Week") {
-                    if let total = progress.totalWeeks {
-                        // Reads "week 7 of 6" when a block runs long, rather than
-                        // clamping and pretending it's still on schedule.
-                        Text("\(progress.weekIndex) of \(total)")
-                    } else {
-                        Text("\(progress.weekIndex)")
-                    }
+        Panel {
+            VStack(alignment: .leading, spacing: 9) {
+                if let progress = block.progress() {
+                    // Reads "7 / 6" when a block runs long, rather than clamping
+                    // and pretending it's still on schedule.
+                    Readout(
+                        label: "week",
+                        value: progress.totalWeeks.map { "\(progress.weekIndex) / \($0)" }
+                            ?? "\(progress.weekIndex)",
+                        accent: Theme.signal,
+                        size: 17
+                    )
+                }
+                if let notes = block.notes, !notes.isEmpty {
+                    Rectangle().fill(Theme.hairline).frame(height: 1)
+                    Text(notes)
+                        .font(Theme.caption)
+                        .foregroundStyle(Theme.inkMuted)
                 }
             }
-            if let notes = block.notes, !notes.isEmpty {
-                Text(notes).font(.subheadline).foregroundStyle(.secondary)
-            }
-            if let message = model.loadError {
+        }
+        .panelRow()
+
+        if let message = model.loadError {
+            Panel(accent: Theme.alert.opacity(0.5)) {
                 Label(message, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.red)
+                    .font(Theme.caption)
+                    .foregroundStyle(Theme.alert)
             }
+            .panelRow()
         }
     }
 
     @ViewBuilder
     private var daySections: some View {
         ForEach(model.programmedDays, id: \.self) { day in
-            Section(day.formatted(date: .complete, time: .omitted)) {
-                ForEach(model.plannedWorkouts(on: day)) { workout in
-                    NavigationLink {
-                        PlannedWorkoutEditor(model: model, workoutID: workout.id, day: day)
-                    } label: {
-                        PlannedWorkoutRow(workout: workout)
-                    }
+            SectionLabel(text: day.formatted(.dateTime.weekday(.abbreviated).month().day()))
+                .panelRow()
+            ForEach(model.plannedWorkouts(on: day)) { workout in
+                // A Button with programmatic navigation rather than a
+                // NavigationLink: List draws its own chevron for a link, and it
+                // lands outside the panel's border instead of inside it.
+                Button {
+                    editing = EditorTarget(id: workout.id, day: day)
+                } label: {
+                    PlannedWorkoutRow(workout: workout)
                 }
-                .onDelete { offsets in
-                    let workouts = model.plannedWorkouts(on: day)
-                    for index in offsets where index < workouts.count {
-                        model.deletePlannedWorkout(id: workouts[index].id)
-                    }
+                .buttonStyle(.plain)
+                .panelRow()
+            }
+            .onDelete { offsets in
+                let workouts = model.plannedWorkouts(on: day)
+                for index in offsets where index < workouts.count {
+                    model.deletePlannedWorkout(id: workouts[index].id)
                 }
             }
         }
@@ -160,11 +198,22 @@ private struct PlannedWorkoutRow: View {
     let workout: PlannedWorkout
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title)
-            Text("\(workout.allSets.count) sets")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        Panel(accent: Theme.signal.opacity(0.4)) {
+            HStack {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(title)
+                        .font(Theme.heading)
+                        .foregroundStyle(Theme.ink)
+                    Text("\(workout.allSets.count) SETS")
+                        .font(Theme.label)
+                        .tracking(1.4)
+                        .foregroundStyle(Theme.signal)
+                }
+                Spacer()
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Theme.signal)
+            }
         }
     }
 
@@ -206,8 +255,12 @@ private struct PlannedWorkoutEditor: View {
                     }
                     Section {
                         Button("Add Exercise", systemImage: "plus") { isPickingExercise = true }
+                            .foregroundStyle(Theme.signal)
+                            .listRowBackground(Theme.panel)
                     }
                 }
+                .listStyle(.plain)
+                .screenGround()
             } else {
                 ContentUnavailableView("Workout deleted", systemImage: "trash")
             }

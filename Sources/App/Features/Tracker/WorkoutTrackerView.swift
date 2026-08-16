@@ -43,32 +43,49 @@ struct WorkoutTrackerView: View {
 
     @ViewBuilder
     private var idle: some View {
-        if todaysPlan.isEmpty {
-            ContentUnavailableView {
-                Label("No workout in progress", systemImage: "figure.strengthtraining.traditional")
-            } description: {
-                Text("Nothing programmed for today. Start an empty session and add lifts as you go.")
-            } actions: {
-                Button("Start Empty Workout") { model?.startAdHoc() }
-                    .buttonStyle(.borderedProminent)
-            }
-        } else {
-            List {
-                Section("Programmed Today") {
-                    ForEach(todaysPlan) { planned in
-                        Button {
-                            start(planned)
-                        } label: {
-                            PlannedSummaryRow(workout: planned)
-                        }
-                        .buttonStyle(.plain)
+        List {
+            if todaysPlan.isEmpty {
+                Panel {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("NO SESSION")
+                            .font(Theme.label)
+                            .tracking(1.6)
+                            .foregroundStyle(Theme.inkFaint)
+                        Text("Nothing programmed for today.")
+                            .font(Theme.body)
+                            .foregroundStyle(Theme.ink)
                     }
                 }
-                Section {
-                    Button("Start Empty Workout") { model?.startAdHoc() }
+                .panelRow()
+            } else {
+                SectionLabel(text: "programmed today", accent: Theme.signal)
+                    .panelRow()
+                ForEach(todaysPlan) { planned in
+                    Button { start(planned) } label: {
+                        PlannedSummaryRow(workout: planned)
+                    }
+                    .buttonStyle(.plain)
+                    .panelRow()
                 }
             }
+
+            Button { model?.startAdHoc() } label: {
+                Label("Start Empty Workout", systemImage: "plus")
+                    .font(Theme.body)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 11)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .strokeBorder(Theme.hairline, lineWidth: 1)
+                    )
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(Theme.ink)
+            .padding(.top, 6)
+            .panelRow()
         }
+        .listStyle(.plain)
+        .screenGround()
     }
 
     /// Starts from the plan, handing over the block and lifter so `%1RM`
@@ -119,11 +136,14 @@ struct WorkoutTrackerView: View {
             // while this machine's Xcode can't build for iOS at all.
             ToolbarItem(placement: .navigation) {
                 Text("\(progress.completed)/\(progress.total)")
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
+                    .font(Theme.data(13, weight: .medium))
+                    .foregroundStyle(progress.completed == progress.total ? Theme.signal : Theme.inkMuted)
             }
             ToolbarItem(placement: .primaryAction) {
-                Button("Discard", role: .destructive) { model.discard() }
+                Button("DISCARD", role: .destructive) { model.discard() }
+                    .font(Theme.label)
+                    .tracking(1.2)
+                    .foregroundStyle(Theme.alert)
             }
         }
     }
@@ -145,20 +165,23 @@ private struct ActiveWorkoutList: View {
             groupSections
             actionSection
         }
+        .listStyle(.plain)
+        .screenGround()
     }
 
     @ViewBuilder
     private var statusSection: some View {
         if let message = model.saveError {
-            Section {
+            Panel(accent: Theme.alert.opacity(0.5)) {
                 Label(message, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.red)
+                    .font(Theme.caption)
+                    .foregroundStyle(Theme.alert)
             }
+            .panelRow()
         }
         if let restEndsAt = model.restEndsAt {
-            Section {
-                RestTimerRow(endsAt: restEndsAt) { model.dismissRest() }
-            }
+            RestTimerRow(endsAt: restEndsAt) { model.dismissRest() }
+                .panelRow()
         }
     }
 
@@ -166,31 +189,73 @@ private struct ActiveWorkoutList: View {
     private var groupSections: some View {
         let groups = model.session?.exerciseGroups ?? []
         ForEach(Array(groups.enumerated()), id: \.offset) { groupIndex, group in
-            Section {
-                ForEach(group) { exercise in
-                    ExerciseSection(
-                        exercise: exercise,
-                        isActive: model.session?.activeExercise?.group == groupIndex,
-                        onToggle: { toggle($0) },
-                        onAddSet: { model.addSet(toExerciseWith: exercise.id) },
-                        onDeleteSet: { model.deleteSet(id: $0) }
-                    )
+            // A group of more than one exercise is a superset — marked with a
+            // signal-coloured edge so the pairing reads without a header row.
+            let isSuperset = group.count > 1
+            VStack(spacing: 0) {
+                if isSuperset {
+                    SectionLabel(text: "superset", accent: Theme.signal)
+                        .padding(.bottom, 8)
                 }
-            } header: {
-                // A group of more than one exercise is a superset.
-                if group.count > 1 {
-                    Text("Superset")
+                VStack(spacing: 10) {
+                    ForEach(group) { exercise in
+                        ExerciseSection(
+                            exercise: exercise,
+                            isActive: model.session?.activeExercise?.group == groupIndex,
+                            onToggle: { toggle($0) },
+                            onAddSet: { model.addSet(toExerciseWith: exercise.id) },
+                            onDeleteSet: { model.deleteSet(id: $0) }
+                        )
+                    }
+                }
+                .padding(.leading, isSuperset ? 10 : 0)
+                .overlay(alignment: .leading) {
+                    if isSuperset {
+                        Rectangle()
+                            .fill(Theme.signalDim)
+                            .frame(width: 2)
+                    }
                 }
             }
+            .panelRow()
         }
     }
 
     private var actionSection: some View {
-        Section {
-            Button("Add Exercise", systemImage: "plus", action: onAddExercise)
-            Button("Finish Workout", systemImage: "checkmark.circle", action: onRequestFinish)
-                .disabled(model.session?.progress.completed == 0)
+        VStack(spacing: 8) {
+            Button(action: onAddExercise) {
+                Label("Add Exercise", systemImage: "plus")
+                    .font(Theme.body)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 11)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .strokeBorder(Theme.hairline, lineWidth: 1)
+                    )
+            }
+            .foregroundStyle(Theme.ink)
+
+            Button(action: onRequestFinish) {
+                Label("Finish Workout", systemImage: "checkmark.circle")
+                    .font(Theme.body.weight(.semibold))
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 11)
+                    .background(canFinish ? Theme.signalDim.opacity(0.28) : Color.clear)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .strokeBorder(canFinish ? Theme.signal : Theme.hairline, lineWidth: 1)
+                    )
+            }
+            .foregroundStyle(canFinish ? Theme.signal : Theme.inkFaint)
+            .disabled(!canFinish)
         }
+        .buttonStyle(.plain)
+        .padding(.top, 6)
+        .panelRow()
+    }
+
+    private var canFinish: Bool {
+        (model.session?.progress.completed ?? 0) > 0
     }
 
     private func toggle(_ set: WorkoutSet) {
@@ -208,16 +273,26 @@ private struct PlannedSummaryRow: View {
     let workout: PlannedWorkout
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(names.isEmpty ? "Empty workout" : names.joined(separator: ", "))
-                .font(.headline)
-            Text("\(workout.allSets.count) sets")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            if let notes = workout.notes, !notes.isEmpty {
-                Text(notes)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+        Panel(accent: Theme.signal.opacity(0.45)) {
+            VStack(alignment: .leading, spacing: 7) {
+                HStack {
+                    Text(names.isEmpty ? "Empty workout" : names.joined(separator: " / "))
+                        .font(Theme.heading)
+                        .foregroundStyle(Theme.ink)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Theme.signal)
+                }
+                if let notes = workout.notes, !notes.isEmpty {
+                    Text(notes)
+                        .font(Theme.caption)
+                        .foregroundStyle(Theme.inkMuted)
+                }
+                Text("\(workout.allSets.count) SETS")
+                    .font(Theme.label)
+                    .tracking(1.4)
+                    .foregroundStyle(Theme.signal)
             }
         }
     }
@@ -237,33 +312,43 @@ private struct ExerciseSection: View {
     let onDeleteSet: (UUID) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(exercise.exercise.name)
-                    .font(.headline)
-                if isActive {
-                    Text("Active")
-                        .font(.caption2.weight(.semibold))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(.tint, in: .capsule)
-                        .foregroundStyle(.white)
-                }
-            }
-
-            ForEach(Array((exercise.sets ?? []).enumerated()), id: \.element.id) { index, set in
-                SetRow(number: index + 1, set: set) { onToggle(set) }
-                    .swipeActions(edge: .trailing) {
-                        Button("Delete", systemImage: "trash", role: .destructive) {
-                            onDeleteSet(set.id)
-                        }
+        Panel(accent: isActive ? Theme.live.opacity(0.55) : Theme.hairline) {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    Text(exercise.exercise.name)
+                        .font(Theme.heading)
+                        .foregroundStyle(Theme.ink)
+                    if isActive {
+                        Chip(text: "active", color: Theme.live)
                     }
-            }
+                    Spacer()
+                    Text(exercise.exercise.muscleGroup.uppercased())
+                        .font(Theme.label)
+                        .tracking(1.2)
+                        .foregroundStyle(Theme.inkFaint)
+                }
 
-            Button("Add Set", systemImage: "plus.circle") { onAddSet() }
-                .font(.footnote)
+                Rectangle().fill(Theme.hairline).frame(height: 1)
+
+                VStack(spacing: 2) {
+                    ForEach(Array((exercise.sets ?? []).enumerated()), id: \.element.id) { index, set in
+                        SetRow(number: index + 1, set: set) { onToggle(set) }
+                            .swipeActions(edge: .trailing) {
+                                Button("Delete", systemImage: "trash", role: .destructive) {
+                                    onDeleteSet(set.id)
+                                }
+                            }
+                    }
+                }
+
+                Button(action: onAddSet) {
+                    Label("Add Set", systemImage: "plus")
+                        .font(Theme.data(11, weight: .medium))
+                        .foregroundStyle(Theme.inkMuted)
+                }
+                .buttonStyle(.plain)
+            }
         }
-        .padding(.vertical, 4)
     }
 }
 
@@ -275,34 +360,56 @@ private struct SetRow: View {
     let onToggle: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
+        let done = set.complete == true
+
+        HStack(spacing: 10) {
             Button(action: onToggle) {
-                Image(systemName: set.complete == true ? "checkmark.circle.fill" : "circle")
-                    .font(.title3)
-                    .foregroundStyle(set.complete == true ? Color.accentColor : .secondary)
+                ZStack {
+                    RoundedRectangle(cornerRadius: 4)
+                        .strokeBorder(done ? Theme.signal : Theme.hairline, lineWidth: 1)
+                        .background(
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(done ? Theme.signalDim.opacity(0.3) : Color.clear)
+                        )
+                        .frame(width: 22, height: 22)
+                    if done {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 11, weight: .bold))
+                            .foregroundStyle(Theme.signal)
+                    }
+                }
+                // The primary interaction of the whole app — Workout Tracker.md's
+                // "minimal effort" requirement — so give it a full-size hit target.
+                .frame(width: 40, height: 34)
+                .contentShape(.rect)
             }
             .buttonStyle(.plain)
-            // The primary interaction of the whole app — Workout Tracker.md's
-            // "minimal effort" requirement — so give it a full-size hit target.
-            .contentShape(.rect)
 
-            Text("\(number)")
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
-                .frame(width: 16, alignment: .leading)
+            Text(String(format: "%02d", number))
+                .font(Theme.data(11))
+                .foregroundStyle(Theme.inkFaint)
 
             Text(summary)
-                .font(.subheadline.monospacedDigit())
-                .strikethrough(set.complete == true, color: .secondary)
+                .font(Theme.data(14, weight: done ? .regular : .medium))
+                .foregroundStyle(done ? Theme.inkMuted : Theme.ink)
 
-            Spacer()
+            Spacer(minLength: 8)
 
             if let prescription {
                 Text(prescription)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .font(Theme.data(11))
+                    .foregroundStyle(setTypeAccent)
             }
         }
+        .padding(.vertical, 1)
+    }
+
+    /// Warmups read quieter than working sets — the HUD annotation layer
+    /// carries set type without spending a column on it.
+    private var setTypeAccent: Color {
+        // `self.` is required: a bare `set` starting the body of a computed
+        // property parses as the start of a setter declaration.
+        self.set.type == .warmup ? Theme.inkFaint : Theme.inkMuted
     }
 
     private var summary: String {
@@ -340,17 +447,26 @@ private struct RestTimerRow: View {
     let onDismiss: () -> Void
 
     var body: some View {
-        HStack {
-            Label {
+        Panel(accent: Theme.live.opacity(0.55)) {
+            HStack(spacing: 10) {
+                Image(systemName: "timer")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.live)
+                Text("REST")
+                    .font(Theme.label)
+                    .tracking(1.6)
+                    .foregroundStyle(Theme.live)
                 // A live-updating countdown with no timer to manage by hand.
                 Text(timerInterval: Date.now...endsAt, countsDown: true)
-                    .monospacedDigit()
-            } icon: {
-                Image(systemName: "timer")
+                    .font(Theme.data(20, weight: .medium))
+                    .foregroundStyle(Theme.ink)
+                Spacer()
+                Button("SKIP", action: onDismiss)
+                    .font(Theme.label)
+                    .tracking(1.2)
+                    .foregroundStyle(Theme.inkMuted)
+                    .buttonStyle(.plain)
             }
-            Spacer()
-            Button("Skip", action: onDismiss)
-                .font(.footnote)
         }
     }
 }

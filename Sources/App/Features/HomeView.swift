@@ -24,6 +24,8 @@ struct HomeView: View {
                 blockSection
                 metricsSection
             }
+            .listStyle(.plain)
+            .screenGround()
             .navigationTitle("Lifting Coach")
             .refreshable { load() }
             .task { load() }
@@ -34,75 +36,108 @@ struct HomeView: View {
 
     @ViewBuilder
     private var todaySection: some View {
-        Section("Today") {
-            if todaysPlan.isEmpty {
+        SectionLabel(text: "today", accent: Theme.signal).panelRow()
+
+        if todaysPlan.isEmpty {
+            Panel {
                 Text("Nothing programmed.")
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(todaysPlan) { workout in
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(summary(workout)).font(.headline)
-                        Text("\(workout.allSets.count) sets")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+                    .font(Theme.body)
+                    .foregroundStyle(Theme.inkMuted)
+            }
+            .panelRow()
+        } else {
+            ForEach(todaysPlan) { workout in
+                Panel(accent: Theme.signal.opacity(0.45)) {
+                    VStack(alignment: .leading, spacing: 7) {
+                        Text(summary(workout))
+                            .font(Theme.heading)
+                            .foregroundStyle(Theme.ink)
+                        Text("\(workout.allSets.count) SETS")
+                            .font(Theme.label)
+                            .tracking(1.4)
+                            .foregroundStyle(Theme.signal)
+                        // Starting happens on the Workout tab, which owns session
+                        // state — duplicating the action here would give two paths
+                        // into the same in-progress workout.
+                        Text("Open the Workout tab to start.")
+                            .font(Theme.caption)
+                            .foregroundStyle(Theme.inkFaint)
                     }
                 }
-                // Starting happens on the Workout tab, which owns session state —
-                // duplicating the start action here would give two paths into the
-                // same in-progress workout.
-                Text("Open the Workout tab to start.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                .panelRow()
             }
         }
     }
 
     @ViewBuilder
     private var blockSection: some View {
-        Section("Current Block") {
+        SectionLabel(text: "current block").panelRow()
+
+        Panel {
             if let block = plan.currentBlock(), let progress = block.progress() {
-                LabeledContent("Week") {
-                    if let total = progress.totalWeeks {
-                        Text("\(progress.weekIndex) of \(total)")
-                    } else {
-                        Text("\(progress.weekIndex)")
+                VStack(spacing: 9) {
+                    Readout(
+                        label: "week",
+                        value: progress.totalWeeks.map { "\(progress.weekIndex) / \($0)" }
+                            ?? "\(progress.weekIndex)",
+                        accent: Theme.signal,
+                        size: 17
+                    )
+                    Readout(label: "day", value: "\(progress.dayIndex)")
+                    if let adherence, adherence.planned > 0 {
+                        Readout(
+                            label: "adherence",
+                            value: "\(adherence.completed) / \(adherence.planned)"
+                        )
                     }
-                }
-                LabeledContent("Day", value: "\(progress.dayIndex)")
-                if let adherence, adherence.planned > 0 {
-                    LabeledContent("Adherence") {
-                        Text("\(adherence.completed)/\(adherence.planned) sets")
-                            .monospacedDigit()
+                    if let notes = block.notes, !notes.isEmpty {
+                        Rectangle().fill(Theme.hairline).frame(height: 1)
+                        Text(notes)
+                            .font(Theme.caption)
+                            .foregroundStyle(Theme.inkMuted)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
-                }
-                if let notes = block.notes, !notes.isEmpty {
-                    Text(notes).font(.caption).foregroundStyle(.secondary)
                 }
             } else {
                 Text("No training block scheduled.")
-                    .foregroundStyle(.secondary)
+                    .font(Theme.body)
+                    .foregroundStyle(Theme.inkMuted)
             }
         }
+        .panelRow()
     }
 
     @ViewBuilder
     private var metricsSection: some View {
-        Section("Metrics") {
-            ForEach(bigThree, id: \.self) { id in
-                LabeledContent(name(for: id)) {
-                    Text(maxLift(id)?.liftedDescription ?? "—")
-                        .foregroundStyle(maxLift(id) == nil ? .secondary : .primary)
+        SectionLabel(text: "one rep max").panelRow()
+
+        Panel {
+            VStack(spacing: 9) {
+                ForEach(bigThree, id: \.self) { id in
+                    Readout(
+                        label: name(for: id),
+                        value: maxLift(id)?.liftedDescription ?? "——",
+                        accent: maxLift(id) == nil ? Theme.inkFaint : Theme.ink,
+                        size: 17
+                    )
                 }
+                Rectangle().fill(Theme.hairline).frame(height: 1)
+                Readout(
+                    label: "bodyweight",
+                    value: environment.currentUser?.currentBodyWeight?.liftedDescription ?? "——",
+                    accent: environment.currentUser?.currentBodyWeight == nil ? Theme.inkFaint : Theme.ink
+                )
             }
-            LabeledContent("Bodyweight") {
-                let weight = environment.currentUser?.currentBodyWeight
-                Text(weight?.liftedDescription ?? "—")
-                    .foregroundStyle(weight == nil ? .secondary : .primary)
-            }
-            if let loadError {
+        }
+        .panelRow()
+
+        if let loadError {
+            Panel(accent: Theme.alert.opacity(0.5)) {
                 Label(loadError, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.red)
+                    .font(Theme.caption)
+                    .foregroundStyle(Theme.alert)
             }
+            .panelRow()
         }
     }
 

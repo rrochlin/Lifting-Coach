@@ -22,6 +22,11 @@ struct LiftingCoachApp: App {
         WindowGroup {
             RootView()
                 .environment(environment)
+                // Dark-only for now. The palette in `Theme` is built for a deep
+                // ground; a light variant needs its own accent work rather than
+                // an inversion, so it's a deliberate later pass, not an omission.
+                .preferredColorScheme(.dark)
+                .tint(Theme.signal)
         }
     }
 }
