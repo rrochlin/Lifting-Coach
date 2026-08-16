@@ -50,12 +50,27 @@ The planned counterpart to #WorkoutExercise — pairs an #Exercise with the #Pla
 struct PlannedExercise {
 	var exercise: Exercise
 	var sets: Array<PlannedSet>?
+	// the default effort target for every set of this exercise — "5x2 @ RPE 7" is
+	// one instruction, written once here. Individual sets override via their own
+	// effort field; consumers resolve set.effort ?? exercise.effort
+	var effort: EffortTarget?
 	var notes: String?
 }
 ```
 
+## Load and effort
+Rationale in [[Core Tenets]] §2–§5. What implementers need:
+
+**Two independent optional fields, never one enum.** `load` says what to put on the bar; `effort` says how hard it should feel. Either may be nil — a warmup usually has load and no effort, an accessory can be "3×10 @ RPE 8, pick your weight" with no load. Don't treat a nil as incomplete data or backfill it.
+
+**Effort resolves set-first, then exercise.** #PlannedExercise carries the target; #PlannedSet may override it. Resolution is `set.effort ?? exercise.effort` — the same shape as `restTime`'s fallback chain.
+
+**RPE is 1–10 in 0.5 increments.** Validate on that. Do not add an RIR property, computed or stored ([[Core Tenets]] §3).
+
+**No consumer adjusts a prescription automatically** — not the tracker, not the planner. Modality (ceiling, target, to-failure, dual progression) is carried in `notes` and interpreted by the lifter ([[Core Tenets]] §1, §4).
+
 ## #Set
-Sets compose a #WorkoutExercise, they detail how many reps, what weight, and how it went. A #PlannedSet is the prescription (what should be done, possibly as %1RM or RPE rather than a fixed weight); a #WorkoutSet is what was actually logged.
+Sets compose a #WorkoutExercise, they detail how many reps, what weight, and how it went. A #PlannedSet is the prescription (load and effort, per above); a #WorkoutSet is what was actually logged.
 ```swift
 import Foundation
 
@@ -73,7 +88,9 @@ struct WorkoutSet {
 	var type: SetType?
 	var timeComplete: Date?
 	var restTime: Int?
-	var RPE: Float?
+	// achieved effort as the lifter rated it, per set — never defaulted from the
+	// prescription. Same scale as #RPE.
+	var rpe: Float?
 	var notes: String?
 	var usernotes: String?
 	// what this set was prescribed as, if any — lets planned vs actual be reconciled without needing user context wherever a WorkoutSet is read
@@ -83,23 +100,53 @@ struct WorkoutSet {
 
 ## #PlannedSet 
 ```Swift
-// how a planned set's intensity is defined — resolved to an absolute weight when the plan is turned into a live Workout
+// What to put on the bar. Resolved to an absolute weight when the plan becomes a
+// live Workout; a percentage that can't be resolved stays unresolved rather than
+// guessing a number.
 enum LoadPrescription {
 	case absolute(Measurement<UnitMass>)
-	case percentOf1RM(Double)
-	case rpe(Float)
+	// The MaxReference is not optional: "80%" is unresolvable until you know 80%
+	// of which number. See #Maxes.
+	case percentOf(Double, of: MaxReference)
+}
+
+// How hard the set should feel. RPE 1-10 in 0.5 increments; see #RPE for anchors.
+struct EffortTarget {
+	var rpe: Float
 }
 
 struct PlannedSet {
 	var reps: Int?
 	var type: SetType?
 	var load: LoadPrescription?
+	// nil means "use the containing PlannedExercise's effort" — this field is an
+	// override for the odd set out (a top single, a back-off), not the normal
+	// place to put a target
+	var effort: EffortTarget?
 	// seconds; nil falls back to the containing WorkoutBlock's defaultRestTimes for this SetType, then an app-level default — most sets shouldn't need this configured explicitly
 	var restTime: Int?
+	// carries programming intent that has no structural home: "work up, stop at 9",
+	// "last set AMRAP", tempo, pauses
 	var notes: String?
 }
 
 ```
+
+## #RPE
+A single scale used for both prescribed and achieved effort. Exertion, **not** reps in reserve — see [[Core Tenets]] §3 before changing anything here.
+
+Valid range 1–10 in 0.5 increments. Anchored only from 6 up, because that's the programming band:
+
+| RPE | Meaning |
+| --- | --- |
+| 10 | Failure, or no chance of another rep |
+| 9 | All-out effort |
+| 8 | Exertion |
+| 7 | Some effort |
+| 6 | Easy |
+| <6 | No descriptor — warmups, deload, easy conditioning |
+
+Values below 6 are valid and storable; the UI should show them as a bare number rather than inventing a label.
 
 ## #WorkoutBlock
 A training block: a bounded span of time (e.g. a 6-week strength cycle) made up of scheduled #Workout 's, plus notes on the block's objectives and a running journal.
@@ -130,13 +177,49 @@ struct WorkoutPlan {
 }
 ```
 
+## #Maxes
+"1RM" is three distinct data points per lift, and they are never interchangeable ([[Core Tenets]] §6):
+
+```swift
+// which max a percentage prescription resolves against
+enum MaxReference {
+	// actually lifted, verified, date-stamped — the only one that is a fact
+	case achieved
+	// what the program is written against; aspirational by construction.
+	// A plan built on goal maxes is intentional, not an error to correct.
+	case goal
+	// estimated from logged work; derived, never entered by hand, recomputed as
+	// history accrues. Not persisted as a stored value — see note below.
+	case theoretical
+}
+
+struct AchievedMax {
+	var weight: Measurement<UnitMass>
+	// when it was lifted — an achieved max is an event, not a setting
+	var date: Date
+	var notes: String?
+}
+
+struct GoalMax {
+	var weight: Measurement<UnitMass>
+	// when the goal was set, so a stale goal is visible as stale
+	var dateSet: Date?
+}
+```
+
+Implementation notes:
+- `.achieved` resolves to the **most recent** achieved max for the lift; keep the full history rather than overwriting, since the progression itself is data.
+- `.theoretical` is computed on demand from logged sets, never stored — persisting it would create a second copy that goes stale, same reasoning as `currentBlock`. Until the estimation model exists (see [[Ideas]] on the flaws in standard formulas), a `.theoretical` reference is simply unresolvable and the set's weight stays blank ([[Core Tenets]] §10).
+- Resolving a percentage against a max the user doesn't have recorded is not an error — the prescription displays as-is ("80% goal") with no weight.
+
 ## #User
 A user is the target of a #WorkoutPlan. The plan is designed for the user, and the user also has metrics tracked related to their performance.
 ```swift
 struct User {
 	var workoutPlan: WorkoutPlan?
-	// keyed by Exercise.id
-	var maxLifts: Dictionary<Int, Measurement<UnitMass>>?
+	// keyed by Exercise.id. Achieved maxes append; goal maxes replace.
+	var achievedMaxes: Dictionary<Int, Array<AchievedMax>>?
+	var goalMaxes: Dictionary<Int, GoalMax>?
 	// always use start of day, same as WorkoutBlock's dictionaries
 	var bodyWeight: Dictionary<Date, Measurement<UnitMass>>?
 	var email: String
