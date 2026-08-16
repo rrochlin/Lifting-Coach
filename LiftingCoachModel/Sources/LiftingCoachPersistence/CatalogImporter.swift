@@ -94,6 +94,18 @@ public struct CatalogImporter {
             guard let match = CatalogMatcher.match(exercise.name, against: candidates),
                   let canonical = bySlug[match.sourceSlug]
             else {
+                // No candidate shares even one movement word with this name.
+                // That's the same signal a human reads as "this isn't naming
+                // one specific lift" — real cases confirmed by hand: "Triceps
+                // (overhead ext / pushdown)," "Core (ab wheel / hanging leg
+                // raise)." Mark it so AchievedMaxUpdate leaves it alone rather
+                // than comparing weights across what might be different lifts
+                // — see Exercise.isOpenChoice for the heuristic's limits.
+                if !exercise.isOpenChoice {
+                    var flagged = exercise
+                    flagged.isOpenChoice = true
+                    try store.save(flagged)
+                }
                 unmatched.append(exercise.name)
                 continue
             }

@@ -250,6 +250,18 @@ extension AppDatabase {
             )
         }
 
+        // Additive, same reasoning as v2 above.
+        //
+        // Marks an exercise as naming a goal/muscle group rather than one
+        // specific movement ("45 min LSS cardio," "pick a triceps exercise")
+        // — see Exercise.isOpenChoice. Exists so AchievedMaxUpdate can refuse
+        // to compare weights across what might be entirely different lifts.
+        migrator.registerMigration("v3_openChoiceExercises") { db in
+            try db.alter(table: "exercise") { t in
+                t.add(column: "isOpenChoice", .boolean).notNull().defaults(to: false)
+            }
+        }
+
         return migrator
     }
 }

@@ -110,7 +110,7 @@ final class TrackerModel {
 
         do {
             let currentBest = try users.fetch(id: userID)?.latestAchievedMax(for: exercise.id)
-            guard let update = AchievedMaxUpdate.evaluate(set: set, currentBest: currentBest, at: date) else {
+            guard let update = AchievedMaxUpdate.evaluate(set: set, for: exercise, currentBest: currentBest, at: date) else {
                 return
             }
             try users.recordAchievedMax(update, exerciseId: exercise.id, for: userID)

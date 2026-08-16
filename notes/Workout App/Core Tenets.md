@@ -80,6 +80,8 @@ A program written against a goal max is a normal and intentional thing, not an e
 
 See [[Concepts]] for how these are modeled.
 
+The same discipline applies one level up, before a max is even a candidate: an achieved max only means something if two logged weights are actually the *same lift*. An exercise that names a goal rather than a movement ("pick a triceps exercise," "45 min LSS cardio") has no such guarantee — this week's implementation and last week's may not be comparable at all. See [[Concepts]]'s Exercise Catalog section for `isOpenChoice`, the mechanism that keeps achieved-max tracking from conflating them.
+
 ## 7. Prediction and analysis are in scope; automatic action is not
 
 Tenet 1 forbids the app from *acting*. It does not forbid the app from *knowing things*. Estimating a max from recent work, projecting a trend, surfacing that a lift has stalled, showing planned against achieved — all squarely in scope, and much of the point.

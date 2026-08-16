@@ -12,15 +12,22 @@ import Foundation
 ///
 /// Only `.working` sets are eligible. A warmup or drop set isn't a maximal
 /// effort by definition, so a heavy warmup shouldn't overwrite a real max.
+///
+/// Also never eligible: an `Exercise` with `isOpenChoice` set. It names a goal
+/// or muscle group, not one movement ("pick a triceps exercise," "45 min LSS
+/// cardio") — a heavier weight logged under it this week than last doesn't
+/// mean progress on the same lift, since it might not be the same lift at all.
 public enum AchievedMaxUpdate {
     /// Returns the max to record if `set` beats `currentBest`, else `nil`.
     public static func evaluate(
         set: WorkoutSet,
+        for exercise: Exercise,
         currentBest: AchievedMax?,
         at date: Date? = nil
     ) -> AchievedMax? {
         guard set.complete == true,
               set.type == .working,
+              !exercise.isOpenChoice,
               let weight = set.weight
         else { return nil }
 

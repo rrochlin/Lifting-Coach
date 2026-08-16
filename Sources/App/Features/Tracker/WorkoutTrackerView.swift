@@ -332,6 +332,12 @@ private struct ExerciseSection: View {
                     if isActive {
                         Chip(text: "active", color: Theme.live)
                     }
+                    // The coach specified a goal, not a movement — a
+                    // reminder to pick your own implementation, and a signal
+                    // that this exercise doesn't track an achieved max.
+                    if exercise.exercise.isOpenChoice {
+                        Chip(text: "your choice", color: Theme.inkMuted)
+                    }
                     Spacer()
                     Text(exercise.exercise.muscleGroup.uppercased())
                         .font(Theme.label)

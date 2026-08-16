@@ -118,6 +118,10 @@ struct CatalogImporterTests {
         let untouched = try #require(try store.fetch(id: 501))
         #expect(untouched.primaryMuscles == nil)
         #expect(untouched.sourceSlug == nil)
+        // "Triceps + biceps" isn't a mis-named specific lift — it's a
+        // coach's-choice slot, and gets flagged as one so achieved-max
+        // tracking knows to leave it alone.
+        #expect(untouched.isOpenChoice)
     }
 
     @Test("Reconciliation with nothing unenriched is a no-op")
@@ -166,5 +170,14 @@ struct CatalogImporterRealProgramTests {
             "Core (ab wheel / hanging leg raise)",
         ]
         #expect(Set(result.unmatchedNames) == expectedUnmatched)
+
+        // All three are legitimately open-choice slots ("pick a triceps
+        // exercise," "core work") confirmed by hand, not naming failures —
+        // each should be flagged so achieved-max tracking skips them.
+        let store = ExerciseStore(database)
+        for name in expectedUnmatched {
+            let exercise = try #require(try store.fetchAll().first { $0.name == name })
+            #expect(exercise.isOpenChoice, "\(name) should be flagged open-choice")
+        }
     }
 }

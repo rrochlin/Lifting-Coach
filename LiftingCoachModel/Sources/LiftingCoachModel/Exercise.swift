@@ -43,6 +43,26 @@ public struct Exercise: Codable, Hashable, Identifiable, Sendable {
     /// `nil` for a catalog-sourced row itself, or for one nothing matched.
     public var matchedSlug: String?
 
+    /// This entry names a **goal or muscle group, not one specific movement**
+    /// — "45 min LSS cardio," "pick a triceps exercise," "core work." A common
+    /// and entirely legitimate way to program anything the coach isn't
+    /// prescribing precisely: it makes no difference whether the cardio is a
+    /// walk, a bike, or a stair climber, so nothing dictates one.
+    ///
+    /// Consequence: `AchievedMaxUpdate` must never treat a heavier weight
+    /// logged under this exercise as a new max — a set of dumbbell
+    /// extensions one week and cable pushdowns the next aren't the same lift,
+    /// and comparing their weights would record a max that means nothing.
+    ///
+    /// `false` by default; set by `CatalogImporter` as a heuristic when
+    /// `CatalogMatcher` finds no candidate sharing even one movement word with
+    /// the name — a decent proxy (every real case behind this flag so far
+    /// genuinely is an open slot), but a proxy, not a certainty. A oddly-named
+    /// but still single, specific exercise could trip it too; the failure
+    /// mode is a missed max update, not a corrupted one, which is the safe
+    /// direction to be wrong in.
+    public var isOpenChoice: Bool
+
     public init(
         id: Int,
         name: String,
@@ -56,7 +76,8 @@ public struct Exercise: Codable, Hashable, Identifiable, Sendable {
         mechanic: String? = nil,
         force: String? = nil,
         sourceSlug: String? = nil,
-        matchedSlug: String? = nil
+        matchedSlug: String? = nil,
+        isOpenChoice: Bool = false
     ) {
         self.id = id
         self.name = name
@@ -71,6 +92,7 @@ public struct Exercise: Codable, Hashable, Identifiable, Sendable {
         self.force = force
         self.sourceSlug = sourceSlug
         self.matchedSlug = matchedSlug
+        self.isOpenChoice = isOpenChoice
     }
 }
 

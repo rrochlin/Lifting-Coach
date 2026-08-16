@@ -25,6 +25,7 @@ struct ExerciseRecord: Codable, FetchableRecord, PersistableRecord {
     var force: String?
     var sourceSlug: String?
     var matchedSlug: String?
+    var isOpenChoice: Bool
 
     init(_ exercise: Exercise) {
         self.id = exercise.id
@@ -40,6 +41,7 @@ struct ExerciseRecord: Codable, FetchableRecord, PersistableRecord {
         self.force = exercise.force
         self.sourceSlug = exercise.sourceSlug
         self.matchedSlug = exercise.matchedSlug
+        self.isOpenChoice = exercise.isOpenChoice
     }
 
     var domain: Exercise {
@@ -56,7 +58,8 @@ struct ExerciseRecord: Codable, FetchableRecord, PersistableRecord {
             mechanic: mechanic,
             force: force,
             sourceSlug: sourceSlug,
-            matchedSlug: matchedSlug
+            matchedSlug: matchedSlug,
+            isOpenChoice: isOpenChoice
         )
     }
 

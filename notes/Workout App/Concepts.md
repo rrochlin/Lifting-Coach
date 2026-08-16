@@ -47,6 +47,10 @@ struct Exercise {
 	// matched this exercise against to borrow its metadata. NOT unique — several
 	// program exercises can and do legitimately match the same canonical entry.
 	var matchedSlug: String?
+	// this names a goal or muscle group, not one movement ("pick a triceps
+	// exercise," "45 min LSS cardio") — see "Exercise Catalog" below. Achieved-
+	// max tracking must never compare weights across an open-choice exercise.
+	var isOpenChoice: Bool
 }
 ```
 
@@ -251,6 +255,10 @@ Resolved: backed by a vendored snapshot of `yuhonas/free-exercise-db` (public do
 
 **Images were deliberately not vendored.** The full image set is ~90-100MB of JPEGs; no screen in the app displays an exercise photo yet, so that cost isn't justified today. Worth revisiting once something actually needs them — the upstream repo still has them, keyed by the same slug this app already stores as `sourceSlug`.
 
-**Names don't line up 1:1 with real programming.** A spreadsheet-authored program names exercises the way a lifter thinks about them ("Bench press — heavy (paused, comp grip)"), not the way a canonical database names them ("Barbell Bench Press - Medium Grip"). `CatalogMatcher` does one-time, best-effort keyword matching to enrich a manually-named exercise with the canonical entry's metadata **without changing its name or id** — see its doc comment for exactly how, and for the real false positives (a "heavy" deadlift nearly matching "Heavy Bag Thrust") that shaped the current movement-word-gated approach. It's explicitly low-precision-tolerant: several real program exercises are legitimately unmatchable (they describe more than one movement, or none), and are left alone rather than guessed at.
+**Names don't line up 1:1 with real programming.** A spreadsheet-authored program names exercises the way a lifter thinks about them ("Bench press — heavy (paused, comp grip)"), not the way a canonical database names them ("Barbell Bench Press - Medium Grip"). `CatalogMatcher` does one-time, best-effort keyword matching to enrich a manually-named exercise with the canonical entry's metadata **without changing its name or id** — see its doc comment for exactly how, and for the real false positives (a "heavy" deadlift nearly matching "Heavy Bag Thrust") that shaped the current movement-word-gated approach.
 
-**This is where "more advanced searching down the line" belongs**, if the keyword matcher's misses ever become worth fixing — embeddings or an LLM call, not more hand-tuned heuristics.
+**Some exercises aren't unmatched because the matcher failed — they don't name a single movement in the first place.** "Triceps (overhead ext / pushdown)," "Core (ab wheel / hanging leg raise)": a coach specifying a goal or a muscle group and leaving the implementation up to the lifter is normal, deliberate programming — no different from "45 min LSS cardio," where a walk, a bike, and a stair climber are all correct answers. This is `Exercise.isOpenChoice`, not a matching gap to eventually close. `CatalogImporter` sets it as a heuristic whenever `CatalogMatcher` finds nothing sharing even one movement word — a decent proxy, not a certainty, but the failure mode (a missed enrichment) is the safe direction to be wrong in.
+
+This flag is load-bearing, not cosmetic: `AchievedMaxUpdate` refuses to record a max for an open-choice exercise, because a heavier weight logged under it than last time doesn't mean progress on the same lift — it might not be the same lift at all.
+
+**"More advanced searching down the line" belongs to the matcher's genuine misses**, not to open-choice exercises — those are correctly unmatched forever, by design. If the keyword matcher's real false negatives (a specific movement it just didn't recognize) ever become worth fixing, that's embeddings or an LLM call, not more hand-tuned heuristics.
