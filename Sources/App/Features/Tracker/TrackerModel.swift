@@ -15,16 +15,18 @@ final class TrackerModel {
     private(set) var session: WorkoutSession?
     private(set) var saveError: String?
 
-    /// When the current rest period is due to end. `nil` when not resting.
-    private(set) var restEndsAt: Date?
-    /// The exercise the current rest period belongs to — `nil` when not
-    /// resting. Lets the view render the rest timer directly beneath the lift
-    /// it follows instead of once, globally, at the top of the screen.
-    private(set) var restingExerciseID: UUID?
+    /// The rest period in progress, if any. See `RestTimer`.
+    private(set) var rest: RestTimer?
 
     /// A just-recorded achieved max, for a transient banner. The lifter should
     /// know the PR was actually captured, not just quietly written to disk.
     private(set) var newAchievedMax: (exercise: Exercise, max: AchievedMax)?
+
+    private let notifier: RestNotifier
+    /// Wakes the model at expiry so the timer can announce itself (haptic,
+    /// expired state) while the app is on screen. The scheduled notification
+    /// covers the other case; this covers the lifter who *is* watching.
+    private var restExpiryTask: Task<Void, Never>?
 
     private let workouts: WorkoutStore
     private let users: UserStore
@@ -42,12 +44,14 @@ final class TrackerModel {
         users: UserStore,
         exercises: ExerciseStore,
         userID: UUID,
+        notifier: RestNotifier = RestNotifier(),
         onAchievedMaxRecorded: @escaping () -> Void = {}
     ) {
         self.workouts = workouts
         self.users = users
         self.exercises = exercises
         self.userID = userID
+        self.notifier = notifier
         self.onAchievedMaxRecorded = onAchievedMaxRecorded
     }
 
@@ -81,8 +85,7 @@ final class TrackerModel {
         guard var session else { return }
         session.finish(at: date)
         self.session = session
-        restEndsAt = nil
-        restingExerciseID = nil
+        dismissRest()
         persist()
         self.session = nil
     }
@@ -93,8 +96,7 @@ final class TrackerModel {
             try? workouts.delete(id: session.workout.id)
         }
         session = nil
-        restEndsAt = nil
-        restingExerciseID = nil
+        dismissRest()
     }
 
     // MARK: Editing
@@ -104,8 +106,11 @@ final class TrackerModel {
 
         // Start the rest clock from the set that was just logged.
         if let session, let exercise = session.exercise(containingSetID: id) {
-            restEndsAt = date.addingTimeInterval(TimeInterval(session.restTarget(afterSetWith: id)))
-            restingExerciseID = exercise.id
+            startRest(
+                for: exercise,
+                seconds: session.restTarget(afterSetWith: id),
+                from: date
+            )
         }
 
         recordAchievedMaxIfNeeded(setID: id, at: date)
@@ -196,9 +201,62 @@ final class TrackerModel {
         mutate { $0.moveSet(from: source, to: destination, within: exerciseID) }
     }
 
+    // MARK: Rest
+
+    /// Begins (or restarts) the rest period following a logged set.
+    func startRest(for exercise: WorkoutExercise, seconds: Int, from date: Date = Date()) {
+        let timer = RestTimer(
+            exerciseID: exercise.id,
+            exerciseName: exercise.displayName,
+            seconds: seconds,
+            from: date
+        )
+        rest = timer
+        Task { await notifier.requestAuthorizationIfNeeded() }
+        scheduleExpiry(for: timer, now: date)
+    }
+
+    /// Extends or shortens the rest in progress — the ± buttons on the timer.
+    /// The clamping rules live in `RestTimer.adjust(by:now:)`.
+    func adjustRest(by seconds: Int, now: Date = Date()) {
+        guard var timer = rest else { return }
+        timer.adjust(by: seconds, now: now)
+        rest = timer
+        scheduleExpiry(for: timer, now: now)
+    }
+
+    /// Ends rest early, or dismisses an expired timer.
     func dismissRest() {
-        restEndsAt = nil
-        restingExerciseID = nil
+        rest = nil
+        restExpiryTask?.cancel()
+        restExpiryTask = nil
+        notifier.cancel()
+    }
+
+    /// Arms both the on-screen expiry and the notification for a timer's end.
+    private func scheduleExpiry(for timer: RestTimer, now: Date = Date()) {
+        restExpiryTask?.cancel()
+        notifier.schedule(at: timer.endsAt, exerciseName: timer.exerciseName, now: now)
+
+        let interval = timer.endsAt.timeIntervalSince(now)
+        guard interval > 0 else {
+            markRestExpired(timerID: timer.id)
+            return
+        }
+
+        restExpiryTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(interval))
+            guard !Task.isCancelled else { return }
+            self?.markRestExpired(timerID: timer.id)
+        }
+    }
+
+    /// Guarded by `timerID` so a task that outlives its rest period — the lifter
+    /// logged the next set early — can't expire whatever timer replaced it.
+    private func markRestExpired(timerID: UUID) {
+        guard var timer = rest, timer.id == timerID else { return }
+        timer.hasExpired = true
+        rest = timer
     }
 
     // MARK: Plumbing

@@ -25,7 +25,7 @@ The phase 1 project is scaffolded, the **Tracker → Planner loop is closed**, t
 
 The model went through a design pass driven by that import (see Core Tenets): `LoadPrescription` is `.absolute | .percentOf(_, of: MaxReference)`; `EffortTarget` is a separate axis living on `PlannedExercise` with per-set override; maxes are split into achieved (event history) / goal (setting) / theoretical (derived, unimplemented). Session start materializes resolved effort into each set's `plannedFrom` snapshot.
 
-Built: `WorkoutSession` + `WorkoutStore` + tracker UI; `PlanStore` + `UserStore` + planner UI; homepage metrics; theme; importer. 104 tests.
+Built: `WorkoutSession` + `WorkoutStore` + tracker UI; `PlanStore` + `UserStore` + planner UI; homepage metrics; theme; importer. 149 tests.
 
 Achieved maxes now auto-record from logged sets (`AchievedMaxUpdate`, wired into `TrackerModel.completeSet`) — a heavier working-set weight than the current best becomes the new best, no manual entry. Bodyweight is logged explicitly via a sheet on Home (it's a distinct action, not derived). Home also has an honest "Health" placeholder (HealthKit not connected) and a minimal reverse-chronological Workout History list — deliberately not the calendar `Features/Workout History.md` specifies; that's staying deferred (low priority, other screens may still change shape under it) per explicit direction.
 
@@ -46,12 +46,21 @@ Achieved maxes now auto-record from logged sets (`AchievedMaxUpdate`, wired into
 
 **`PlannedExercise.variant` / `WorkoutExercise.variant`** (migration `v5_exerciseVariant`) — the plan's own wording for a lift, e.g. "Bench press — heavy (paused, comp grip)". Needed once the program resolved onto canonical catalog entries: Monday prescribes heavy paused bench *and* its back-off sets, both correctly the same `Exercise`, which without this rendered as one exercise listed twice. `displayName` is `variant ?? exercise.name`. It is prescription, never identity — nothing keys off it. See Concepts.md's "Variant vs. exercise".
 
+**Rest is prescribed, never measured.** `WorkoutSession.completeSet` used to record `restTime` as the gap between two completion timestamps; it doesn't any more, on the owner's call. That number is rest *plus* reaching for the phone — biased long every single time, so it looked like data while being systematically wrong. `WorkoutSet.restTime` stays as a legacy column (real rows on the phone carry values) but nothing writes it; the tracker's per-set annotation reads the prescription in `plannedFrom`. See Concepts.md's "Rest is prescribed, not measured" before adding any rest analytics.
+
+**The rest timer** is `RestTimer` (model package, pure) + `TrackerModel`'s orchestration + `RestTimerRow` in the tracker.
+- It **stops at zero**. `Text(timerInterval:countsDown:)` counts straight past into negative time, which turns a rest timer into a stopwatch measuring lateness; the row renders from the clock inside a `TimelineView` instead, and flips to a cyan REST COMPLETE state.
+- It's **adjustable** (−30 / +30, drawn as buttons) and skippable, because rest is a prescription the lifter may depart from (Core Tenets §1). Shortening below the elapsed time lands on zero, never negative.
+- `RestTimer` stores the *window* (`startedAt`/`endsAt`), not a tick count, so a phone that slept through the rest period shows the truth on return with nothing to catch up. Not persisted — a rest period spanning a relaunch is over.
+- **Expiry notifies**: `RestNotifier` schedules one local notification (fixed identifier, so re-scheduling replaces rather than stacks) and cancels it on skip/finish/discard. Authorization is requested at the first rest period, not at launch. `installForegroundPresentation()` in `LiftingCoachApp.init` is what lets the banner show while the app is frontmost — the default is to suppress it, which is backwards for a phone sitting face-down on a bench with the tracker open. Not `.timeSensitive`: that needs an entitlement this signing setup doesn't have.
+
 Next, in rough order:
 - **Profile: data export/import.** The one genuinely local part of that screen, and `Ideas.md` calls importing from other apps crucial. If/when real program import happens, it's a documented JSON/CSV schema (or the phase 2 AI coach), not a spreadsheet parser.
 - **Superset authoring.** Stores and tracker handle supersets; the planner can't author one. Note the real program uses none.
 - **Adherence denominator**: home counts all 644 sets of the 12-week block; should probably scope to elapsed days.
 - **Real HealthKit integration** — scope (which metrics, a new page vs. Home, entitlements) is an open decision, not started. The Home placeholder just names what's missing.
-- **UI test target** — simctl can't tap, so sheets, the rest timer, and the achieved-max banner are only verifiable by hand. (`-openPlanDay N` was added as the same kind of stopgap as `-initialTab`, and gets the planner's day editor on screen from the command line; the Save/discard flow behind it still isn't exercisable.) Worth prioritizing: the completeSet → banner → Home-refresh path has never actually been exercised end-to-end, only its pieces individually.
+- **UI test target** — simctl can't tap, so sheets and the achieved-max banner are only verifiable by hand. (`-openPlanDay N` and `-restDemo <seconds>` are the same kind of stopgap as `-initialTab`: the first gets the planner's day editor on screen, the second puts a running rest timer there. The planner's Save/discard flow and the rest timer's own buttons still aren't exercisable.) Worth prioritizing: the completeSet → banner → Home-refresh path has never actually been exercised end-to-end, only its pieces individually.
+- **The rest-complete notification is unverified.** Scheduling, cancelling, and the foreground-presentation delegate are all written and the permission prompt is confirmed to appear, but nothing here can tap "Allow", so no alert has ever actually been *seen* firing. First thing to check by hand on the phone.
 - **Exercise catalog search stays substring-only.** `CatalogMatcher`'s heuristic is fine for a one-time enrichment pass but not built for interactive search over ~900 entries — if the picker needs to get smarter, that's real search work (embeddings/LLM), not a bigger keyword table.
 
 Open items intentionally left unresolved (in the docs, not silently in the model):
@@ -114,7 +123,13 @@ xcrun simctl io "$D" screenshot /tmp/shot.png
 
 **Note "iPhone 17 Pro" is a device model, not an OS version** — it runs iOS 26.3. The stale iOS 17.0 runtime is also installed but nothing here can run on it (deployment target is 18).
 
-`-initialTab home|workout|plan|history|profile` picks the starting tab. It exists because simctl can install, launch, and screenshot but **cannot tap** — without it, only Home is reachable from the command line. Interaction-dependent states (rest timer, sheets, the planned-workout editor) still can't be reached this way; that needs a UI test target, which doesn't exist yet.
+`-initialTab home|workout|plan|history|profile` picks the starting tab. It exists because simctl can install, launch, and screenshot but **cannot tap** — without it, only Home is reachable from the command line. Two more of the same kind: `-openPlanDay N` opens the planner's day editor, and `-restDemo <seconds>` starts a throwaway workout, logs its first set through the real `completeSet` path, and leaves the rest timer running that long (`-restDemo 0` lands on the expired state). Both are `#if DEBUG`. States behind a *second* tap — sheets, the timer's own ± buttons, the planner's Save/discard — still need a UI test target, which doesn't exist yet.
+
+`-restDemo` writes a real in-progress workout, and it no-ops if one already exists, so clear it between runs:
+```sh
+sqlite3 "$DB" "delete from workoutSet; delete from workoutExercise; delete from workout;"
+```
+It also disables `RestNotifier` — the permission prompt would otherwise cover the thing being screenshotted, and nothing on the command line can dismiss it.
 
 **Seeding data to see populated views:** write directly to the app's SQLite.
 ```sh

@@ -16,6 +16,10 @@ struct LiftingCoachApp: App {
         } catch {
             fatalError("Could not open the workout database: \(error)")
         }
+
+        // Has to be in place before any notification is delivered, so it can't
+        // wait until a rest period starts.
+        RestNotifier.installForegroundPresentation()
     }
 
     var body: some Scene {

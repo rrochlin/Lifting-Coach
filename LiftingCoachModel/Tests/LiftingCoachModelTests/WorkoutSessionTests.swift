@@ -164,17 +164,19 @@ struct WorkoutSessionLoggingTests {
         #expect(logged.rpe == 9.5)
     }
 
-    @Test("Rest is measured from the previously completed set")
-    func measuresRestBetweenSets() {
+    @Test("Rest actually taken is not inferred from completion timestamps")
+    func doesNotMeasureRestBetweenSets() {
         var session = self.session()
         let sets = session.workout.allSets
 
         session.completeSet(id: sets[0].id, at: later(60))
         session.completeSet(id: sets[1].id, at: later(60 + 180))
 
-        // The first set has nothing before it to rest from.
+        // The gap between two completions is rest *plus* however long it took to
+        // reach for the phone, so it's not rest — and it's biased long every
+        // time. Logging it would look like a measurement it isn't.
         #expect(session.workout.allSets[0].restTime == nil)
-        #expect(session.workout.allSets[1].restTime == 180)
+        #expect(session.workout.allSets[1].restTime == nil)
     }
 
     @Test("Un-completing clears the timestamp but keeps the numbers")
@@ -195,7 +197,7 @@ struct WorkoutSessionLoggingTests {
         #expect(set.rpe == 9)
     }
 
-    @Test("Un-completing doesn't corrupt rest timing for later sets")
+    @Test("Un-completing leaves the rest prescription alone")
     func uncompleteKeepsRestSane() {
         var session = self.session()
         let sets = session.workout.allSets
@@ -204,8 +206,10 @@ struct WorkoutSessionLoggingTests {
 
         session.completeSet(id: sets[1].id, at: later(300))
 
-        // With no completed set before it, there's no rest interval to claim.
+        // Rest owed comes from the prescription, not from set status, so
+        // un-checking a set can't change what the next set's timer counts.
         #expect(session.workout.allSets[1].restTime == nil)
+        #expect(session.restTarget(afterSetWith: sets[1].id) == 120)
     }
 
     @Test("Completing an unknown set id reports failure")

@@ -52,6 +52,14 @@ public struct WorkoutSet: Codable, Hashable, Identifiable, Sendable {
     public var complete: Bool?
     public var type: SetType?
     public var timeComplete: Date?
+    /// Legacy: rest actually taken, in seconds. **Nothing writes this any more.**
+    ///
+    /// It used to be derived as the gap between two completion timestamps, which
+    /// overstates rest by however long the lifter took to pick the phone back up
+    /// — a lag that never cancels out. Rows logged before that was removed still
+    /// carry a value; the prescribed rest lives in `plannedFrom.restTime`, which
+    /// is what the tracker displays. Kept as a column so existing history isn't
+    /// destroyed (Design.md), not as a field to start writing again.
     public var restTime: Int?
     /// Achieved effort as the lifter rated it, per set — never defaulted from
     /// the prescription. Same 1–10 scale as `EffortTarget`.

@@ -35,10 +35,14 @@ struct WorkoutTrackerView: View {
                     users: environment.users,
                     exercises: environment.exercises,
                     userID: userID,
+                    notifier: RestNotifier(isEnabled: !isRestDemo),
                     onAchievedMaxRecorded: { environment.reloadUser() }
                 )
                 model.resumeIfNeeded()
                 self.model = model
+                #if DEBUG
+                startRestDemoIfRequested(model)
+                #endif
             }
             loadWeek()
         }
@@ -48,6 +52,37 @@ struct WorkoutTrackerView: View {
             }
         }
     }
+
+    /// True only under `-restDemo`, which is DEBUG-gated everywhere it acts.
+    private var isRestDemo: Bool {
+        #if DEBUG
+        LaunchArguments.restDemoSeconds != nil
+        #else
+        false
+        #endif
+    }
+
+    #if DEBUG
+    /// Puts a running rest timer on screen for `-restDemo <seconds>`.
+    ///
+    /// Goes through the real path — log a set, which starts rest — rather than
+    /// faking the state, so what gets screenshotted is what a lifter would see.
+    /// The length is then forced to the requested value, since the timer's own
+    /// target comes from the prescription and an ad-hoc set has none.
+    private func startRestDemoIfRequested(_ model: TrackerModel) {
+        guard let seconds = LaunchArguments.restDemoSeconds, !model.isActive else { return }
+        guard let exercise = try? environment.exercises.fetchAll().first else { return }
+
+        model.startAdHoc()
+        model.addExercise(exercise, sets: 3)
+        guard let first = model.session?.workout.allSets.first else { return }
+        model.updateSet(id: first.id) { $0.reps = 5; $0.weight = Measurement(value: 225, unit: .pounds) }
+        model.completeSet(id: first.id)
+        if let started = model.session?.exercise(containingSetID: first.id) {
+            model.startRest(for: started, seconds: seconds)
+        }
+    }
+    #endif
 
     // MARK: Idle — week view
 
@@ -259,6 +294,15 @@ private struct ActiveWorkoutList: View {
         }
         .listStyle(.plain)
         .screenGround()
+        // The lifter who *is* watching the screen still deserves to be told,
+        // and a phone on the bench is felt before it's read. The notification
+        // covers the case where the app isn't on screen at all.
+        .onChange(of: model.rest?.hasExpired) { _, expired in
+            guard expired == true else { return }
+            #if os(iOS)
+            UINotificationFeedbackGenerator().notificationOccurred(.success)
+            #endif
+        }
         .sheet(item: $noteEditorTarget) { target in
             NoteEditorSheet(
                 programmedNote: programmedNote(for: target),
@@ -323,7 +367,7 @@ private struct ActiveWorkoutList: View {
         // once the workout moves on to the next lift.
         let expanded = expandedOverrides[exercise.id] ?? isActiveGroup
         let sets = exercise.sets ?? []
-        let isRestingHere = model.restingExerciseID == exercise.id && model.restEndsAt != nil
+        let restTimer = model.rest?.exerciseID == exercise.id ? model.rest : nil
         let accent = isActiveGroup ? Theme.live.opacity(0.55) : Theme.hairline
 
         ExerciseHeaderRow(
@@ -367,9 +411,13 @@ private struct ActiveWorkoutList: View {
                 model.moveSet(from: source, to: destination, within: exercise.id)
             }
 
-            if isRestingHere, let endsAt = model.restEndsAt {
-                RestTimerRow(endsAt: endsAt) { model.dismissRest() }
-                    .panelGroupRow(.middle, accent: Theme.live)
+            if let restTimer {
+                RestTimerRow(
+                    timer: restTimer,
+                    onAdjust: { model.adjustRest(by: $0) },
+                    onDismiss: { model.dismissRest() }
+                )
+                .panelGroupRow(.middle, accent: Theme.live)
             }
 
             Button { model.addSet(toExerciseWith: exercise.id) } label: {
@@ -788,14 +836,14 @@ private struct SetRow: View {
             .clipShape(RoundedRectangle(cornerRadius: 4))
     }
 
-    /// Before the set is logged this is the target ("rest 2:00"); after, it's
-    /// what was actually taken ("rested 3:05"), which `completeSet` measures
-    /// from the previous completed set.
+    /// The rest prescribed after this set — before and after it's logged.
+    ///
+    /// It used to switch to "rested 3:05" once done, measured between completion
+    /// timestamps. That number was rest plus fumbling for the phone, biased long
+    /// every time, so it's gone rather than shown as if it were observed. The
+    /// prescription is what the app actually knows.
     private var restLabel: String {
-        if done, let actual = self.set.restTime {
-            return "rested \(formatted(actual))"
-        }
-        return "rest \(formatted(restTarget))"
+        "rest \(formatted(restTarget))"
     }
 
     private func formatted(_ seconds: Int) -> String {
@@ -971,30 +1019,102 @@ private struct AchievedMaxBanner: View {
 
 // MARK: - Rest timer
 
+/// The rest countdown, sitting under the lift it follows.
+///
+/// Rendered from the clock on every tick rather than from `Text(timerInterval:)`,
+/// which counts straight past zero into negative time. Rest owed can't be
+/// negative — once it's up the row says so and stops, instead of quietly
+/// becoming a stopwatch measuring how late the lifter is.
 private struct RestTimerRow: View {
-    let endsAt: Date
+    let timer: RestTimer
+    /// Seconds to add (or, negative, subtract).
+    let onAdjust: (Int) -> Void
     let onDismiss: () -> Void
 
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: "timer")
-                .font(.system(size: 13))
-                .foregroundStyle(Theme.live)
-            Text("REST")
-                .font(Theme.label)
-                .tracking(1.6)
-                .foregroundStyle(Theme.live)
-            // A live-updating countdown with no timer to manage by hand.
-            Text(timerInterval: Date.now...endsAt, countsDown: true)
-                .font(Theme.data(20, weight: .medium))
-                .foregroundStyle(Theme.ink)
-            Spacer()
-            Button("SKIP", action: onDismiss)
+        // One second is the finest granularity the display shows, so that's how
+        // often it needs to redraw.
+        TimelineView(.periodic(from: timer.startedAt, by: 1)) { context in
+            let isOver = timer.isOver(at: context.date)
+            let accent = isOver ? Theme.signal : Theme.live
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 10) {
+                    Image(systemName: isOver ? "checkmark.circle.fill" : "timer")
+                        .font(.system(size: 13))
+                        .foregroundStyle(accent)
+                    Text(isOver ? "REST COMPLETE" : "REST")
+                        .font(Theme.label)
+                        .tracking(1.6)
+                        .foregroundStyle(accent)
+                    Spacer(minLength: 6)
+                    Text(clock(timer.remaining(at: context.date)))
+                        .font(Theme.data(22, weight: .medium))
+                        .foregroundStyle(isOver ? accent : Theme.ink)
+                        // Digits keep their column as the count changes, so the
+                        // readout doesn't jitter every second.
+                        .monospacedDigit()
+                        .contentTransition(.numericText(countsDown: true))
+                }
+
+                ProgressView(value: timer.progress(at: context.date))
+                    .progressViewStyle(.linear)
+                    .tint(accent)
+                    .scaleEffect(y: 0.6, anchor: .center)
+
+                HStack(spacing: 8) {
+                    // Adjusting is the interaction this row is *for* — the
+                    // prescription is a starting point, not a rule (Core Tenets
+                    // §1) — so both controls are drawn as buttons rather than
+                    // left as bare tappable text.
+                    adjustButton(label: "−30", seconds: -30, enabled: !isOver)
+                    adjustButton(label: "+30", seconds: 30, enabled: true)
+                    Spacer(minLength: 6)
+                    actionButton(title: isOver ? "DISMISS" : "SKIP REST", accent: accent)
+                }
+            }
+            .padding(.vertical, 2)
+        }
+    }
+
+    private func adjustButton(label: String, seconds: Int, enabled: Bool) -> some View {
+        Button { onAdjust(seconds) } label: {
+            Text(label)
+                .font(Theme.data(13, weight: .medium))
+                .foregroundStyle(enabled ? Theme.ink : Theme.inkFaint)
+                .frame(minWidth: 52, minHeight: 30)
+                .background(Theme.panelRaised)
+                .clipShape(RoundedRectangle(cornerRadius: 5))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 5)
+                        .strokeBorder(Theme.hairline, lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+    }
+
+    private func actionButton(title: String, accent: Color) -> some View {
+        Button(action: onDismiss) {
+            Text(title)
                 .font(Theme.label)
                 .tracking(1.2)
-                .foregroundStyle(Theme.inkMuted)
-                .buttonStyle(.plain)
+                .foregroundStyle(accent)
+                .padding(.horizontal, 12)
+                .frame(minHeight: 30)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 5)
+                        .strokeBorder(accent.opacity(0.6), lineWidth: 1)
+                )
         }
+        .buttonStyle(.plain)
+    }
+
+    private func clock(_ seconds: TimeInterval) -> String {
+        // Rounded up, so a timer showing 1:00 has a full minute left rather than
+        // flicking to 0:59 the instant it starts.
+        let total = Int(seconds.rounded(.up))
+        return String(format: "%d:%02d", total / 60, total % 60)
     }
 }
 

@@ -81,6 +81,17 @@ enum LaunchArguments {
     static var planDayIndex: Int? {
         value(for: "-openPlanDay").flatMap(Int.init)
     }
+
+    /// `-restDemo 90` starts a throwaway ad-hoc workout, logs its first set, and
+    /// leaves the rest timer running for that many seconds — `0` lands straight
+    /// on the expired state.
+    ///
+    /// The rest timer only exists on the far side of a tap, so this is the only
+    /// way to see it without a UI test target. It writes a real workout, so it's
+    /// `#if DEBUG` at the call site as well as opt-in here.
+    static var restDemoSeconds: Int? {
+        value(for: "-restDemo").flatMap(Int.init)
+    }
 }
 
 #Preview {

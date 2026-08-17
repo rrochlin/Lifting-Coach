@@ -196,10 +196,11 @@ public struct WorkoutSession: Equatable, Sendable {
     /// arguments at all. That's the common case during a workout, and it's the
     /// interaction Workout Tracker.md cares most about being frictionless.
     ///
-    /// Also records `restTime` as the seconds elapsed since the previously
-    /// completed set — the rest that *preceded* this one. That's the interval the
-    /// rest timer was actually counting, and the only one measurable at the
-    /// moment a set is logged.
+    /// Deliberately does **not** record how long the lifter rested. The interval
+    /// between two completion timestamps isn't rest — it's rest plus however long
+    /// it took to reach for the phone, so it always reads long, and always in the
+    /// same direction. A number that's wrong the same way every time is worse
+    /// than no number, because it looks like data. See `WorkoutSet.restTime`.
     @discardableResult
     public mutating func completeSet(
         id: UUID,
@@ -209,37 +210,25 @@ public struct WorkoutSession: Equatable, Sendable {
         notes: String? = nil,
         at date: Date = Date()
     ) -> Bool {
-        let previousCompletion = workout.allSets
-            .filter { $0.complete == true }
-            .compactMap(\.timeComplete)
-            .max()
-
-        return mutateSet(id: id) { set in
+        mutateSet(id: id) { set in
             set.complete = true
             set.timeComplete = date
             if let reps { set.reps = reps }
             if let weight { set.weight = weight }
             if let rpe { set.rpe = rpe }
             if let notes { set.usernotes = notes }
-            if let previousCompletion {
-                set.restTime = max(0, Int(date.timeIntervalSince(previousCompletion)))
-            }
         }
     }
 
     /// Undoes a completion.
     ///
-    /// Clears `timeComplete` and the measured `restTime` along with it — leaving
-    /// a completion timestamp on a set that isn't complete would quietly corrupt
-    /// the rest calculation for every set logged afterward. Reps, weight, and RPE
-    /// are kept: the lifter un-checking a set almost never means they want the
-    /// numbers they typed thrown away.
+    /// Reps, weight, and RPE are kept: the lifter un-checking a set almost never
+    /// means they want the numbers they typed thrown away.
     @discardableResult
     public mutating func uncompleteSet(id: UUID) -> Bool {
         mutateSet(id: id) { set in
             set.complete = false
             set.timeComplete = nil
-            set.restTime = nil
         }
     }
 

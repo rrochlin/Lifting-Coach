@@ -122,6 +122,9 @@ struct WorkoutSet {
 	var complete: Bool?
 	var type: SetType?
 	var timeComplete: Date?
+	// legacy — nothing writes this. Rest actually taken is NOT recorded; see
+	// "Rest is prescribed, not measured" below. Kept only so history logged
+	// before that decision isn't destroyed.
 	var restTime: Int?
 	// achieved effort as the lifter rated it, per set — never defaulted from the
 	// prescription. Same scale as #RPE.
@@ -166,6 +169,13 @@ struct PlannedSet {
 }
 
 ```
+
+## Rest is prescribed, not measured
+Rest exists in the model in exactly one place: #PlannedSet `restTime`, falling back to the #WorkoutBlock's `defaultRestTimes` for that #SetType, then an app default. That's rest *owed*.
+
+Rest *taken* is deliberately not recorded. It used to be, derived as the gap between two completion timestamps, and that number is wrong in a way that doesn't average out: it's the rest plus however long it took to pick the phone up and check a box, so it always reads long. A measurement biased one direction every time is worse than no measurement, because it still looks like data — and #Ideas' whole reason for wanting logged history is analysis. `WorkoutSet.restTime` survives as a legacy column so rows written before this decision aren't destroyed; nothing writes it.
+
+If rest taken ever needs to be real, it has to come from the timer itself (started, adjusted, and ended by the lifter), not from inference — and that's a decision to make deliberately, not to fall into.
 
 ## #RPE
 A single scale used for both prescribed and achieved effort. Exertion, **not** reps in reserve — see [[Core Tenets]] §3 before changing anything here.
