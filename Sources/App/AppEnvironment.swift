@@ -54,16 +54,15 @@ public final class AppEnvironment {
     }
 
     private func bootstrap() throws {
-        try seedCatalogIfNeeded()
         currentUser = try users.localUser()
-        try importSampleBlockIfNeeded()
-        // Runs after the program import, not before: reconciliation enriches
-        // whatever exercises already exist with no catalog link, which
-        // includes the ones the program import just created. Running it first
-        // would mean reconciling against an empty program.
+        // Catalog first, program second — the order matters now that the
+        // program import resolves its exercises onto catalog entries via
+        // ProgramExerciseMap. With an empty catalog there'd be nothing to
+        // resolve against and every program exercise would fall back to a
+        // placeholder, which is exactly the duplication the mapping removes.
         try importCatalogIfNeeded()
-        // Both imports can touch the lifter's goal maxes / catalog links —
-        // re-read once at the end rather than after each.
+        try importSampleBlockIfNeeded()
+        // The program import writes goal maxes — re-read once at the end.
         currentUser = try users.localUser()
     }
 
@@ -93,16 +92,15 @@ public final class AppEnvironment {
         currentUser = try? users.localUser()
     }
 
-    /// Seeds the big-three placeholder entries (`ExerciseCatalog.seed`, ids
-    /// 1-10) that `HomeView` and `ProgramImporter` reference by id. Superseded
-    /// in richness by `importCatalogIfNeeded` below, but kept as the very
-    /// first thing to exist — those ids need to be stable before anything else
-    /// runs, and the seed's own id range never collides with the catalog
-    /// import's (which starts at 1000).
-    func seedCatalogIfNeeded() throws {
-        guard try exercises.fetchAll().isEmpty else { return }
-        try exercises.save(ExerciseCatalog.seed)
-    }
+    /// Deliberately no longer seeded into the app database.
+    ///
+    /// `ExerciseCatalog.seed`'s ten hardcoded entries were a stand-in from
+    /// before a real catalog existed. Now that the vendored catalog is imported
+    /// and the program resolves onto it, seeding them would put ten more
+    /// non-catalog exercises in the picker and split maxes between a seed
+    /// "Back Squat" and the catalog's "Barbell Squat". The type stays as a
+    /// convenient fixture for tests, which construct it explicitly.
+    func seedCatalogIfNeeded() throws {}
 
     /// First launch only: imports the vendored `free-exercise-db` catalog
     /// (~870 exercises, see `CatalogImporter`) and, in the same pass,

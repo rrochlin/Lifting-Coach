@@ -45,6 +45,28 @@ public struct ProgramImporter {
         }
     }
 
+    /// The hand-checked program-name → catalog-slug mapping, keyed by program
+    /// name. See `ProgramExerciseMap.json`; a one-time artifact, not something
+    /// to grow into a general matcher.
+    static func bundledExerciseMap() throws -> [String: MapEntry] {
+        guard let url = Bundle.module.url(forResource: "ProgramExerciseMap", withExtension: "json") else {
+            throw ImportError.missingResource
+        }
+        let entries = try JSONDecoder().decode([MapEntry].self, from: Data(contentsOf: url))
+        return Dictionary(entries.map { ($0.programName, $0) }, uniquingKeysWith: { first, _ in first })
+    }
+
+    struct MapEntry: Decodable {
+        var programName: String
+        /// `nil` for an open-choice slot — it names a goal, not a movement.
+        var slug: String?
+        var openChoice: Bool
+        /// How many exercises the slot expands to. >1 means the program calls
+        /// for a superset (e.g. "Triceps + biceps" is two slots).
+        var slots: Int
+        var muscleGroups: [String]
+    }
+
     /// Parses and persists a program, scheduling week 1 day 1 on `startDate`.
     ///
     /// The JSON is date-free (week/dayOfWeek only); dates materialize as
@@ -59,19 +81,66 @@ public struct ProgramImporter {
         let file = try JSONDecoder().decode(ProgramFile.self, from: data)
         let start = calendar.startOfDay(for: startDate)
 
-        // Catalog: reuse an existing exercise by exact name, otherwise create
-        // above the seed range so imports never collide with built-ins.
+        // Resolve every program exercise onto the vendored catalog rather than
+        // minting a sheet-derived entry for it.
+        //
+        // `ProgramExerciseMap.json` is a hand-checked, one-time mapping from the
+        // spreadsheet's names to catalog slugs — "Bench volume — Spoto press"
+        // and "Bench — back-off (paused)" are tempo/intensity variants of one
+        // movement, not two more entries the catalog should carry. Without this
+        // the import polluted the catalog with ~20 near-duplicates that then
+        // each accrued their own achieved max.
+        //
+        // The exception is a slot the program deliberately leaves open ("pick a
+        // triceps exercise"): that isn't a movement, so it can't be a catalog
+        // entry. Those get a placeholder flagged `isOpenChoice`, which the
+        // tracker resolves to a real exercise when the lifter picks one.
+        // Keyed by program name; the value is one exercise per *slot*, so a
+        // multi-slot entry ("Triceps + biceps") yields two distinct
+        // placeholders that can each be filled and tracked independently.
         let exercises = ExerciseStore(database)
-        var catalog: [String: Exercise] = [:]
-        var nextID = max(100, (try exercises.fetchAll().map(\.id).max() ?? 0) + 1)
-        for existing in try exercises.fetchAll() {
-            catalog[existing.name] = existing
-        }
-        for entry in file.exerciseCatalog where catalog[entry.name] == nil {
-            let exercise = Exercise(id: nextID, name: entry.name, muscleGroup: entry.muscleGroup)
-            try exercises.save(exercise)
-            catalog[entry.name] = exercise
-            nextID += 1
+        let mapping = try Self.bundledExerciseMap()
+        var catalog: [String: [Exercise]] = [:]
+        var existing = try exercises.fetchAll()
+        var nextID = max(100, (existing.map(\.id).max() ?? 0) + 1)
+
+        for entry in file.exerciseCatalog {
+            guard let mapped = mapping[entry.name] else { continue }
+
+            if let slug = mapped.slug, let canonical = try exercises.fetch(sourceSlug: slug) {
+                catalog[entry.name] = [canonical]
+                continue
+            }
+
+            let slotCount = Swift.max(1, mapped.slots)
+            var slots: [Exercise] = []
+            for slot in 0..<slotCount {
+                // A slot's own name: the muscle it targets when the entry
+                // splits, otherwise the program's name for it.
+                let name = slotCount > 1 && slot < mapped.muscleGroups.count
+                    ? mapped.muscleGroups[slot]
+                    : entry.name
+                let muscle = mapped.muscleGroups.indices.contains(slot)
+                    ? mapped.muscleGroups[slot]
+                    : (mapped.muscleGroups.first ?? entry.muscleGroup)
+
+                // Reuse by name so a re-import doesn't duplicate placeholders.
+                if let found = existing.first(where: { $0.name == name }) {
+                    slots.append(found)
+                    continue
+                }
+                let placeholder = Exercise(
+                    id: nextID,
+                    name: name,
+                    muscleGroup: muscle,
+                    isOpenChoice: mapped.openChoice
+                )
+                try exercises.save(placeholder)
+                existing.append(placeholder)
+                slots.append(placeholder)
+                nextID += 1
+            }
+            catalog[entry.name] = slots
         }
 
         // The sheet's maxes are explicitly goals (targets, not verified lifts).
@@ -96,8 +165,8 @@ public struct ProgramImporter {
         for day in file.days {
             for entry in day.exercises {
                 guard let lift = entry.percentReference?.lift,
-                      let exercise = catalog[entry.name] else { continue }
-                referencedBy[lift, default: []].insert(exercise.id)
+                      let slots = catalog[entry.name] else { continue }
+                for slot in slots { referencedBy[lift, default: []].insert(slot.id) }
             }
         }
 
@@ -109,8 +178,11 @@ public struct ProgramImporter {
             for (lift, ids) in referencedBy where goalByLift[lift]?.exercise == goal.exercise {
                 targets.formUnion(ids)
             }
-            // the canonical lift itself (seed catalog) also gets the goal
-            if let canonical = catalog[goal.exercise] ?? bigThreeMatch(goal.exercise, in: catalog) {
+            // Every program row that references this lift now resolves to the
+            // canonical catalog entry, so `referencedBy` already holds it — no
+            // seed-catalog fallback needed (and the seed entries are exactly
+            // the duplicates this mapping exists to stop creating).
+            if let canonical = catalog[goal.exercise]?.first {
                 targets.insert(canonical.id)
             }
             for exerciseId in targets where !assigned.contains(exerciseId) {
@@ -136,39 +208,58 @@ public struct ProgramImporter {
 
             var groups: [[PlannedExercise]] = []
             for entry in day.exercises {
-                guard let exercise = catalog[entry.name] else { continue }
+                guard let slotExercises = catalog[entry.name], !slotExercises.isEmpty else { continue }
 
                 let exerciseEffort = entry.targetRPE.map { EffortTarget(rpe: $0) }
-                let sets = entry.sets.map { set -> PlannedSet in
-                    setCount += 1
-                    return PlannedSet(
-                        reps: set.reps,
-                        type: set.type.flatMap(SetType.init(rawValue:)),
-                        load: importLoad(set.load),
-                        // store per-set effort only where it differs from the
-                        // exercise's target — the exercise target is the norm
-                        effort: set.targetRPE.flatMap { rpe in
-                            rpe == entry.targetRPE ? nil : EffortTarget(rpe: rpe)
-                        },
-                        restTime: set.restTime,
-                        notes: set.notes
+
+                // A multi-slot open-choice entry expands into one PlannedExercise
+                // per slot inside a single superset group: "Triceps + biceps" is
+                // the program calling for two exercises performed together, one
+                // per muscle, each filled in by the lifter at workout time. One
+                // combined placeholder couldn't express that, and couldn't
+                // record which two exercises actually got done.
+                //
+                // Sets are rebuilt per slot rather than shared: PlannedSet
+                // carries an identity, and reusing one array across both slots
+                // gives two exercises the same set ids (a UNIQUE violation on
+                // insert, and two rows that would edit as one if it got past).
+                let planned: [PlannedExercise] = slotExercises.map { slotExercise in
+                    let sets = entry.sets.map { set -> PlannedSet in
+                        setCount += 1
+                        return PlannedSet(
+                            reps: set.reps,
+                            type: set.type.flatMap(SetType.init(rawValue:)),
+                            load: importLoad(set.load),
+                            // store per-set effort only where it differs from the
+                            // exercise's target — the exercise target is the norm
+                            effort: set.targetRPE.flatMap { rpe in
+                                rpe == entry.targetRPE ? nil : EffortTarget(rpe: rpe)
+                            },
+                            restTime: set.restTime,
+                            notes: set.notes
+                        )
+                    }
+                    return PlannedExercise(
+                        exercise: slotExercise,
+                        sets: sets,
+                        effort: exerciseEffort,
+                        notes: entry.notes
                     )
                 }
 
-                let planned = PlannedExercise(
-                    exercise: exercise,
-                    sets: sets,
-                    effort: exerciseEffort,
-                    notes: entry.notes
-                )
+                if slotExercises.count > 1 {
+                    // The slots ARE the superset — they always travel together.
+                    groups.append(planned)
+                    continue
+                }
 
                 // supersetGroup groups exercises performed together; the source
                 // program happens not to use it, but honor it if present.
                 if entry.supersetGroup < groups.count,
                    entry.orderInGroup > 0 {
-                    groups[entry.supersetGroup].append(planned)
+                    groups[entry.supersetGroup].append(contentsOf: planned)
                 } else {
-                    groups.append([planned])
+                    groups.append(planned)
                 }
             }
 
@@ -215,13 +306,6 @@ public struct ProgramImporter {
         default:
             return nil
         }
-    }
-
-    /// The sheet names maxes "Back Squat"/"Bench Press"/"Deadlift" while program
-    /// rows use variation names — fall back to a seed-catalog match for the big
-    /// three so goals land on the canonical lifts.
-    private func bigThreeMatch(_ name: String, in catalog: [String: Exercise]) -> Exercise? {
-        ExerciseCatalog.seed.first { $0.name == name }
     }
 
     private func unit(_ symbol: String) -> UnitMass {

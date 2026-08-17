@@ -31,6 +31,10 @@ let package = Package(
                 // The owner's real 12-week program, extracted from the source
                 // spreadsheet — the sample block ProgramImporter ingests.
                 .copy("Resources/Block1.json"),
+                // Hand-checked program-name → catalog-slug mapping, so the
+                // program import resolves onto the vendored catalog instead of
+                // minting its own near-duplicate entries.
+                .copy("Resources/ProgramExerciseMap.json"),
                 // A vendored snapshot of yuhonas/free-exercise-db (public
                 // domain), backing the real exercise catalog. See
                 // Resources/FreeExerciseDB.LICENSE.txt for provenance.

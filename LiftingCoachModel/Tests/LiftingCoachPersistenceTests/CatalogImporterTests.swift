@@ -161,12 +161,17 @@ struct CatalogImporterRealProgramTests {
 
         let result = try CatalogImporter(database).importAndReconcile(try CatalogImporter.bundledCatalog)
 
-        // Genuinely ambiguous/compound entries with no honest single-exercise
-        // match — confirmed by hand, not something a better matcher should
-        // silently "fix" without a human deciding what they should map to.
+        // Genuinely ambiguous entries with no honest single-exercise match —
+        // confirmed by hand, not something a better matcher should silently
+        // "fix" without a human deciding what they should map to.
+        //
+        // "Triceps" and "Biceps" are the two slots the program's combined
+        // "Triceps + biceps" row expands into; each is its own open-choice slot
+        // the lifter fills at workout time.
         let expectedUnmatched: Set<String> = [
             "Triceps (overhead ext / pushdown)",
-            "Triceps + biceps",
+            "Triceps",
+            "Biceps",
             "Core (ab wheel / hanging leg raise)",
         ]
         #expect(Set(result.unmatchedNames) == expectedUnmatched)

@@ -22,7 +22,10 @@ struct ProgramImporterTests {
 
     private func importBundled() throws -> (AppDatabase, User, ProgramImporter.Result) {
         let database = try AppDatabase.inMemory()
-        try ExerciseStore(database).save(ExerciseCatalog.seed)
+        // Catalog first, mirroring AppEnvironment.bootstrap — the program
+        // import resolves its exercises onto catalog entries, so importing it
+        // against an empty catalog would exercise only the fallback path.
+        try CatalogImporter(database).importAndReconcile(try CatalogImporter.bundledCatalog)
         let users = UserStore(database, calendar: calendar)
         let user = try users.localUser()
 
@@ -38,9 +41,13 @@ struct ProgramImporterTests {
     func importsWholeBlock() throws {
         let (database, _, result) = try importBundled()
 
-        // Counts verified against the source sheet: 69 days, SUM(Sets) = 644.
+        // 69 days, and the sheet's own SUM(Sets) of 644 — plus 27 more, because
+        // "Triceps + biceps" is one sheet row but two exercises performed
+        // together: each slot gets the row's 3 sets, so 9 occurrences of that
+        // row contribute 27 extra. The sheet under-counts it; the program
+        // genuinely prescribes both.
         #expect(result.dayCount == 69)
-        #expect(result.setCount == 644)
+        #expect(result.setCount == 671)
         // canonical big three plus every variation that programs off them
         #expect(result.goalMaxCount >= 3)
 
@@ -52,20 +59,53 @@ struct ProgramImporterTests {
         let persistedSets = try database.writer.read { db in
             try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM plannedSet")
         }
-        #expect(persistedSets == 644)
+        #expect(persistedSets == 671)
     }
 
-    @Test("The sheet's maxes import as goals, not achieved lifts")
+    @Test("The sheet's maxes import as goals against canonical catalog lifts")
     func maxesImportAsGoals() throws {
-        let (_, user, _) = try importBundled()
+        let (database, user, _) = try importBundled()
+        let exercises = ExerciseStore(database)
 
         // Plan!A8: "goal maxes (targets, not all verified)" — importing them as
         // achieved would fabricate lifts that never happened.
-        let squat = ExerciseCatalog.seed[0]
+        //
+        // The goals land on the vendored catalog's canonical entries, not on
+        // sheet-derived duplicates: the whole point of the program→catalog
+        // mapping is that "Squat — volume (comp stance)" IS Barbell Squat.
+        let squat = try #require(try exercises.fetch(sourceSlug: "Barbell_Squat"))
+        let bench = try #require(try exercises.fetch(sourceSlug: "Barbell_Bench_Press_-_Medium_Grip"))
+        let deadlift = try #require(try exercises.fetch(sourceSlug: "Barbell_Deadlift"))
+
         #expect(user.max(.goal, for: squat.id)?.value == 495)
+        #expect(user.max(.goal, for: bench.id)?.value == 365)
+        #expect(user.max(.goal, for: deadlift.id)?.value == 555)
         #expect(user.max(.achieved, for: squat.id) == nil)
-        #expect(user.max(.goal, for: 2)?.value == 365)   // bench
-        #expect(user.max(.goal, for: 3)?.value == 555)   // deadlift
+    }
+
+    @Test("Program exercises resolve onto the catalog instead of duplicating it")
+    func resolvesOntoCatalog() throws {
+        let (database, _, _) = try importBundled()
+        let exercises = ExerciseStore(database)
+        let all = try exercises.fetchAll()
+
+        // The sheet's variation names must not become catalog entries of their
+        // own — that pollution is what the mapping exists to prevent.
+        for name in [
+            "Squat — volume (comp stance)",
+            "Bench volume — Spoto press (1\" off chest)",
+            "Deadlift — heavy (straight bar)",
+        ] {
+            #expect(!all.contains { $0.name == name }, "\(name) should resolve to a catalog entry")
+        }
+
+        // "Triceps + biceps" is one sheet row but two slots, so it becomes two
+        // open-choice placeholders the lifter fills independently.
+        let triceps = try #require(all.first { $0.name == "Triceps" })
+        let biceps = try #require(all.first { $0.name == "Biceps" })
+        #expect(triceps.isOpenChoice)
+        #expect(biceps.isOpenChoice)
+        #expect(triceps.id != biceps.id)
     }
 
     @Test("Week and day place workouts on the right calendar dates")
@@ -88,9 +128,14 @@ struct ProgramImporterTests {
         let (database, user, _) = try importBundled()
         let plans = PlanStore(database, calendar: calendar)
 
+        // The sheet's "Bench press — heavy (paused, comp grip)" now resolves to
+        // the canonical catalog bench press, so look it up by that rather than
+        // by the spreadsheet's own name for the variation.
         let monday = try #require(try plans.fetchPlanned(on: blockStart).first)
         let benchHeavy = try #require(
-            monday.exercises?.flatMap { $0 }.first { $0.exercise.name.hasPrefix("Bench press — heavy") }
+            monday.exercises?.flatMap { $0 }.first {
+                $0.exercise.sourceSlug == "Barbell_Bench_Press_-_Medium_Grip"
+            }
         )
 
         // Load: 72.5% of the bench goal (365) → 264.625 → 265 at the plate step.

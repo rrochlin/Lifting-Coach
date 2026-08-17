@@ -16,7 +16,16 @@ struct HomeView: View {
     @State private var loadError: String?
     @State private var isLoggingBodyWeight = false
 
-    private let bigThree = [1, 2, 3]  // squat, bench, deadlift — Homepage.md
+    /// Squat / bench / deadlift, per Homepage.md — identified by their vendored
+    /// catalog slugs rather than hardcoded ids. Maxes are recorded against the
+    /// canonical catalog entry (a heavy Spoto press updates the bench max), so
+    /// this has to look them up the same way to find anything.
+    private let bigThreeSlugs = [
+        "Barbell_Squat",
+        "Barbell_Bench_Press_-_Medium_Grip",
+        "Barbell_Deadlift",
+    ]
+    @State private var bigThree: [Exercise] = []
 
     var body: some View {
         NavigationStack {
@@ -122,11 +131,11 @@ struct HomeView: View {
 
         Panel {
             VStack(spacing: 9) {
-                ForEach(bigThree, id: \.self) { id in
+                ForEach(bigThree) { exercise in
                     Readout(
-                        label: name(for: id),
-                        value: maxSummary(id),
-                        accent: environment.currentUser?.max(.achieved, for: id) == nil
+                        label: exercise.name,
+                        value: maxSummary(exercise.id),
+                        accent: environment.currentUser?.max(.achieved, for: exercise.id) == nil
                             ? Theme.inkMuted : Theme.ink,
                         size: 17
                     )
@@ -209,6 +218,7 @@ struct HomeView: View {
             plan = try environment.plans.fetchPlan(userId: user.id)
             todaysPlan = try environment.plans.fetchPlanned(on: Date())
             adherence = try currentAdherence()
+            bigThree = try bigThreeSlugs.compactMap { try environment.exercises.fetch(sourceSlug: $0) }
             loadError = nil
         } catch {
             loadError = error.localizedDescription
@@ -243,10 +253,6 @@ struct HomeView: View {
         let achieved = environment.currentUser?.max(.achieved, for: id)?.liftedDescription ?? "—"
         let goal = environment.currentUser?.max(.goal, for: id)?.liftedDescription ?? "—"
         return "\(achieved) / \(goal)"
-    }
-
-    private func name(for id: Int) -> String {
-        ExerciseCatalog.seed.first { $0.id == id }?.name ?? "Exercise \(id)"
     }
 
     private func summary(_ workout: PlannedWorkout) -> String {
