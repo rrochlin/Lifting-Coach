@@ -33,7 +33,6 @@ struct WorkoutTrackerView: View {
                 let model = TrackerModel(
                     workouts: environment.workouts,
                     users: environment.users,
-                    exercises: environment.exercises,
                     userID: userID,
                     notifier: RestNotifier(isEnabled: !isRestDemo),
                     onAchievedMaxRecorded: { environment.reloadUser() }
@@ -310,7 +309,10 @@ private struct ActiveWorkoutList: View {
             )
         }
         .sheet(item: $choosingFor) { target in
-            ExercisePicker(initialMuscleFilter: target.muscleGroup) { picked in
+            ExercisePicker(
+                initialMuscleFilter: target.muscleGroup,
+                suggestions: target.suggestions
+            ) { picked in
                 // Recording what actually filled the slot: the logged exercise
                 // becomes the real movement, so history and achieved-max
                 // tracking reference something specific rather than a goal.
@@ -380,7 +382,10 @@ private struct ActiveWorkoutList: View {
             onChooseExercise: {
                 choosingFor = ChoosingTarget(
                     id: exercise.id,
-                    muscleGroup: exercise.exercise.isOpenChoice ? exercise.exercise.muscleGroup : nil
+                    muscleGroup: exercise.exercise.isOpenChoice ? exercise.exercise.muscleGroup : nil,
+                    suggestions: exercise.exercise.isOpenChoice
+                        ? (exercise.exercise.suggestions ?? [])
+                        : []
                 )
             }
         )
@@ -525,6 +530,9 @@ private struct ChoosingTarget: Identifiable {
     /// Non-nil for an open-choice slot — the muscle group the coach specified,
     /// used to pre-filter the picker to plausible choices.
     let muscleGroup: String?
+    /// Movements the program floated for this slot. Shortcuts into the search,
+    /// never a restriction on it — the lifter picks what they pick.
+    var suggestions: [String] = []
 }
 
 /// Identifies which planned-vs-logged item the note editor sheet is open on.
@@ -1103,6 +1111,8 @@ private struct ExercisePicker: View {
     /// Pre-selects a muscle filter — set when filling an open-choice slot the
     /// coach targeted at a specific muscle group.
     var initialMuscleFilter: String?
+    /// What the program suggested for this slot, if anything.
+    var suggestions: [String] = []
     let onPick: (Exercise) -> Void
 
     @State private var exercises: [Exercise] = []
@@ -1113,6 +1123,7 @@ private struct ExercisePicker: View {
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                suggestionBar
                 filterBar
                 List(filtered) { exercise in
                     Button {
@@ -1151,6 +1162,40 @@ private struct ExercisePicker: View {
                 exercises = (try? environment.exercises.fetchAll()) ?? []
                 if muscleFilter == nil { muscleFilter = initialMuscleFilter }
             }
+        }
+    }
+
+    /// What the program floated for this slot — "overhead extension,"
+    /// "pushdown." Tapping one searches for it.
+    ///
+    /// Suggestions, not a whitelist. The program leaving the movement open is
+    /// the whole point of the slot, so these can't narrow what's pickable — the
+    /// app doesn't overrule the lifter (Core Tenets §1). Absent entirely where
+    /// the program suggested nothing, rather than showing an empty rail.
+    @ViewBuilder
+    private var suggestionBar: some View {
+        if !suggestions.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                SectionLabel(text: "programmed as")
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(suggestions, id: \.self) { suggestion in
+                            Button { query = suggestion } label: {
+                                Text(suggestion)
+                                    .font(Theme.data(11))
+                                    .foregroundStyle(Theme.signal)
+                                    .padding(.horizontal, 9)
+                                    .padding(.vertical, 5)
+                                    .background(Theme.panelRaised)
+                                    .clipShape(Capsule())
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 10)
         }
     }
 

@@ -35,14 +35,6 @@ public struct Exercise: Codable, Hashable, Identifiable, Sendable {
     /// duplicating rows.
     public var sourceSlug: String?
 
-    /// The catalog entry `CatalogMatcher` best-effort matched this exercise
-    /// against to borrow its metadata — a **provenance** note, not an identity
-    /// claim: this row did not become that exercise, and unlike `sourceSlug`
-    /// this is not unique — "Bench press — heavy" and "Bench volume — Spoto
-    /// press" can both, correctly, match the same canonical bench press entry.
-    /// `nil` for a catalog-sourced row itself, or for one nothing matched.
-    public var matchedSlug: String?
-
     /// This entry names a **goal or muscle group, not one specific movement**
     /// — "45 min LSS cardio," "pick a triceps exercise," "core work." A common
     /// and entirely legitimate way to program anything the coach isn't
@@ -54,14 +46,19 @@ public struct Exercise: Codable, Hashable, Identifiable, Sendable {
     /// extensions one week and cable pushdowns the next aren't the same lift,
     /// and comparing their weights would record a max that means nothing.
     ///
-    /// `false` by default; set by `CatalogImporter` as a heuristic when
-    /// `CatalogMatcher` finds no candidate sharing even one movement word with
-    /// the name — a decent proxy (every real case behind this flag so far
-    /// genuinely is an open slot), but a proxy, not a certainty. A oddly-named
-    /// but still single, specific exercise could trip it too; the failure
-    /// mode is a missed max update, not a corrupted one, which is the safe
-    /// direction to be wrong in.
+    /// **Authored, never inferred.** Whoever writes the program says which
+    /// slots are open; nothing in the app reads a name and guesses. An earlier
+    /// version derived this from a keyword matcher failing to find a movement
+    /// word, which meant a correctly-programmed lift with an unusual name could
+    /// silently become an open slot.
     public var isOpenChoice: Bool
+
+    /// Movements the program floated for an open slot — "overhead extension,"
+    /// "pushdown." Suggestions, not a whitelist: the lifter picks whatever they
+    /// pick, and the app never refuses one (Core Tenets §1). Empty or `nil`
+    /// wherever the program suggested nothing ("45 min cardio"), and meaningless
+    /// on an exercise that isn't `isOpenChoice`.
+    public var suggestions: [String]?
 
     public init(
         id: Int,
@@ -76,8 +73,8 @@ public struct Exercise: Codable, Hashable, Identifiable, Sendable {
         mechanic: String? = nil,
         force: String? = nil,
         sourceSlug: String? = nil,
-        matchedSlug: String? = nil,
-        isOpenChoice: Bool = false
+        isOpenChoice: Bool = false,
+        suggestions: [String]? = nil
     ) {
         self.id = id
         self.name = name
@@ -91,8 +88,8 @@ public struct Exercise: Codable, Hashable, Identifiable, Sendable {
         self.mechanic = mechanic
         self.force = force
         self.sourceSlug = sourceSlug
-        self.matchedSlug = matchedSlug
         self.isOpenChoice = isOpenChoice
+        self.suggestions = suggestions
     }
 }
 

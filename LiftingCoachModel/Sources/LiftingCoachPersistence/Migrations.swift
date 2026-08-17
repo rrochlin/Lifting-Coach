@@ -230,11 +230,12 @@ extension AppDatabase {
                 t.add(column: "mechanic", .text)
                 t.add(column: "force", .text)
                 t.add(column: "sourceSlug", .text)
-                // Not unique, deliberately: many program-specific exercises can
-                // legitimately best-effort-match the same canonical entry (two
-                // bench variants both matching "Barbell Bench Press"). This is
-                // provenance for what CatalogMatcher picked, not an identity
-                // claim like sourceSlug is — see Exercise.swift.
+                // Dead since v7 — nothing reads or writes this. It held what a
+                // name matcher guessed an exercise probably was; programs now
+                // name their exercises by slug outright, so there's nothing to
+                // guess. Kept only because a real device's database has to
+                // migrate forward and dropping a column means rebuilding the
+                // table. Don't start using it again.
                 t.add(column: "matchedSlug", .text)
             }
             // Unique only where present — lets a re-import upsert a
@@ -308,6 +309,23 @@ extension AppDatabase {
         migrator.registerMigration("v6_setRestOverride") { db in
             try db.alter(table: "workoutSet") { t in
                 t.add(column: "restOverride", .integer)
+            }
+        }
+
+        // Additive, same reasoning as v2-v6 above.
+        //
+        // Backs Exercise.suggestions: the movements a program floated for an
+        // open slot ("overhead extension," "pushdown"), which used to be prose
+        // buried in the exercise's own name.
+        //
+        // Note what this migration does *not* do: `matchedSlug` (added in v2)
+        // is dead as of this version — nothing reads or writes it now that the
+        // name matcher is gone and programs name their exercises by slug. The
+        // column stays because dropping one would mean rebuilding the table,
+        // and the phone's database has to survive this.
+        migrator.registerMigration("v7_exerciseSuggestions") { db in
+            try db.alter(table: "exercise") { t in
+                t.add(column: "suggestions", .jsonText)
             }
         }
 

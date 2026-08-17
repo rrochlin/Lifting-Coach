@@ -55,11 +55,9 @@ public final class AppEnvironment {
 
     private func bootstrap() throws {
         currentUser = try users.localUser()
-        // Catalog first, program second — the order matters now that the
-        // program import resolves its exercises onto catalog entries via
-        // ProgramExerciseMap. With an empty catalog there'd be nothing to
-        // resolve against and every program exercise would fall back to a
-        // placeholder, which is exactly the duplication the mapping removes.
+        // Catalog first, program second. The program names its exercises by
+        // catalog slug, so with an empty catalog there'd be nothing for those
+        // slugs to resolve to.
         try importCatalogIfNeeded()
         try importSampleBlockIfNeeded()
         // The program import writes goal maxes — re-read once at the end.
@@ -79,8 +77,8 @@ public final class AppEnvironment {
         calendar.firstWeekday = 2  // Monday
         let thisWeek = calendar.dateInterval(of: .weekOfYear, for: Date())?.start ?? Date()
 
-        try ProgramImporter(database).importProgram(
-            try ProgramImporter.bundledBlock1,
+        try ProgramLoader(database).load(
+            try ProgramLoader.bundledBlock1,
             for: user.id,
             startDate: thisWeek
         )
@@ -103,11 +101,9 @@ public final class AppEnvironment {
     func seedCatalogIfNeeded() throws {}
 
     /// First launch only: imports the vendored `free-exercise-db` catalog
-    /// (~870 exercises, see `CatalogImporter`) and, in the same pass,
-    /// best-effort-enriches whatever exercises don't already have catalog
-    /// metadata — the seed entries and anything the program import created.
+    /// (~870 exercises, see `CatalogImporter`).
     private func importCatalogIfNeeded() throws {
         guard try !exercises.hasCatalogImport() else { return }
-        try CatalogImporter(database).importAndReconcile(try CatalogImporter.bundledCatalog)
+        try CatalogImporter(database).importCatalog(try CatalogImporter.bundledCatalog)
     }
 }

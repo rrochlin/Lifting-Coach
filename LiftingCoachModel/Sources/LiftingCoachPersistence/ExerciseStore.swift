@@ -24,8 +24,8 @@ struct ExerciseRecord: Codable, FetchableRecord, PersistableRecord {
     var mechanic: String?
     var force: String?
     var sourceSlug: String?
-    var matchedSlug: String?
     var isOpenChoice: Bool
+    var suggestions: String?
 
     init(_ exercise: Exercise) {
         self.id = exercise.id
@@ -40,8 +40,8 @@ struct ExerciseRecord: Codable, FetchableRecord, PersistableRecord {
         self.mechanic = exercise.mechanic
         self.force = exercise.force
         self.sourceSlug = exercise.sourceSlug
-        self.matchedSlug = exercise.matchedSlug
         self.isOpenChoice = exercise.isOpenChoice
+        self.suggestions = Self.encode(exercise.suggestions)
     }
 
     var domain: Exercise {
@@ -58,8 +58,8 @@ struct ExerciseRecord: Codable, FetchableRecord, PersistableRecord {
             mechanic: mechanic,
             force: force,
             sourceSlug: sourceSlug,
-            matchedSlug: matchedSlug,
-            isOpenChoice: isOpenChoice
+            isOpenChoice: isOpenChoice,
+            suggestions: Self.decode(suggestions)
         )
     }
 
@@ -115,20 +115,6 @@ public struct ExerciseStore: Sendable {
                 .filter(Column("sourceSlug") == sourceSlug)
                 .fetchOne(db)?
                 .domain
-        }
-    }
-
-    /// Exercises with no catalog-metadata link — manually created or
-    /// program-imported entries `CatalogMatcher` hasn't (yet, or ever
-    /// successfully) enriched. This is exactly the set a reconciliation pass
-    /// needs to consider.
-    public func fetchUnenriched() throws -> [Exercise] {
-        try database.writer.read { db in
-            try ExerciseRecord
-                .filter(Column("sourceSlug") == nil && Column("primaryMuscles") == nil)
-                .order(Column("name"))
-                .fetchAll(db)
-                .map(\.domain)
         }
     }
 

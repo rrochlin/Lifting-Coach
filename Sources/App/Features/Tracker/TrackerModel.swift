@@ -30,9 +30,6 @@ final class TrackerModel {
 
     private let workouts: WorkoutStore
     private let users: UserStore
-    /// Used to resolve a performed variation to its canonical lift when
-    /// recording an achieved max — see `canonicalExercise(for:)`.
-    private let exercises: ExerciseStore
     private let userID: UUID
     /// Called after an achieved max is recorded, so the view can refresh
     /// `AppEnvironment.currentUser` — TrackerModel doesn't hold a reference to
@@ -42,14 +39,12 @@ final class TrackerModel {
     init(
         workouts: WorkoutStore,
         users: UserStore,
-        exercises: ExerciseStore,
         userID: UUID,
         notifier: RestNotifier = RestNotifier(),
         onAchievedMaxRecorded: @escaping () -> Void = {}
     ) {
         self.workouts = workouts
         self.users = users
-        self.exercises = exercises
         self.userID = userID
         self.notifier = notifier
         self.onAchievedMaxRecorded = onAchievedMaxRecorded
@@ -120,11 +115,16 @@ final class TrackerModel {
     /// heavier weight than the current best *is* the new best, checked every
     /// time a set is completed.
     ///
-    /// The max is recorded against the **canonical** lift, not the variation
-    /// that was performed: a heavy Spoto press updates the bench press max
-    /// rather than starting a separate one. Without this, every program
-    /// variation accrues its own max, so the first working set of each one
-    /// reads as a PR and the banner fires constantly.
+    /// The max lands on the exercise itself, which is already the canonical
+    /// lift: a program names the movement it means by slug, so heavy paused
+    /// bench, its back-offs, and a Spoto press are all the one bench press
+    /// entry, told apart by `variant`. They share a max because they *are* the
+    /// same lift — nothing has to roll one up onto another.
+    ///
+    /// This used to resolve a separate "which canonical entry did a matcher
+    /// think this variation was?" link before recording. That link is gone with
+    /// the matcher, and it isn't missed: identity now comes from the program,
+    /// not from a guess about the exercise's name.
     private func recordAchievedMaxIfNeeded(setID: UUID, at date: Date) {
         guard let session,
               let performed = session.exercise(containingSetID: setID)?.exercise,
@@ -132,33 +132,19 @@ final class TrackerModel {
         else { return }
 
         do {
-            let canonical = try canonicalExercise(for: performed)
-            let currentBest = try users.fetch(id: userID)?.latestAchievedMax(for: canonical.id)
+            let currentBest = try users.fetch(id: userID)?.latestAchievedMax(for: performed.id)
             guard let update = AchievedMaxUpdate.evaluate(
                 set: set, for: performed, currentBest: currentBest, at: date
             ) else { return }
 
-            try users.recordAchievedMax(update, exerciseId: canonical.id, for: userID)
-            // Report the canonical lift — "NEW MAX — BARBELL FULL SQUAT" is
-            // what the number actually belongs to.
-            newAchievedMax = (canonical, update)
+            try users.recordAchievedMax(update, exerciseId: performed.id, for: userID)
+            newAchievedMax = (performed, update)
             onAchievedMaxRecorded()
         } catch {
             // A missed max update shouldn't interrupt logging the set itself —
             // the workout write already succeeded via `persist()`.
             saveError = error.localizedDescription
         }
-    }
-
-    /// The catalog entry a performed exercise's max belongs to.
-    ///
-    /// `matchedSlug` is the link `CatalogMatcher` already establishes from a
-    /// program-authored variation to the canonical catalog entry it borrowed
-    /// metadata from; here it doubles as the rollup target. An exercise with no
-    /// match is its own canonical lift.
-    private func canonicalExercise(for exercise: Exercise) throws -> Exercise {
-        guard let slug = exercise.matchedSlug else { return exercise }
-        return try exercises.fetch(sourceSlug: slug) ?? exercise
     }
 
     func dismissAchievedMaxBanner() {

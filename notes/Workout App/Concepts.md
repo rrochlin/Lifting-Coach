@@ -43,14 +43,15 @@ struct Exercise {
 	// identity: this row IS that vendored-catalog entry. Unique when present —
 	// lets a re-import upsert instead of duplicating rows.
 	var sourceSlug: String?
-	// provenance, not identity: the catalog entry CatalogMatcher best-effort
-	// matched this exercise against to borrow its metadata. NOT unique — several
-	// program exercises can and do legitimately match the same canonical entry.
-	var matchedSlug: String?
 	// this names a goal or muscle group, not one movement ("pick a triceps
 	// exercise," "45 min LSS cardio") — see "Exercise Catalog" below. Achieved-
 	// max tracking must never compare weights across an open-choice exercise.
+	// Authored by whoever writes the program; never inferred from the name.
 	var isOpenChoice: Bool
+	// movements the program floated for an open slot ("overhead extension,"
+	// "pushdown"). Suggestions, not a whitelist — the lifter picks what they
+	// pick and the app never refuses one.
+	var suggestions: Array<String>?
 }
 ```
 
@@ -286,10 +287,22 @@ Resolved: backed by a vendored snapshot of `yuhonas/free-exercise-db` (public do
 
 **Images were deliberately not vendored.** The full image set is ~90-100MB of JPEGs; no screen in the app displays an exercise photo yet, so that cost isn't justified today. Worth revisiting once something actually needs them — the upstream repo still has them, keyed by the same slug this app already stores as `sourceSlug`.
 
-**Names don't line up 1:1 with real programming.** A spreadsheet-authored program names exercises the way a lifter thinks about them ("Bench press — heavy (paused, comp grip)"), not the way a canonical database names them ("Barbell Bench Press - Medium Grip"). `CatalogMatcher` does one-time, best-effort keyword matching to enrich a manually-named exercise with the canonical entry's metadata **without changing its name or id** — see its doc comment for exactly how, and for the real false positives (a "heavy" deadlift nearly matching "Heavy Bag Thrust") that shaped the current movement-word-gated approach.
+### Programs name exercises, they don't describe them
 
-**Some exercises aren't unmatched because the matcher failed — they don't name a single movement in the first place.** "Triceps (overhead ext / pushdown)," "Core (ab wheel / hanging leg raise)": a coach specifying a goal or a muscle group and leaving the implementation up to the lifter is normal, deliberate programming — no different from "45 min LSS cardio," where a walk, a bike, and a stair climber are all correct answers. This is `Exercise.isOpenChoice`, not a matching gap to eventually close. `CatalogImporter` sets it as a heuristic whenever `CatalogMatcher` finds nothing sharing even one movement word — a decent proxy, not a certainty, but the failure mode (a missed enrichment) is the safe direction to be wrong in.
+**A program says which exercise it means. Nothing in the app works it out from the name.** There are exactly two ways to program a slot:
 
-This flag is load-bearing, not cosmetic: `AchievedMaxUpdate` refuses to record a max for an open-choice exercise, because a heavier weight logged under it than last time doesn't mean progress on the same lift — it might not be the same lift at all.
+1. **Directly** — the plan's own wording plus the catalog entry it refers to. "Bench press — heavy (paused, comp grip)" *is* `Barbell_Bench_Press_-_Medium_Grip`; the wording lives in `variant`, the identity in the exercise itself.
+2. **As an open choice** — the plan names a goal or a muscle group and leaves the movement to the lifter, carrying only the fields that limit or suggest: a muscle group, and whatever movements it floated (`suggestions`).
 
-**"More advanced searching down the line" belongs to the matcher's genuine misses**, not to open-choice exercises — those are correctly unmatched forever, by design. If the keyword matcher's real false negatives (a specific movement it just didn't recognize) ever become worth fixing, that's embeddings or an LLM call, not more hand-tuned heuristics.
+There is deliberately no third case, and in particular **no code that reads an exercise's name and decides what it probably is.** An earlier version had one — a keyword matcher scoring a program's wording against the canonical catalog. It was removed. Two reasons, and the second is the real one:
+
+- It could be wrong in ways nothing downstream could detect. A "heavy" deadlift matched "Heavy Bag Thrust" on the word "heavy" alone. Gating on movement words fixed that case and not the class of problem.
+- **It solved a problem that shouldn't exist.** A program is authored, not discovered. Whoever writes it knows whether they mean one specific lift or the lifter's choice, and a workout plan only ever exists in this app or its database — so that knowledge can simply be recorded when the plan is written. Inferring it later is re-deriving something that was never unknown.
+
+The consequence for importing anything external (the owner's original spreadsheet, say): the translation happens **once, by hand, into the app's language**, and the result is what ships. See `Resources/Block1.json` and `ProgramLoader` — the loader is transcription, and a program naming an exercise the catalog doesn't have fails to load rather than approximating.
+
+**An open slot is a real prescription, not a gap.** "Triceps (overhead ext / pushdown)," "Core (ab wheel / hanging leg raise)," "45 min LSS cardio" — a coach specifying a goal and leaving the implementation up to the lifter is normal, deliberate programming, and a walk, a bike, and a stair climber are all correct answers to the last one.
+
+`Exercise.isOpenChoice` is load-bearing, not cosmetic: `AchievedMaxUpdate` refuses to record a max for an open-choice exercise, because a heavier weight logged under it than last time doesn't mean progress on the same lift — it might not be the same lift at all. Which is exactly why it's authored rather than guessed: an inferred flag would let a correctly-programmed lift with an unusual name silently stop tracking maxes.
+
+**"More advanced searching down the line" is about the exercise picker**, not about program loading. Picker search is substring-only over ~870 entries; if that needs to get smarter, it's embeddings or an LLM call. It has nothing to do with how a program names its exercises, which is now settled.

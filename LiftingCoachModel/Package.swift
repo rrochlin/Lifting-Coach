@@ -28,13 +28,12 @@ let package = Package(
                 .product(name: "GRDB", package: "GRDB.swift"),
             ],
             resources: [
-                // The owner's real 12-week program, extracted from the source
-                // spreadsheet — the sample block ProgramImporter ingests.
+                // The owner's real 12-week program, hand-translated from the
+                // source spreadsheet into the app's own language — the sample
+                // block ProgramLoader loads. Names its exercises by catalog
+                // slug and declares its open slots outright, so loading it
+                // involves no guessing about what a name meant.
                 .copy("Resources/Block1.json"),
-                // Hand-checked program-name → catalog-slug mapping, so the
-                // program import resolves onto the vendored catalog instead of
-                // minting its own near-duplicate entries.
-                .copy("Resources/ProgramExerciseMap.json"),
                 // A vendored snapshot of yuhonas/free-exercise-db (public
                 // domain), backing the real exercise catalog. See
                 // Resources/FreeExerciseDB.LICENSE.txt for provenance.

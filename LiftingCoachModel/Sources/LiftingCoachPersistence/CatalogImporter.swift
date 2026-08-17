@@ -2,20 +2,23 @@ import Foundation
 import LiftingCoachModel
 
 /// Imports the vendored `yuhonas/free-exercise-db` snapshot (see
-/// `Resources/FreeExerciseDB.LICENSE.txt`) as real exercise-catalog entries,
-/// and best-effort-enriches any exercise that doesn't already have catalog
-/// metadata by matching it against the newly-imported set.
+/// `Resources/FreeExerciseDB.LICENSE.txt`) as real exercise-catalog entries.
 ///
-/// Unlike `ProgramImporter`, this **is** ongoing app infrastructure, not a
-/// one-off dev tool — the vendored file is real product data (a properly
-/// licensed, public-domain exercise database), not a personal spreadsheet.
-/// `AppEnvironment` runs it once at first launch alongside the rest of
-/// bootstrap.
+/// The vendored file is real product data — a properly licensed, public-domain
+/// exercise database — so this is ongoing app infrastructure rather than a
+/// dev-time convenience. `AppEnvironment` runs it once at first launch
+/// alongside the rest of bootstrap, and `ProgramLoader` depends on it having
+/// run: a program names its exercises by the slugs this imports.
+///
+/// It loads the catalog and stops there. It used to also run a "reconcile"
+/// pass that read every exercise with no catalog link, guessed which canonical
+/// entry it probably was from keyword overlap in its name, and copied that
+/// entry's metadata across. That's gone: a program says which exercise it
+/// means by naming the slug, so there is nothing left to infer, and a guess
+/// that lands wrong is worse than no metadata at all.
 public struct CatalogImporter {
     public struct Result: Sendable {
         public var importedCount: Int
-        public var enrichedCount: Int
-        public var unmatchedNames: [String]
     }
 
     private let database: AppDatabase
@@ -34,15 +37,10 @@ public struct CatalogImporter {
         }
     }
 
-    /// Imports the vendored catalog (upserting by `sourceSlug`, so re-running
-    /// this is safe), then enriches every exercise that doesn't yet have
-    /// catalog metadata by matching it against what was just imported.
-    ///
-    /// The two are one operation rather than two separate calls because
-    /// enrichment is only meaningful once the candidates it matches against
-    /// actually exist in the database.
+    /// Imports the vendored catalog, upserting by `sourceSlug` so re-running
+    /// this is safe.
     @discardableResult
-    public func importAndReconcile(_ data: Data) throws -> Result {
+    public func importCatalog(_ data: Data) throws -> Result {
         let entries = try JSONDecoder().decode([CatalogFile.Entry].self, from: data)
         let store = ExerciseStore(database)
 
@@ -61,75 +59,7 @@ public struct CatalogImporter {
             imported += 1
         }
 
-        let (enriched, unmatched) = try reconcile(store: store)
-
-        return Result(importedCount: imported, enrichedCount: enriched, unmatchedNames: unmatched)
-    }
-
-    /// Matches every exercise with no catalog link (`sourceSlug == nil`)
-    /// against the catalog-sourced ones, and fills in metadata for whatever
-    /// clears `CatalogMatcher`'s bar. See `CatalogMatcher`'s doc comment for
-    /// why this is deliberately low-precision-tolerant: some names (a
-    /// combined "Triceps + biceps" accessory slot, an ad-hoc "Walk with wife")
-    /// have no honest match, and are left alone rather than guessed at.
-    ///
-    /// Never touches `name` or `id` — enrichment adds metadata to an existing
-    /// exercise, it doesn't replace it with the canonical one it matched.
-    private func reconcile(store: ExerciseStore) throws -> (enriched: Int, unmatched: [String]) {
-        let unenriched = try store.fetchUnenriched()
-        guard !unenriched.isEmpty else { return (0, []) }
-
-        let catalogSourced = try store.fetchAll().filter { $0.sourceSlug != nil }
-        let candidates = catalogSourced.compactMap { exercise in
-            exercise.sourceSlug.map { CatalogMatcher.Candidate(name: exercise.name, sourceSlug: $0) }
-        }
-        let bySlug = Dictionary(uniqueKeysWithValues: catalogSourced.compactMap { exercise in
-            exercise.sourceSlug.map { ($0, exercise) }
-        })
-
-        var enrichedCount = 0
-        var unmatched: [String] = []
-
-        for exercise in unenriched {
-            guard let match = CatalogMatcher.match(exercise.name, against: candidates),
-                  let canonical = bySlug[match.sourceSlug]
-            else {
-                // No candidate shares even one movement word with this name.
-                // That's the same signal a human reads as "this isn't naming
-                // one specific lift" — real cases confirmed by hand: "Triceps
-                // (overhead ext / pushdown)," "Core (ab wheel / hanging leg
-                // raise)." Mark it so AchievedMaxUpdate leaves it alone rather
-                // than comparing weights across what might be different lifts
-                // — see Exercise.isOpenChoice for the heuristic's limits.
-                if !exercise.isOpenChoice {
-                    var flagged = exercise
-                    flagged.isOpenChoice = true
-                    try store.save(flagged)
-                }
-                unmatched.append(exercise.name)
-                continue
-            }
-
-            var updated = exercise
-            updated.equipment = canonical.equipment
-            updated.primaryMuscles = canonical.primaryMuscles
-            updated.secondaryMuscles = canonical.secondaryMuscles
-            updated.instructions = canonical.instructions
-            updated.level = canonical.level
-            updated.category = canonical.category
-            updated.mechanic = canonical.mechanic
-            updated.force = canonical.force
-            // matchedSlug, not sourceSlug: this row keeps its own name/id and
-            // did not become that exercise — sourceSlug is an identity claim
-            // and unique, which multiple program exercises matching the same
-            // canonical entry would violate. See Exercise.swift.
-            updated.matchedSlug = canonical.sourceSlug
-
-            try store.save(updated)
-            enrichedCount += 1
-        }
-
-        return (enrichedCount, unmatched)
+        return Result(importedCount: imported)
     }
 
     public enum ImportError: Error {
