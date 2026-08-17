@@ -26,7 +26,7 @@ struct RootView: View {
     private var tabs: some View {
         TabView(selection: $selection) {
             Tab("Home", systemImage: "house.fill", value: RootTab.home) {
-                HomeView()
+                HomeView(onOpenWorkout: { selection = .workout })
             }
             Tab("Workout", systemImage: "figure.strengthtraining.traditional", value: RootTab.workout) {
                 WorkoutTrackerView()

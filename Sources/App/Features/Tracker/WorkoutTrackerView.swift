@@ -78,7 +78,7 @@ struct WorkoutTrackerView: View {
         model.updateSet(id: first.id) { $0.reps = 5; $0.weight = Measurement(value: 225, unit: .pounds) }
         model.completeSet(id: first.id)
         if let started = model.session?.exercise(containingSetID: first.id) {
-            model.startRest(for: started, seconds: seconds)
+            model.startRest(for: started, afterSetWith: first.id, seconds: seconds)
         }
     }
     #endif
@@ -393,20 +393,40 @@ private struct ActiveWorkoutList: View {
 
         if expanded {
             ForEach(Array(sets.enumerated()), id: \.element.id) { index, set in
-                SetRow(
-                    number: index + 1,
-                    set: set,
-                    isNextUp: model.session?.nextSet?.id == set.id,
-                    restTarget: model.session?.restTarget(afterSetWith: set.id) ?? 120,
-                    prescribedRest: model.session?.prescribedRest(afterSetWith: set.id) ?? 120,
-                    onToggle: { toggle(set) },
-                    onRepsChange: { reps in model.updateSet(id: set.id) { $0.reps = reps } },
-                    onWeightChange: { weight in model.updateSet(id: set.id) { $0.weight = weight } },
-                    onRPEChange: { rpe in model.updateSet(id: set.id) { $0.rpe = rpe } },
-                    onRestChange: { seconds in model.setRest(seconds, forSetWith: set.id) },
-                    onEditNote: { noteEditorTarget = .set(set.id) }
-                )
-                .panelGroupRow(.middle, accent: accent)
+                // The countdown lives *inside* this row rather than as a row of
+                // its own, so it stays welded to the set that started it —
+                // through a reorder, and with the set's own swipe-to-delete
+                // still targeting the set.
+                let restingHere = restTimer.map { $0.setID == set.id } ?? false
+
+                VStack(spacing: 0) {
+                    SetRow(
+                        number: index + 1,
+                        set: set,
+                        isNextUp: model.session?.nextSet?.id == set.id,
+                        restTarget: model.session?.restTarget(afterSetWith: set.id) ?? 120,
+                        prescribedRest: model.session?.prescribedRest(afterSetWith: set.id) ?? 120,
+                        onToggle: { toggle(set) },
+                        onRepsChange: { reps in model.updateSet(id: set.id) { $0.reps = reps } },
+                        onWeightChange: { weight in model.updateSet(id: set.id) { $0.weight = weight } },
+                        onRPEChange: { rpe in model.updateSet(id: set.id) { $0.rpe = rpe } },
+                        onRestChange: { seconds in model.setRest(seconds, forSetWith: set.id) },
+                        onEditNote: { noteEditorTarget = .set(set.id) }
+                    )
+
+                    if let restTimer, restingHere {
+                        Divider()
+                            .overlay(Theme.hairline)
+                            .padding(.top, 10)
+                        RestTimerRow(
+                            timer: restTimer,
+                            onAdjust: { model.adjustRest(by: $0) },
+                            onDismiss: { model.dismissRest() }
+                        )
+                        .padding(.top, 10)
+                    }
+                }
+                .panelGroupRow(.middle, accent: restingHere ? Theme.live : accent)
                 .swipeActions(edge: .trailing) {
                     Button("Delete", systemImage: "trash", role: .destructive) {
                         model.deleteSet(id: set.id)
@@ -418,7 +438,10 @@ private struct ActiveWorkoutList: View {
                 model.moveSet(from: source, to: destination, within: exercise.id)
             }
 
-            if let restTimer {
+            // The set that started this rest is gone — deleted mid-countdown.
+            // The rest is still real, so it falls back to the foot of the
+            // exercise rather than vanishing along with the row.
+            if let restTimer, !sets.contains(where: { $0.id == restTimer.setID }) {
                 RestTimerRow(
                     timer: restTimer,
                     onAdjust: { model.adjustRest(by: $0) },

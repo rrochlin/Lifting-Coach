@@ -14,9 +14,16 @@ public struct RestTimer: Identifiable, Equatable, Sendable {
     /// Identifies this run of the timer, so a pending expiry can tell whether
     /// it still belongs to the rest period on screen.
     public let id = UUID()
-    /// The exercise this rest follows. Lets the view render the timer directly
-    /// beneath that lift instead of once, globally, at the top of the screen.
+    /// The exercise this rest follows.
     public var exerciseID: UUID
+    /// The set whose completion started this rest.
+    ///
+    /// The timer renders directly beneath *this* row, not at the top of the
+    /// screen and not at the foot of the exercise. Rest is per set and
+    /// adjustable per set, so a countdown floating anywhere else leaves the
+    /// lifter working out which set it belongs to — and on a back-off ladder
+    /// where every set rests differently, that's a real question.
+    public var setID: UUID
     /// Named at the time it started, for the notification body — by the time
     /// that fires the lifter is looking at a banner, not the app.
     public var exerciseName: String
@@ -28,11 +35,13 @@ public struct RestTimer: Identifiable, Equatable, Sendable {
 
     public init(
         exerciseID: UUID,
+        setID: UUID,
         exerciseName: String,
         startedAt: Date,
         endsAt: Date
     ) {
         self.exerciseID = exerciseID
+        self.setID = setID
         self.exerciseName = exerciseName
         self.startedAt = startedAt
         self.endsAt = endsAt
@@ -41,9 +50,10 @@ public struct RestTimer: Identifiable, Equatable, Sendable {
     /// Starts a rest period of the given length. A negative or zero length lands
     /// already finished rather than being rejected — "no rest prescribed here"
     /// is a legitimate thing for a plan to say.
-    public init(exerciseID: UUID, exerciseName: String, seconds: Int, from date: Date) {
+    public init(exerciseID: UUID, setID: UUID, exerciseName: String, seconds: Int, from date: Date) {
         self.init(
             exerciseID: exerciseID,
+            setID: setID,
             exerciseName: exerciseName,
             startedAt: date,
             endsAt: date.addingTimeInterval(TimeInterval(max(0, seconds)))

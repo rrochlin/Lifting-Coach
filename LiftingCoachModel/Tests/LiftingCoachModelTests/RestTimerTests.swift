@@ -6,7 +6,13 @@ private let noon = Date(timeIntervalSince1970: 1_770_000_000)
 private func later(_ seconds: TimeInterval) -> Date { noon.addingTimeInterval(seconds) }
 
 private func timer(_ seconds: Int) -> RestTimer {
-    RestTimer(exerciseID: UUID(), exerciseName: "Barbell Bench Press", seconds: seconds, from: noon)
+    RestTimer(
+        exerciseID: UUID(),
+        setID: UUID(),
+        exerciseName: "Barbell Bench Press",
+        seconds: seconds,
+        from: noon
+    )
 }
 
 @Suite("Rest timer")

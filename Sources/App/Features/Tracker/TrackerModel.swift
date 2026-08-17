@@ -103,6 +103,7 @@ final class TrackerModel {
         if let session, let exercise = session.exercise(containingSetID: id) {
             startRest(
                 for: exercise,
+                afterSetWith: id,
                 seconds: session.restTarget(afterSetWith: id),
                 from: date
             )
@@ -199,9 +200,15 @@ final class TrackerModel {
     // MARK: Rest
 
     /// Begins (or restarts) the rest period following a logged set.
-    func startRest(for exercise: WorkoutExercise, seconds: Int, from date: Date = Date()) {
+    func startRest(
+        for exercise: WorkoutExercise,
+        afterSetWith setID: UUID,
+        seconds: Int,
+        from date: Date = Date()
+    ) {
         let timer = RestTimer(
             exerciseID: exercise.id,
+            setID: setID,
             exerciseName: exercise.displayName,
             seconds: seconds,
             from: date

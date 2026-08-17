@@ -10,6 +10,12 @@ import LiftingCoachModel
 struct HomeView: View {
     @Environment(AppEnvironment.self) private var environment
 
+    /// Switches to the Workout tab. Home shows today's session and hands off to
+    /// the tab that owns it; it deliberately doesn't *start* anything, because
+    /// starting writes a real in-progress workout and a stray tap on a home
+    /// screen shouldn't do that. One more tap on the other side begins it.
+    var onOpenWorkout: () -> Void = {}
+
     @State private var plan = WorkoutPlan()
     @State private var todaysPlan: [PlannedWorkout] = []
     @State private var adherence: Adherence?
@@ -63,23 +69,40 @@ struct HomeView: View {
             .panelRow()
         } else {
             ForEach(todaysPlan) { workout in
-                Panel(accent: Theme.signal.opacity(0.45)) {
-                    VStack(alignment: .leading, spacing: 7) {
-                        Text(summary(workout))
-                            .font(Theme.heading)
-                            .foregroundStyle(Theme.ink)
-                        Text("\(workout.allSets.count) SETS")
-                            .font(Theme.label)
-                            .tracking(1.4)
-                            .foregroundStyle(Theme.signal)
-                        // Starting happens on the Workout tab, which owns session
-                        // state — duplicating the action here would give two paths
-                        // into the same in-progress workout.
-                        Text("Open the Workout tab to start.")
-                            .font(Theme.caption)
-                            .foregroundStyle(Theme.inkFaint)
+                Button(action: onOpenWorkout) {
+                    Panel(accent: Theme.signal.opacity(0.45)) {
+                        HStack(alignment: .center, spacing: 10) {
+                            VStack(alignment: .leading, spacing: 7) {
+                                // The day's own name leads, with the lifts
+                                // under it. Running the four exercise names
+                                // together as the headline filled four lines
+                                // and still didn't say which day this was.
+                                Text(title(workout))
+                                    .font(Theme.heading)
+                                    .foregroundStyle(Theme.ink)
+                                    .multilineTextAlignment(.leading)
+                                Text(summary(workout))
+                                    .font(Theme.caption)
+                                    .foregroundStyle(Theme.inkMuted)
+                                    .multilineTextAlignment(.leading)
+                                    .lineLimit(2)
+                                Text("\(workout.allSets.count) SETS")
+                                    .font(Theme.label)
+                                    .tracking(1.4)
+                                    .foregroundStyle(Theme.signal)
+                            }
+                            Spacer(minLength: 6)
+                            // The card is the affordance now. It used to read
+                            // "Open the Workout tab to start," which is an app
+                            // asking to be navigated by hand.
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(Theme.signal)
+                        }
                     }
+                    .contentShape(.rect)
                 }
+                .buttonStyle(.plain)
                 .panelRow()
             }
         }
@@ -253,6 +276,13 @@ struct HomeView: View {
         let achieved = environment.currentUser?.max(.achieved, for: id)?.liftedDescription ?? "—"
         let goal = environment.currentUser?.max(.goal, for: id)?.liftedDescription ?? "—"
         return "\(achieved) / \(goal)"
+    }
+
+    /// The program's name for the day, falling back to its lifts where a plan
+    /// didn't label it.
+    private func title(_ workout: PlannedWorkout) -> String {
+        if let notes = workout.notes, !notes.isEmpty { return notes }
+        return summary(workout)
     }
 
     private func summary(_ workout: PlannedWorkout) -> String {
