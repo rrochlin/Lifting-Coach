@@ -84,6 +84,10 @@ public struct WorkoutSession: Equatable, Sendable {
                             plannedFrom: snapshot
                         )
                     },
+                    // Carried forward, not looked up later: how the lift was
+                    // prescribed that day ("heavy, paused") is part of what was
+                    // done, and history has to stay readable without the plan.
+                    variant: plannedExercise.variant,
                     notes: plannedExercise.notes
                 )
             }

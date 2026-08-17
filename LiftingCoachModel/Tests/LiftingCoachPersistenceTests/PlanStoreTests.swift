@@ -190,6 +190,39 @@ struct PlanStoreTests {
         #expect(rowSets.first?.load == .absolute(Measurement(value: 135, unit: .pounds)))
     }
 
+    @Test("A variant round-trips without becoming a second exercise")
+    func roundTripsVariant() throws {
+        let fixture = try makeFixture()
+        var original = block()
+        let target = try #require(original.program?[day(2026, 3, 2)]?.first?.id)
+
+        // Two prescriptions of the same catalog lift on one day — the shape
+        // the real program produces once it resolves onto the catalog.
+        var workout = try #require(original.program?[day(2026, 3, 2)]?.first)
+        var first = try #require(workout.exercises?[0][0])
+        var second = first
+        first.variant = "heavy (paused, comp grip)"
+        second.id = UUID()
+        second.variant = "back-off (paused)"
+        second.sets = (second.sets ?? []).map { set in
+            var set = set
+            set.id = UUID()
+            return set
+        }
+        workout.exercises = [[first], [second]]
+        original.program?[day(2026, 3, 2)] = [workout]
+
+        try fixture.plans.save(original, userId: fixture.user.id)
+        let loaded = try fixture.plans.fetchBlock(id: original.id)
+        let reloaded = try #require(loaded?.program?[day(2026, 3, 2)]?.first { $0.id == target })
+        let exercises = (reloaded.exercises ?? []).flatMap { $0 }
+
+        #expect(exercises.map(\.variant) == ["heavy (paused, comp grip)", "back-off (paused)"])
+        // Same lift underneath: the variant is prescription, never identity.
+        #expect(Set(exercises.map(\.exercise.id)).count == 1)
+        #expect(exercises[0].displayName == "heavy (paused, comp grip)")
+    }
+
     @Test("Supersets survive as one group")
     func preservesSupersets() throws {
         let fixture = try makeFixture()

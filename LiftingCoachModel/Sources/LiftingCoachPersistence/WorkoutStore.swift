@@ -24,6 +24,7 @@ private struct WorkoutExerciseRow: Codable, FetchableRecord, PersistableRecord {
     var exerciseId: Int
     var groupIndex: Int
     var position: Int
+    var variant: String?
     var notes: String?
     var usernotes: String?
 }
@@ -102,6 +103,7 @@ public struct WorkoutStore: Sendable {
                         exerciseId: exercise.exercise.id,
                         groupIndex: groupIndex,
                         position: position,
+                        variant: exercise.variant,
                         notes: exercise.notes,
                         usernotes: exercise.usernotes
                     ).insert(db)
@@ -208,6 +210,7 @@ public struct WorkoutStore: Sendable {
                 id: UUID(uuidString: exerciseRow.id) ?? UUID(),
                 exercise: catalog,
                 sets: sets,
+                variant: exerciseRow.variant,
                 notes: exerciseRow.notes,
                 usernotes: exerciseRow.usernotes
             )

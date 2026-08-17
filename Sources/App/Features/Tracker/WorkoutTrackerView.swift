@@ -545,7 +545,7 @@ private struct PlannedSummaryRow: View {
     }
 
     private var names: [String] {
-        (workout.exercises ?? []).flatMap { $0 }.map(\.exercise.name)
+        (workout.exercises ?? []).flatMap { $0 }.map(\.displayName)
     }
 }
 
@@ -568,16 +568,27 @@ private struct ExerciseHeaderRow: View {
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(Theme.inkFaint)
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                    Text(exercise.exercise.name)
-                        .font(Theme.heading)
-                        .foregroundStyle(Theme.ink)
-                        // Two lines rather than one: program exercise names are
-                        // long and descriptive ("Deadlift — heavy (straight
-                        // bar)"), and a single line truncates the part that
-                        // distinguishes it from the other three deadlift days.
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                        .fixedSize(horizontal: false, vertical: true)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(exercise.displayName)
+                            .font(Theme.heading)
+                            .foregroundStyle(Theme.ink)
+                            // Two lines rather than one: program exercise names are
+                            // long and descriptive ("Deadlift — heavy (straight
+                            // bar)"), and a single line truncates the part that
+                            // distinguishes it from the other three deadlift days.
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                        // The catalog lift underneath the plan's wording —
+                        // which is what a logged max is recorded against, so
+                        // it shouldn't be invisible while lifting.
+                        if exercise.variant != nil {
+                            Text(exercise.exercise.name)
+                                .font(Theme.caption)
+                                .foregroundStyle(Theme.inkFaint)
+                                .lineLimit(1)
+                        }
+                    }
                     if isActive {
                         Chip(text: "active", color: Theme.live)
                     }

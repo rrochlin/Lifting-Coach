@@ -61,6 +61,9 @@ The execution of an #Exercise within a specific #Workout — tracks the sets act
 struct WorkoutExercise {
 	var exercise: Exercise
 	var sets: Array<WorkoutSet>?
+	// the plan's own wording, carried over from PlannedExercise.variant so
+	// history stays readable without the plan in hand
+	var variant: String?
 	var notes: String?
 	var usernotes: String?
 }
@@ -76,9 +79,19 @@ struct PlannedExercise {
 	// one instruction, written once here. Individual sets override via their own
 	// effort field; consumers resolve set.effort ?? exercise.effort
 	var effort: EffortTarget?
+	// how this exercise is being done today, in the program's own words:
+	// "Bench press — heavy (paused, comp grip)", "Bench volume — Spoto press"
+	var variant: String?
 	var notes: String?
 }
 ```
+
+## Variant vs. exercise
+A program routinely prescribes the same lift twice in one session under different instructions — heavy paused bench, then back-off sets. Those are **one** #Exercise: they share a max, they share achieved-max history, and giving each its own catalog entry is exactly the duplication the program→catalog mapping exists to prevent.
+
+They are **not** one instruction. `variant` carries the plan's own wording; `exercise` stays the canonical catalog identity underneath. Display resolves as `variant ?? exercise.name` (`displayName`), so a day prescribing both reads as two lines rather than as one exercise listed twice, while every percentage and every recorded max still resolves against the same lift.
+
+`variant` is prescription, never identity. Nothing keys off it, nothing matches on it, and two exercises with different variants are still the same lift.
 
 ## Load and effort
 Rationale in [[Core Tenets]] §2–§5. What implementers need:

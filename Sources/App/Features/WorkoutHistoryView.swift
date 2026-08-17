@@ -91,7 +91,7 @@ private struct WorkoutHistoryRow: View {
     }
 
     private var exerciseSummary: String {
-        let names = (workout.exercises ?? []).flatMap { $0 }.map(\.exercise.name)
+        let names = (workout.exercises ?? []).flatMap { $0 }.map(\.displayName)
         return names.isEmpty ? "Empty workout" : names.joined(separator: ", ")
     }
 

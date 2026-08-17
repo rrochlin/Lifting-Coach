@@ -273,6 +273,28 @@ extension AppDatabase {
             }
         }
 
+        // Additive, same reasoning as v2-v4 above.
+        //
+        // Backs PlannedExercise.variant / WorkoutExercise.variant: how a lift
+        // is being done today, in the program's own words ("heavy, paused",
+        // "Spoto press"). Needed once the program resolves onto canonical
+        // catalog entries — Monday's heavy paused bench and its back-off sets
+        // are the same catalog lift and correctly share a max, but they're two
+        // different instructions, and without this a day prescribing both
+        // renders as one exercise listed twice.
+        //
+        // A plain column on each side rather than on `exercise`: this is
+        // prescription, not catalog identity. Two different variants of the
+        // same lift must keep resolving to the same exercise row.
+        migrator.registerMigration("v5_exerciseVariant") { db in
+            try db.alter(table: "plannedExercise") { t in
+                t.add(column: "variant", .text)
+            }
+            try db.alter(table: "workoutExercise") { t in
+                t.add(column: "variant", .text)
+            }
+        }
+
         return migrator
     }
 }

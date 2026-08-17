@@ -32,16 +32,24 @@ struct WorkoutPlannerView: View {
     }
 
     private func setUpIfNeeded() {
-        guard model == nil, let user = environment.currentUser else { return }
-        let model = PlannerModel(plans: environment.plans, userID: user.id)
+        guard let user = environment.currentUser else { return }
+        guard model == nil else {
+            // Maxes can change between visits (a set logged in the tracker
+            // records a new achieved max), and every %-of-max weight on this
+            // screen resolves against them.
+            model?.user = user
+            model?.load()
+            return
+        }
+        let model = PlannerModel(plans: environment.plans, userID: user.id, user: user)
         model.load()
         self.model = model
     }
 
     @ViewBuilder
     private func content(_ model: PlannerModel) -> some View {
-        if let block = model.selectedBlock {
-            BlockDetail(model: model, block: block)
+        if model.selectedBlock != nil {
+            BlockOverview(model: model)
         } else {
             ContentUnavailableView {
                 Label("No training block", systemImage: "calendar.badge.plus")
@@ -86,76 +94,98 @@ struct WorkoutPlannerView: View {
     }
 }
 
-// MARK: - Block detail
+// MARK: - Block overview
 
-private struct BlockDetail: View {
+/// The block at a glance: weeks, days, and every day's actual prescription.
+///
+/// The spreadsheet this replaces shows the whole week's programming without a
+/// click, and `Workout Planner.md` asks for "a compact view of the information
+/// taking full advantage of screen real estate". So the weight, reps, and
+/// effort are on this screen — tapping a day is for *editing* it, not for
+/// finding out what's in it.
+///
+/// Weeks collapse because a 12-week block is ~70 programmed days; the current
+/// one is open by default, which is the doc's "default focus is on the current
+/// area of the lift".
+private struct BlockOverview: View {
     let model: PlannerModel
-    let block: WorkoutBlock
 
     @State private var isPickingDay = false
-    @State private var editing: EditorTarget?
-
-    /// Identifies which planned workout the editor is open on.
-    struct EditorTarget: Hashable, Identifiable {
-        let id: UUID
-        let day: Date
-    }
+    @State private var editing: PlannedWorkout?
+    @State private var collapsedWeeks: Set<Int> = []
+    @State private var didSetInitialFocus = false
 
     var body: some View {
         List {
             headerSection
-            daySections
-            Button { isPickingDay = true } label: {
-                Label("Add Workout Day", systemImage: "calendar.badge.plus")
-                    .font(Theme.body)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 11)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .strokeBorder(Theme.hairline, lineWidth: 1)
-                    )
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(Theme.ink)
-            .padding(.top, 6)
-            .panelRow()
+            weekSections
+            addDayButton
         }
         .listStyle(.plain)
         .screenGround()
         .sheet(isPresented: $isPickingDay) {
-            DayPickerSheet(block: block) { day in
-                model.addPlannedWorkout(on: day)
+            if let block = model.selectedBlock {
+                DayPickerSheet(block: block) { day in
+                    model.addPlannedWorkout(on: day)
+                }
             }
         }
-        .navigationDestination(item: $editing) { target in
-            PlannedWorkoutEditor(model: model, workoutID: target.id, day: target.day)
+        .navigationDestination(item: $editing) { workout in
+            PlannedWorkoutEditor(model: model, workout: workout)
+        }
+        .onAppear {
+            focusCurrentWeek()
+            openLaunchArgumentDay()
         }
     }
 
+    /// `-openPlanDay N` — the only way to see the day editor from the command
+    /// line, since simctl can't tap. Inert without the argument.
+    private func openLaunchArgumentDay() {
+        guard editing == nil, let index = LaunchArguments.planDayIndex else { return }
+        let days = model.programmedWeeks.flatMap(\.days)
+        guard days.indices.contains(index) else { return }
+        editing = model.plannedWorkouts(on: days[index]).first
+    }
+
+    /// Opens the week the lifter is actually in and collapses the rest. Only
+    /// once per appearance of the screen — re-running it would fight the
+    /// lifter every time they expanded a different week.
+    private func focusCurrentWeek() {
+        guard !didSetInitialFocus else { return }
+        didSetInitialFocus = true
+        guard let current = model.currentWeekIndex() else { return }
+        collapsedWeeks = Set(model.programmedWeeks.map(\.index)).subtracting([current])
+    }
+
+    // MARK: Sections
+
     @ViewBuilder
     private var headerSection: some View {
-        Panel {
-            VStack(alignment: .leading, spacing: 9) {
-                if let progress = block.progress() {
-                    // Reads "7 / 6" when a block runs long, rather than clamping
-                    // and pretending it's still on schedule.
-                    Readout(
-                        label: "week",
-                        value: progress.totalWeeks.map { "\(progress.weekIndex) / \($0)" }
-                            ?? "\(progress.weekIndex)",
-                        accent: Theme.signal,
-                        size: 17
-                    )
-                }
-                if let notes = block.notes, !notes.isEmpty {
-                    Rectangle().fill(Theme.hairline).frame(height: 1)
-                    Text(notes)
-                        .font(Theme.caption)
-                        .foregroundStyle(Theme.inkMuted)
+        if let block = model.selectedBlock {
+            Panel {
+                VStack(alignment: .leading, spacing: 9) {
+                    if let progress = block.progress(asOf: Date(), calendar: model.calendar) {
+                        // Reads "7 / 6" when a block runs long, rather than clamping
+                        // and pretending it's still on schedule.
+                        Readout(
+                            label: "week",
+                            value: progress.totalWeeks.map { "\(progress.weekIndex) / \($0)" }
+                                ?? "\(progress.weekIndex)",
+                            accent: Theme.signal,
+                            size: 17
+                        )
+                    }
+                    if let notes = block.notes, !notes.isEmpty {
+                        Rectangle().fill(Theme.hairline).frame(height: 1)
+                        Text(notes)
+                            .font(Theme.caption)
+                            .foregroundStyle(Theme.inkMuted)
+                    }
                 }
             }
+            .panelRow()
         }
-        .panelRow()
 
         if let message = model.loadError {
             Panel(accent: Theme.alert.opacity(0.5)) {
@@ -168,190 +198,277 @@ private struct BlockDetail: View {
     }
 
     @ViewBuilder
-    private var daySections: some View {
-        ForEach(model.programmedDays, id: \.self) { day in
-            SectionLabel(text: day.formatted(.dateTime.weekday(.abbreviated).month().day()))
-                .panelRow()
-            ForEach(model.plannedWorkouts(on: day)) { workout in
-                // A Button with programmatic navigation rather than a
-                // NavigationLink: List draws its own chevron for a link, and it
-                // lands outside the panel's border instead of inside it.
-                Button {
-                    editing = EditorTarget(id: workout.id, day: day)
-                } label: {
-                    PlannedWorkoutRow(workout: workout)
-                }
-                .buttonStyle(.plain)
-                .panelRow()
-            }
-            .onDelete { offsets in
-                let workouts = model.plannedWorkouts(on: day)
-                for index in offsets where index < workouts.count {
-                    model.deletePlannedWorkout(id: workouts[index].id)
-                }
-            }
-        }
-    }
-}
-
-private struct PlannedWorkoutRow: View {
-    let workout: PlannedWorkout
-
-    var body: some View {
-        Panel(accent: Theme.signal.opacity(0.4)) {
-            HStack {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(title)
-                        .font(Theme.heading)
-                        .foregroundStyle(Theme.ink)
-                    Text("\(workout.allSets.count) SETS")
-                        .font(Theme.label)
-                        .tracking(1.4)
-                        .foregroundStyle(Theme.signal)
-                }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Theme.signal)
-            }
-        }
-    }
-
-    private var title: String {
-        let names = (workout.exercises ?? []).flatMap { $0 }.map(\.exercise.name)
-        if names.isEmpty { return "Empty workout" }
-        return names.prefix(2).joined(separator: ", ") + (names.count > 2 ? "…" : "")
-    }
-}
-
-// MARK: - Planned workout editor
-
-private struct PlannedWorkoutEditor: View {
-    let model: PlannerModel
-    let workoutID: UUID
-    let day: Date
-
-    @State private var isPickingExercise = false
-
-    /// Read back through the model rather than held in `@State`, so an edit that
-    /// round-trips through the store shows the stored truth instead of a copy
-    /// that silently diverges when a write fails.
-    private var workout: PlannedWorkout? {
-        model.plannedWorkouts(on: day).first { $0.id == workoutID }
-    }
-
-    var body: some View {
-        Group {
-            if let workout {
-                List {
-                    ForEach(Array((workout.exercises ?? []).enumerated()), id: \.offset) { _, group in
-                        Section {
-                            ForEach(group) { exercise in
-                                PlannedExerciseView(model: model, workout: workout, exercise: exercise)
-                            }
-                        } header: {
-                            if group.count > 1 { Text("Superset") }
-                        }
-                    }
-                    Section {
-                        Button("Add Exercise", systemImage: "plus") { isPickingExercise = true }
-                            .foregroundStyle(Theme.signal)
-                            .listRowBackground(Theme.panel)
-                    }
-                }
-                .listStyle(.plain)
-                .screenGround()
-            } else {
-                ContentUnavailableView("Workout deleted", systemImage: "trash")
-            }
-        }
-        .navigationTitle(day.formatted(date: .abbreviated, time: .omitted))
-        .sheet(isPresented: $isPickingExercise) {
-            PlannerExercisePicker { exercise in
-                if let workout { model.addExercise(exercise, to: workout) }
-            }
-        }
-    }
-}
-
-private struct PlannedExerciseView: View {
-    let model: PlannerModel
-    let workout: PlannedWorkout
-    let exercise: PlannedExercise
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(exercise.exercise.name).font(.headline)
-                Spacer()
-                Button("Remove", systemImage: "trash", role: .destructive) {
-                    model.deleteExercise(id: exercise.id, from: workout)
-                }
-                .labelStyle(.iconOnly)
-                .buttonStyle(.plain)
-                .foregroundStyle(.red)
-            }
-
-            ForEach(Array((exercise.sets ?? []).enumerated()), id: \.element.id) { index, set in
-                PlannedSetRow(number: index + 1, set: set) { change in
-                    model.updateSet(id: set.id, in: workout, change)
-                }
-                .swipeActions(edge: .trailing) {
-                    Button("Delete", systemImage: "trash", role: .destructive) {
-                        model.deleteSet(id: set.id, in: workout)
-                    }
-                }
-            }
-
-            Button("Add Set", systemImage: "plus.circle") {
-                model.addSet(to: exercise.id, in: workout)
-            }
-            .font(.footnote)
-        }
-        .padding(.vertical, 4)
-    }
-}
-
-private struct PlannedSetRow: View {
-    let number: Int
-    let set: PlannedSet
-    let onChange: ((inout PlannedSet) -> Void) -> Void
-
-    var body: some View {
-        HStack(spacing: 12) {
-            Text("\(number)")
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
-                .frame(width: 16, alignment: .leading)
-
-            Stepper(
-                "\(set.reps ?? 0) reps",
-                value: Binding(
-                    get: { set.reps ?? 0 },
-                    set: { reps in onChange { $0.reps = reps } }
-                ),
-                in: 1...30
+    private var weekSections: some View {
+        let current = model.currentWeekIndex()
+        ForEach(model.programmedWeeks) { week in
+            WeekHeaderRow(
+                week: week,
+                isCurrent: week.index == current,
+                isCollapsed: collapsedWeeks.contains(week.index),
+                setCount: setCount(in: week),
+                onToggle: { toggle(week.index) }
             )
-            .font(.subheadline.monospacedDigit())
+            .panelRow()
 
-            Spacer()
-
-            Text(loadSummary)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            if !collapsedWeeks.contains(week.index) {
+                ForEach(week.days, id: \.self) { day in
+                    daySection(day)
+                }
+            }
         }
     }
 
-    private var loadSummary: String {
-        // Load and effort are independent axes; show whichever are prescribed.
-        var parts: [String] = []
-        if let load = set.load {
-            parts.append(load.prescriptionDescription)
+    @ViewBuilder
+    private func daySection(_ day: Date) -> some View {
+        let workouts = model.plannedWorkouts(on: day)
+        let isToday = model.calendar.isDateInToday(day)
+
+        ForEach(workouts) { workout in
+            Button {
+                editing = workout
+            } label: {
+                PlannedDayPanel(
+                    workout: workout,
+                    day: day,
+                    isToday: isToday,
+                    resolve: { model.resolvedWeight(for: $0, exercise: $1) }
+                )
+            }
+            .buttonStyle(.plain)
+            .panelRow()
+            .swipeActions(edge: .trailing) {
+                Button("Delete", systemImage: "trash", role: .destructive) {
+                    model.deletePlannedWorkout(id: workout.id)
+                }
+            }
         }
-        if let effort = set.effort {
-            parts.append("RPE \(effort.rpe.rpeDescription)")
+    }
+
+    private var addDayButton: some View {
+        Button { isPickingDay = true } label: {
+            Label("Add Workout Day", systemImage: "calendar.badge.plus")
+                .font(Theme.body)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 11)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .strokeBorder(Theme.hairline, lineWidth: 1)
+                )
         }
-        return parts.isEmpty ? "no load" : parts.joined(separator: " · ")
+        .buttonStyle(.plain)
+        .foregroundStyle(Theme.ink)
+        .padding(.top, 6)
+        .panelRow()
+    }
+
+    private func toggle(_ index: Int) {
+        if collapsedWeeks.contains(index) {
+            collapsedWeeks.remove(index)
+        } else {
+            collapsedWeeks.insert(index)
+        }
+    }
+
+    private func setCount(in week: WorkoutBlock.ProgrammedWeek) -> Int {
+        week.days.reduce(0) { total, day in
+            total + model.plannedWorkouts(on: day).reduce(0) { $0 + $1.allSets.count }
+        }
+    }
+}
+
+private struct WeekHeaderRow: View {
+    let week: WorkoutBlock.ProgrammedWeek
+    let isCurrent: Bool
+    let isCollapsed: Bool
+    let setCount: Int
+    let onToggle: () -> Void
+
+    var body: some View {
+        Button(action: onToggle) {
+            HStack(spacing: 8) {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(Theme.inkFaint)
+                    .rotationEffect(.degrees(isCollapsed ? 0 : 90))
+                Text("WEEK \(week.index)")
+                    .font(Theme.label)
+                    .tracking(1.6)
+                    .foregroundStyle(isCurrent ? Theme.live : Theme.inkFaint)
+                    .fixedSize()
+                if isCurrent {
+                    Chip(text: "now", color: Theme.live)
+                }
+                Rectangle()
+                    .fill(Theme.hairline)
+                    .frame(height: 1)
+                Text("\(week.days.count)d · \(setCount) sets")
+                    .font(Theme.data(10))
+                    .foregroundStyle(Theme.inkFaint)
+                    .fixedSize()
+            }
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+        .padding(.top, 6)
+    }
+}
+
+// MARK: - Day panel
+
+/// A programmed day with its full prescription visible — the density the
+/// spreadsheet had.
+private struct PlannedDayPanel: View {
+    let workout: PlannedWorkout
+    let day: Date
+    let isToday: Bool
+    let resolve: (LoadPrescription, Exercise) -> Measurement<UnitMass>?
+
+    var body: some View {
+        Panel(accent: accent) {
+            VStack(alignment: .leading, spacing: 8) {
+                header
+                if exercises.isEmpty {
+                    Text("Nothing programmed.")
+                        .font(Theme.caption)
+                        .foregroundStyle(Theme.inkFaint)
+                } else {
+                    ForEach(exercises) { exercise in
+                        PlannedExerciseLine(exercise: exercise, resolve: resolve)
+                    }
+                }
+            }
+        }
+        // Skipped stays visible, per Core Tenets §10 — dimmed, not hidden.
+        .opacity(workout.skippedAt != nil ? 0.55 : 1)
+    }
+
+    private var header: some View {
+        HStack(spacing: 8) {
+            Text(day.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day()).uppercased())
+                .font(Theme.label)
+                .tracking(1.4)
+                .foregroundStyle(isToday ? Theme.live : Theme.inkFaint)
+                .fixedSize()
+            if let label = workout.notes, !label.isEmpty {
+                Text(label)
+                    .font(Theme.caption)
+                    .foregroundStyle(Theme.inkMuted)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 6)
+            if workout.skippedAt != nil {
+                Chip(text: "skipped", color: Theme.inkFaint)
+            }
+            Image(systemName: "square.and.pencil")
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.signal)
+                .fixedSize()
+        }
+    }
+
+    private var accent: Color {
+        if workout.skippedAt != nil { return Theme.hairline }
+        return isToday ? Theme.live.opacity(0.5) : Theme.signal.opacity(0.4)
+    }
+
+    private var exercises: [PlannedExercise] {
+        (workout.exercises ?? []).flatMap { $0 }
+    }
+}
+
+/// One exercise's prescription, on one line where it fits.
+///
+/// Width-agnostic: the name is the only flexible element and the only thing
+/// allowed to truncate — it's the most redundant part of the line (you can tell
+/// "Barbell Bench Press - Medi…" from "Barbell Squat"), while a truncated
+/// weight or rep count would read as corrupted data.
+private struct PlannedExerciseLine: View {
+    let exercise: PlannedExercise
+    let resolve: (LoadPrescription, Exercise) -> Measurement<UnitMass>?
+
+    var body: some View {
+        let groups = exercise.setGroups
+
+        VStack(alignment: .leading, spacing: 3) {
+            if groups.count == 1 {
+                // The common case — one uniform prescription fits beside the
+                // name.
+                HStack(spacing: 8) {
+                    name
+                    Spacer(minLength: 6)
+                    PrescriptionText(group: groups[0], exercise: exercise.exercise, resolve: resolve)
+                }
+            } else {
+                name
+                ForEach(Array(groups.enumerated()), id: \.offset) { _, group in
+                    HStack {
+                        PrescriptionText(group: group, exercise: exercise.exercise, resolve: resolve)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.leading, 12)
+                }
+            }
+        }
+    }
+
+    private var name: some View {
+        HStack(spacing: 5) {
+            Text(exercise.displayName)
+                .font(Theme.body)
+                .foregroundStyle(Theme.ink)
+                .lineLimit(1)
+                .truncationMode(.tail)
+            if exercise.exercise.isOpenChoice {
+                Image(systemName: "questionmark.circle")
+                    .font(.system(size: 10))
+                    .foregroundStyle(Theme.inkFaint)
+                    .fixedSize()
+            }
+        }
+    }
+}
+
+/// "5×2 · 405 lb · @7" — the prescription for one run of identical sets.
+private struct PrescriptionText: View {
+    let group: PlannedExercise.SetGroup
+    let exercise: Exercise
+    let resolve: (LoadPrescription, Exercise) -> Measurement<UnitMass>?
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(countText)
+                .font(Theme.data(12, weight: .medium))
+                .foregroundStyle(Theme.ink)
+                .fixedSize()
+            if let loadText {
+                Text(loadText)
+                    .font(Theme.data(12))
+                    .foregroundStyle(Theme.inkMuted)
+                    .fixedSize()
+            }
+            if let effort = group.effort {
+                Text("@\(effort.rpe.rpeDescription)")
+                    .font(Theme.data(12))
+                    .foregroundStyle(Theme.signal)
+                    .fixedSize()
+            }
+        }
+    }
+
+    private var countText: String {
+        guard let reps = group.reps else { return "\(group.count)×" }
+        return "\(group.count)×\(reps)"
+    }
+
+    /// The resolved weight where the referenced max exists, otherwise the
+    /// prescription exactly as written — "72% goal" beats showing nothing when
+    /// no goal max is on record (Core Tenets §10).
+    private var loadText: String? {
+        guard let load = group.load else { return nil }
+        if let weight = resolve(load, exercise) {
+            return weight.liftedDescription
+        }
+        return load.prescriptionDescription
     }
 }
 
@@ -422,53 +539,6 @@ private struct DayPickerSheet: View {
     /// still accept new days rather than refusing to schedule them.
     private var range: PartialRangeFrom<Date> {
         (block.startDate ?? .distantPast)...
-    }
-}
-
-private struct PlannerExercisePicker: View {
-    @Environment(AppEnvironment.self) private var environment
-    @Environment(\.dismiss) private var dismiss
-
-    let onPick: (Exercise) -> Void
-
-    @State private var exercises: [Exercise] = []
-    @State private var query = ""
-
-    var body: some View {
-        NavigationStack {
-            List(filtered) { exercise in
-                Button {
-                    onPick(exercise)
-                    dismiss()
-                } label: {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(exercise.name)
-                        HStack(spacing: 4) {
-                            Text(exercise.muscleGroup)
-                            if let equipment = exercise.equipment {
-                                Text("· \(equipment.capitalized)")
-                            }
-                        }
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    }
-                }
-                .buttonStyle(.plain)
-            }
-            .searchable(text: $query)
-            .navigationTitle("Add Exercise")
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-            }
-            .task { exercises = (try? environment.exercises.fetchAll()) ?? [] }
-        }
-    }
-
-    private var filtered: [Exercise] {
-        guard !query.isEmpty else { return exercises }
-        return exercises.filter { $0.name.localizedCaseInsensitiveContains(query) }
     }
 }
 

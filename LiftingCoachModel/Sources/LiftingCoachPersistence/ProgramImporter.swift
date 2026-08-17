@@ -243,6 +243,17 @@ public struct ProgramImporter {
                         exercise: slotExercise,
                         sets: sets,
                         effort: exerciseEffort,
+                        // Keep the program's own wording where the exercise
+                        // resolved onto a canonical catalog entry. Monday
+                        // prescribes heavy paused bench *and* its back-off
+                        // sets; both are Barbell Bench Press (correctly — they
+                        // share a max), and without this the day would read as
+                        // the same exercise listed twice.
+                        //
+                        // Not set for a placeholder, whose name already is the
+                        // program's own ("Triceps (overhead ext / pushdown)")
+                        // or the muscle a split slot targets.
+                        variant: slotExercise.sourceSlug == nil ? nil : entry.name,
                         notes: entry.notes
                     )
                 }

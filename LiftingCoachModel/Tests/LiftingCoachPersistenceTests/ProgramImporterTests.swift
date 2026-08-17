@@ -108,6 +108,42 @@ struct ProgramImporterTests {
         #expect(triceps.id != biceps.id)
     }
 
+    @Test("Resolving onto the catalog keeps the program's own wording as a variant")
+    func keepsProgramWordingAsVariant() throws {
+        let (database, _, _) = try importBundled()
+        let plans = PlanStore(database, calendar: calendar)
+
+        // Monday prescribes heavy paused bench *and* its back-off sets. Both
+        // are Barbell Bench Press — correctly, they share a max — so without a
+        // variant the day would read as the same exercise listed twice.
+        let monday = try #require(try plans.fetchPlanned(on: blockStart).first)
+        let bench = (monday.exercises?.flatMap { $0 } ?? []).filter {
+            $0.exercise.sourceSlug == "Barbell_Bench_Press_-_Medium_Grip"
+        }
+        #expect(bench.count == 2)
+        #expect(Set(bench.map(\.exercise.id)).count == 1)
+        #expect(
+            Set(bench.map(\.displayName)) == [
+                "Bench press — heavy (paused, comp grip)",
+                "Bench — back-off (paused)",
+            ]
+        )
+    }
+
+    @Test("An open-choice slot carries no variant — its name is already the program's")
+    func openChoiceSlotsHaveNoVariant() throws {
+        let (database, _, _) = try importBundled()
+        let plans = PlanStore(database, calendar: calendar)
+
+        let monday = try #require(try plans.fetchPlanned(on: blockStart).first)
+        let triceps = try #require(
+            monday.exercises?.flatMap { $0 }.first { $0.exercise.isOpenChoice }
+        )
+
+        #expect(triceps.variant == nil)
+        #expect(triceps.displayName == triceps.exercise.name)
+    }
+
     @Test("Week and day place workouts on the right calendar dates")
     func schedulesOntoCalendar() throws {
         let (database, _, _) = try importBundled()

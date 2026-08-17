@@ -42,6 +42,7 @@ private struct PlannedExerciseRow: Codable, FetchableRecord, PersistableRecord {
     var groupIndex: Int
     var position: Int
     var effortRPE: Double?
+    var variant: String?
     var notes: String?
 }
 
@@ -171,6 +172,7 @@ public struct PlanStore: Sendable {
                     groupIndex: groupIndex,
                     position: position,
                     effortRPE: exercise.effort.map { Double($0.rpe) },
+                    variant: exercise.variant,
                     notes: exercise.notes
                 ).insert(db)
 
@@ -343,6 +345,7 @@ public struct PlanStore: Sendable {
                 exercise: catalog,
                 sets: sets,
                 effort: exerciseRow.effortRPE.map { EffortTarget(rpe: Float($0)) },
+                variant: exerciseRow.variant,
                 notes: exerciseRow.notes
             )
 

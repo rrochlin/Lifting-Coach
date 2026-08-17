@@ -99,4 +99,57 @@ public struct WorkoutBlock: Codable, Hashable, Identifiable, Sendable {
         /// `nil` when the block has no planned `endDate`.
         public var totalWeeks: Int?
     }
+
+    /// The block's programmed days, grouped into its training weeks.
+    ///
+    /// A 12-week program is ~70 programmed days; a flat list of them is
+    /// unreadable, and the week is the unit the program is actually written in
+    /// (`Week 5 Fri`), so it's the unit the planner navigates by.
+    ///
+    /// Weeks are counted from `startDate` in 7-day spans, *not* by calendar
+    /// week — a block starting on a Wednesday runs Wed–Tue weeks, which is what
+    /// its author meant. With no `startDate` the earliest programmed day
+    /// anchors week 1 instead, so an unscheduled block still groups sensibly.
+    /// Only weeks that have something programmed appear.
+    public func programmedWeeks(calendar: Calendar = .current) -> [ProgrammedWeek] {
+        let days = (program ?? [:])
+            .filter { !$0.value.isEmpty }
+            .keys
+            .map { calendar.startOfDay(for: $0) }
+            .sorted()
+        guard let anchor = startDate.map({ calendar.startOfDay(for: $0) }) ?? days.first else {
+            return []
+        }
+
+        var byWeek: [Int: [Date]] = [:]
+        for day in days {
+            guard let elapsed = calendar.dateComponents([.day], from: anchor, to: day).day else {
+                continue
+            }
+            // Integer division truncates toward zero, so a day *before* the
+            // anchor would land in week 1 alongside the first real week. Floor
+            // it instead: a day programmed early belongs to week 0 or lower.
+            let offset = elapsed >= 0 ? elapsed / 7 : (elapsed - 6) / 7
+            byWeek[offset + 1, default: []].append(day)
+        }
+
+        return byWeek
+            .map { ProgrammedWeek(index: $0.key, days: $0.value.sorted()) }
+            .sorted { $0.index < $1.index }
+    }
+
+    /// One training week's worth of programmed days.
+    public struct ProgrammedWeek: Hashable, Identifiable, Sendable {
+        /// 1-based, counted from the block's start. Matches the `weekIndex` in
+        /// `Progress`, so "the current week" is a direct comparison.
+        public var index: Int
+        public var days: [Date]
+
+        public var id: Int { index }
+
+        public init(index: Int, days: [Date]) {
+            self.index = index
+            self.days = days
+        }
+    }
 }

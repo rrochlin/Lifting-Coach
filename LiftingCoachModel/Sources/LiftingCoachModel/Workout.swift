@@ -6,6 +6,9 @@ public struct WorkoutExercise: Codable, Hashable, Identifiable, Sendable {
     public var id: UUID
     public var exercise: Exercise
     public var sets: [WorkoutSet]?
+    /// How this exercise was done, when that differs from the catalog lift —
+    /// carried over from the prescription. See `PlannedExercise.variant`.
+    public var variant: String?
     public var notes: String?
     public var usernotes: String?
 
@@ -13,14 +16,28 @@ public struct WorkoutExercise: Codable, Hashable, Identifiable, Sendable {
         id: UUID = UUID(),
         exercise: Exercise,
         sets: [WorkoutSet]? = nil,
+        variant: String? = nil,
         notes: String? = nil,
         usernotes: String? = nil
     ) {
         self.id = id
         self.exercise = exercise
         self.sets = sets
+        self.variant = variant
         self.notes = notes
         self.usernotes = usernotes
+    }
+
+    /// What to show as this exercise's name: the plan's own wording where it
+    /// has some, otherwise the catalog lift.
+    ///
+    /// The plan's wording wins because it's the more specific instruction —
+    /// "Bench — back-off (paused)" tells the lifter what to do; "Barbell Bench
+    /// Press - Medium Grip" is the identity that lets it share a max with the
+    /// heavy paused sets earlier in the same session.
+    public var displayName: String {
+        guard let variant, !variant.isEmpty else { return exercise.name }
+        return variant
     }
 }
 
@@ -34,6 +51,21 @@ public struct PlannedExercise: Codable, Hashable, Identifiable, Sendable {
     /// is one instruction, written once here. Individual sets override via their
     /// own `effort`; consumers resolve `set.effort ?? exercise.effort`.
     public var effort: EffortTarget?
+    /// The plan's own name for this exercise, when it differs from the catalog
+    /// lift: "Bench press — heavy (paused, comp grip)", "Bench volume — Spoto
+    /// press (1\" off chest)".
+    ///
+    /// A prescription, not an identity. Heavy paused bench and Spoto bench are
+    /// the *same lift* — they share a max, they share history, and splitting
+    /// them into separate catalog entries is exactly what the program→catalog
+    /// mapping exists to stop. But they are not the same *instruction*, and a
+    /// day prescribing both would otherwise render as one exercise listed
+    /// twice. That's what this carries, and why it lives on the plan rather
+    /// than on `Exercise`.
+    ///
+    /// It's what `displayName` shows; `exercise.name` is still the catalog
+    /// lift underneath, and screens with room for both show both.
+    public var variant: String?
     public var notes: String?
 
     public init(
@@ -41,18 +73,91 @@ public struct PlannedExercise: Codable, Hashable, Identifiable, Sendable {
         exercise: Exercise,
         sets: [PlannedSet]? = nil,
         effort: EffortTarget? = nil,
+        variant: String? = nil,
         notes: String? = nil
     ) {
         self.id = id
         self.exercise = exercise
         self.sets = sets
         self.effort = effort
+        self.variant = variant
         self.notes = notes
+    }
+
+    /// What to show as this exercise's name: the plan's own wording where it
+    /// has some, otherwise the catalog lift.
+    ///
+    /// The plan's wording wins because it's the more specific instruction —
+    /// "Bench — back-off (paused)" tells the lifter what to do; "Barbell Bench
+    /// Press - Medium Grip" is the identity that lets it share a max with the
+    /// heavy paused sets earlier in the same session.
+    public var displayName: String {
+        guard let variant, !variant.isEmpty else { return exercise.name }
+        return variant
     }
 
     /// The effort target in force for a given set of this exercise.
     public func resolvedEffort(for set: PlannedSet) -> EffortTarget? {
         set.effort ?? effort
+    }
+
+    /// Consecutive sets that share a prescription, collapsed into runs — the
+    /// "5×2" a program is written in.
+    ///
+    /// Consecutive rather than global: "3×5 then 1×3" and "5, 3, 5" are
+    /// different prescriptions, and collapsing by value alone would render them
+    /// identically. An exercise whose sets are uniform (the common case)
+    /// collapses to exactly one group, which is what lets a day's overview fit
+    /// one line per exercise.
+    public var setGroups: [SetGroup] {
+        var groups: [SetGroup] = []
+        for set in sets ?? [] {
+            let effort = resolvedEffort(for: set)
+            if var last = groups.last,
+               last.reps == set.reps,
+               last.load == set.load,
+               last.effort == effort,
+               last.type == set.type {
+                last.count += 1
+                groups[groups.count - 1] = last
+            } else {
+                groups.append(
+                    SetGroup(
+                        count: 1,
+                        reps: set.reps,
+                        load: set.load,
+                        // Resolved, not the set's own: two sets both inheriting
+                        // RPE 7 are the same prescription written once.
+                        effort: effort,
+                        type: set.type
+                    )
+                )
+            }
+        }
+        return groups
+    }
+
+    /// A run of identically prescribed consecutive sets.
+    public struct SetGroup: Hashable, Sendable {
+        public var count: Int
+        public var reps: Int?
+        public var load: LoadPrescription?
+        public var effort: EffortTarget?
+        public var type: SetType?
+
+        public init(
+            count: Int,
+            reps: Int? = nil,
+            load: LoadPrescription? = nil,
+            effort: EffortTarget? = nil,
+            type: SetType? = nil
+        ) {
+            self.count = count
+            self.reps = reps
+            self.load = load
+            self.effort = effort
+            self.type = type
+        }
     }
 }
 
