@@ -22,6 +22,23 @@ struct ExerciseStoreTests {
         }
     }
 
+    @Test("The name matcher's provenance column is gone from the schema")
+    func matchedSlugIsDropped() throws {
+        let database = try AppDatabase.inMemory()
+
+        let columns = try database.writer.read { db in
+            try String.fetchAll(db, sql: "SELECT name FROM pragma_table_info('exercise')")
+        }
+
+        // Deleting the matcher but leaving its column behind would leave the
+        // idea behind: the next reader has to work out that it means nothing.
+        #expect(!columns.contains("matchedSlug"))
+        // The columns that replaced its job are here instead — identity stated
+        // by the program, and the movements an open slot suggested.
+        #expect(columns.contains("sourceSlug"))
+        #expect(columns.contains("suggestions"))
+    }
+
     @Test("Round-trips the seed catalog through SQLite")
     func roundTripsCatalog() throws {
         let store = ExerciseStore(try AppDatabase.inMemory())

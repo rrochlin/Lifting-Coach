@@ -22,14 +22,15 @@ extension AppDatabase {
         // Recreate the database from scratch if the actual on-disk schema ever
         // stops matching what a fresh run of these migrations would produce.
         //
-        // This used to be an unconditionally safe convenience — phase 1 had no
-        // real user data anywhere. That stopped being true the moment the app
-        // went on a real device: erasing now means erasing someone's logged
-        // workouts and maxes, not just simulator scratch data. It stays on
-        // because it's still a useful safety net against a genuine local dev
-        // mistake, but it only stays *safe* if migrations are strictly
-        // additive from here — see the docstring above. Edit one in place and
-        // this is exactly the mechanism that will silently wipe a real device.
+        // The device this ever runs on is a dev phone whose data is expendable
+        // by the owner's own call, so an erase here costs scratch data rather
+        // than someone's training history. That's what makes editing a
+        // migration in place merely rude instead of destructive.
+        //
+        // Still prefer appending a migration to editing one: an erase throws
+        // away whatever you were mid-way through testing, and this flag stops
+        // being a safety net the day phase 2 puts this app on a phone that
+        // matters. Treat "additive by default" as the habit, not the rule.
         migrator.eraseDatabaseOnSchemaChange = true
         #endif
 
@@ -230,12 +231,9 @@ extension AppDatabase {
                 t.add(column: "mechanic", .text)
                 t.add(column: "force", .text)
                 t.add(column: "sourceSlug", .text)
-                // Dead since v7 — nothing reads or writes this. It held what a
-                // name matcher guessed an exercise probably was; programs now
-                // name their exercises by slug outright, so there's nothing to
-                // guess. Kept only because a real device's database has to
-                // migrate forward and dropping a column means rebuilding the
-                // table. Don't start using it again.
+                // Held what a name matcher guessed an exercise probably was.
+                // Dropped again in v8 — programs name their exercises by slug
+                // outright, so there is nothing to guess.
                 t.add(column: "matchedSlug", .text)
             }
             // Unique only where present — lets a re-import upsert a
@@ -317,15 +315,22 @@ extension AppDatabase {
         // Backs Exercise.suggestions: the movements a program floated for an
         // open slot ("overhead extension," "pushdown"), which used to be prose
         // buried in the exercise's own name.
-        //
-        // Note what this migration does *not* do: `matchedSlug` (added in v2)
-        // is dead as of this version — nothing reads or writes it now that the
-        // name matcher is gone and programs name their exercises by slug. The
-        // column stays because dropping one would mean rebuilding the table,
-        // and the phone's database has to survive this.
         migrator.registerMigration("v7_exerciseSuggestions") { db in
             try db.alter(table: "exercise") { t in
                 t.add(column: "suggestions", .jsonText)
+            }
+        }
+
+        // The one non-additive migration, and deliberately so.
+        //
+        // `matchedSlug` held what the deleted name matcher guessed an exercise
+        // probably was. Nothing reads or writes it. Leaving a dead column in
+        // place would leave the idea in place too — the next person to see it
+        // has to work out that it means nothing, and might reasonably start
+        // filling it in again.
+        migrator.registerMigration("v8_dropMatchedSlug") { db in
+            try db.alter(table: "exercise") { t in
+                t.drop(column: "matchedSlug")
             }
         }
 

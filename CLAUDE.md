@@ -38,7 +38,11 @@ Achieved maxes now auto-record from logged sets (`AchievedMaxUpdate`, wired into
 - **`Exercise.isOpenChoice` is authored, never inferred.** "Triceps," "Core," "Cardio" — a coach naming a goal and leaving the movement up to the lifter is normal programming. It's load-bearing, not cosmetic: `AchievedMaxUpdate` refuses to record a max for one, since a heavier weight this week than last doesn't mean progress on the same lift. An inferred flag would let a correctly-programmed lift with an odd name silently stop tracking maxes — which is exactly what the old name-matching heuristic risked.
 - **`Exercise.suggestions`** carries what the program floated for an open slot ("Overhead extension," "Pushdown"). The tracker's picker shows them as shortcuts into search under a "programmed as" rail. Suggestions, **not** a whitelist — the app never refuses a choice (Core Tenets §1).
 
-**⚠️ A real device now holds real data (the owner's iPhone 13).** `Migrations.swift`'s `eraseDatabaseOnSchemaChange` (DEBUG-only) used to be a safe convenience because nothing real existed anywhere. It is no longer safe to edit a migration in place — GRDB will detect the phone's schema no longer matches a fresh run of the migrations and **silently wipe the phone's database** on next launch. Every migration added *after* this stopped being true — `v2_exerciseCatalog` through `v7_exerciseSuggestions` — is additive (`ALTER TABLE`) for exactly this reason. Keep doing that. (A corollary: dead columns stay. `exercise.matchedSlug` is unused as of v7 and still there.)
+**The iPhone 13 is a dev device and its data is expendable** — the owner's explicit call. That relaxes a constraint this file used to state in the strongest terms: `eraseDatabaseOnSchemaChange` (DEBUG-only) wiping the phone was treated as a disaster, so `v2_exerciseCatalog` through `v7_exerciseSuggestions` are all strictly additive. It isn't a disaster any more, and `v8_dropMatchedSlug` is deliberately non-additive.
+
+Still prefer appending over editing: an erase throws away whatever you were mid-way through testing, and the flag stops being a safety net the day phase 2 puts this on a phone that matters. **Additive is the habit, not the rule** — a schema change worth making is worth making.
+
+Wiping the phone is `xcrun devicectl device uninstall app --device <id> com.rrochlin.LiftingCoach` (see "Deploying to the phone" below), which is also the only way to make it re-bootstrap the sample block: `AppEnvironment` loads a program only when the plan has no blocks at all.
 
 **The Workout Planner is reworked** to close the `notes/Feedback.md` Plan items. Two files now: `WorkoutPlannerView.swift` (block overview) and `PlannedWorkoutEditor.swift` (day authoring).
 - The block overview shows each day's **actual prescription** — reps, resolved weight, RPE — rather than a set count you had to tap through. Days group into collapsible **weeks** (`WorkoutBlock.programmedWeeks`), with the current week open by default; a flat list of a 12-week block's ~70 days is unreadable.
@@ -147,6 +151,28 @@ DB="$(xcrun simctl get_app_container "$D" com.rrochlin.LiftingCoach data)/Librar
 The container UUID **changes on reinstall**, so re-resolve it every time. GRDB stores dates as `'YYYY-MM-DD HH:MM:SS.SSS'` in **UTC**, while the app normalizes days with the *local* calendar — so a local start-of-day is e.g. `07:00:00.000` at UTC-7. Get this wrong and rows silently don't match "today". `workoutSet.plannedFrom` is Swift-encoded JSON; generate it with the real encoder rather than hand-writing it (`LoadPrescription` encodes as `{"rpe":{"_0":8}}`).
 
 Lesson worth keeping: running the app immediately found two bugs that compiled fine — weights rounding 157.5 lb to 158 lb, and logged RPE never displaying. **Screenshot new views; don't trust a green build.**
+
+### Deploying to the phone
+The iPhone 13 is usually connected. Two gotchas, both of which cost time before being written down:
+
+1. **`devicectl` and `xcodebuild` use different device identifiers for the same phone.** `xcrun devicectl list devices` prints one (`2F0D37A5-…`); `xcodebuild`'s destination wants the hardware UDID (`00008110-…`), which it will list for you on a failed destination match.
+2. **`project.yml` pins no `DEVELOPMENT_TEAM`** (deliberately — Xcode fills it from whoever's signed in). A command-line build therefore fails with "requires a development team" until you pass it. The team is the `OU` of the signing certificate: `security find-identity -v -p codesigning`, then `security find-certificate -c "<that name>" -p | openssl x509 -noout -subject`.
+
+```sh
+DEV=2F0D37A5-1A73-5D88-9E6A-61DFC7603A0A          # devicectl identifier
+UDID=00008110-000C71260121401E                     # xcodebuild destination
+DD=/tmp/lifting-coach-device
+xcodebuild -project LiftingCoach.xcodeproj -scheme LiftingCoach \
+  -destination "id=$UDID" -configuration Debug \
+  DEVELOPMENT_TEAM=33G44VZ97Z -allowProvisioningUpdates \
+  SYMROOT="$DD/Products" OBJROOT="$DD/Intermediates" SHARED_PRECOMPS_DIR="$DD/PCH" build
+
+xcrun devicectl device uninstall app --device "$DEV" com.rrochlin.LiftingCoach   # wipes its data
+xcrun devicectl device install app --device "$DEV" "$DD/Products/Debug-iphoneos/LiftingCoach.app"
+xcrun devicectl device process launch --device "$DEV" com.rrochlin.LiftingCoach
+```
+
+**The launch will fail after a fresh uninstall** with "profile has not been explicitly trusted by the user" — uninstalling the last app from a developer identity removes the trust with it. Re-trusting is a tap on the phone (Settings → General → VPN & Device Management → the developer profile → Trust) and **nothing here can do it**; hand that step to the owner.
 
 ## Working conventions from this project
 - The notes docs are living working files, not archives — once a design conversation converges on a direction, implement it directly in the relevant `.md` (or, going forward, the actual Swift code). Don't leave agreed decisions sitting only in chat.
