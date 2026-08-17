@@ -90,6 +90,14 @@ final class PlannerModel {
         load.resolvedWeight { reference in user?.max(reference, for: exercise.id) }
     }
 
+    /// Rest a planned set resolves to: its own value, then the selected block's
+    /// default for its type, then the app default. The same chain
+    /// `WorkoutSession` walks at lift time, so what the planner shows is what
+    /// the tracker will count.
+    func restTime(for set: PlannedSet) -> Int {
+        selectedBlock?.restTime(for: set) ?? set.restTime ?? 120
+    }
+
     // MARK: Loading
 
     func load(asOf date: Date = Date()) {

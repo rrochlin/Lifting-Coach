@@ -316,6 +316,75 @@ struct WorkoutSessionRestTests {
         let added = session.addSet(toExerciseWith: session.exerciseGroups[0][0].id)!
         #expect(session.restTarget(afterSetWith: added) == 180)
     }
+
+    @Test("The lifter's own rest for a set beats every level of the prescription")
+    func overrideOutranksPrescription() {
+        let block = WorkoutBlock(defaultRestTimes: [.working: 180])
+        var session = WorkoutSession.start(
+            from: plannedWorkout([(squat, [PlannedSet(reps: 5, type: .working, restTime: 300)])]),
+            block: block,
+            at: noon,
+            appDefaultRestTime: 90
+        )
+
+        let setID = session.workout.allSets[0].id
+        #expect(session.restTarget(afterSetWith: setID) == 300)
+
+        session.setRest(210, forSetWith: setID)
+        #expect(session.restTarget(afterSetWith: setID) == 210)
+        // The prescription is untouched underneath, so "back to what the
+        // program said" stays answerable.
+        #expect(session.prescribedRest(afterSetWith: setID) == 300)
+        #expect(session.workout.allSets[0].plannedFrom?.restTime == 300)
+    }
+
+    @Test("Clearing the override falls back to the prescription again")
+    func clearingOverrideRestoresPrescription() {
+        var session = WorkoutSession.start(
+            from: plannedWorkout([(squat, [PlannedSet(reps: 5, type: .working, restTime: 240)])]),
+            at: noon
+        )
+
+        let setID = session.workout.allSets[0].id
+        session.setRest(60, forSetWith: setID)
+        session.setRest(nil, forSetWith: setID)
+
+        #expect(session.workout.allSets[0].restOverride == nil)
+        #expect(session.restTarget(afterSetWith: setID) == 240)
+    }
+
+    @Test("No rest is a legitimate answer; negative rest isn't")
+    func overrideClampsAtZero() {
+        var session = WorkoutSession.start(
+            from: plannedWorkout([(squat, [PlannedSet(reps: 5, type: .working, restTime: 240)])]),
+            at: noon
+        )
+
+        let setID = session.workout.allSets[0].id
+        session.setRest(0, forSetWith: setID)
+        // Zero has to stick rather than reading as "unset" — a superset's first
+        // movement legitimately rests for nothing.
+        #expect(session.restTarget(afterSetWith: setID) == 0)
+
+        session.setRest(-30, forSetWith: setID)
+        #expect(session.restTarget(afterSetWith: setID) == 0)
+    }
+
+    @Test("A set added after tuning rest inherits the tuned value")
+    func addedSetCopiesTunedRest() {
+        var session = WorkoutSession.start(
+            from: plannedWorkout([(squat, [PlannedSet(reps: 5, type: .working, restTime: 240)])]),
+            at: noon
+        )
+
+        session.setRest(150, forSetWith: session.workout.allSets[0].id)
+        let added = session.addSet(toExerciseWith: session.exerciseGroups[0][0].id)!
+
+        // Unlike `plannedFrom`, which is deliberately dropped: the tuning is the
+        // lifter's instruction for this lift today, and re-entering it on every
+        // added set is the friction the control exists to remove.
+        #expect(session.restTarget(afterSetWith: added) == 150)
+    }
 }
 
 @Suite("Editing mid-workout")

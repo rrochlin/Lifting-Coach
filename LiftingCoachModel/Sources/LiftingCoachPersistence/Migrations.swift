@@ -295,6 +295,22 @@ extension AppDatabase {
             }
         }
 
+        // Additive, same reasoning as v2-v5 above.
+        //
+        // Backs WorkoutSet.restOverride: rest the lifter tuned for one set,
+        // which outranks the prescription in WorkoutSession.restTarget.
+        //
+        // A new column rather than reusing `restTime`, which sits right beside
+        // it and holds the *measured* rest that used to be derived from
+        // completion timestamps. Real rows on the phone still carry those
+        // values; writing chosen durations into the same column would make the
+        // two indistinguishable after the fact.
+        migrator.registerMigration("v6_setRestOverride") { db in
+            try db.alter(table: "workoutSet") { t in
+                t.add(column: "restOverride", .integer)
+            }
+        }
+
         return migrator
     }
 }

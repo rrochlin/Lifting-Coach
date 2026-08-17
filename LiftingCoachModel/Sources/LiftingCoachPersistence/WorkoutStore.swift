@@ -42,6 +42,7 @@ private struct WorkoutSetRow: Codable, FetchableRecord, PersistableRecord {
     var setType: String?
     var timeComplete: Date?
     var restTime: Int?
+    var restOverride: Int?
     var rpe: Double?
     var notes: String?
     var usernotes: String?
@@ -120,6 +121,7 @@ public struct WorkoutStore: Sendable {
                             setType: set.type?.rawValue,
                             timeComplete: set.timeComplete,
                             restTime: set.restTime,
+                            restOverride: set.restOverride,
                             rpe: set.rpe.map(Double.init),
                             notes: set.notes,
                             usernotes: set.usernotes,
@@ -243,6 +245,7 @@ public struct WorkoutStore: Sendable {
             type: row.setType.flatMap(SetType.init(rawValue:)),
             timeComplete: row.timeComplete,
             restTime: row.restTime,
+            restOverride: row.restOverride,
             rpe: row.rpe.map(Float.init),
             notes: row.notes,
             usernotes: row.usernotes,

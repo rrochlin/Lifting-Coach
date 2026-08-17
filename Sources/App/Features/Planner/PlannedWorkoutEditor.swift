@@ -140,7 +140,7 @@ struct PlannedWorkoutEditor: View {
                 set: set,
                 inheritedEffort: exercise.effort,
                 resolvedWeight: resolvedWeight(for: set, exercise: exercise.exercise),
-                showsRest: restIsMixed,
+                resolvedRest: model.restTime(for: set),
                 onChange: { change in draft.updateSet(id: set.id, change) },
                 onEditNote: { noteTarget = .set(set.id) },
                 onDelete: { draft.deleteSet(id: set.id) }
@@ -328,11 +328,11 @@ private struct PlannedExerciseHeaderRow: View {
             // Both are exercise-level instructions — "5×2 @ RPE 7, 3 minutes"
             // is written once, not copied onto every set.
             HStack(spacing: 14) {
-                EffortMenu(
+                RPEPicker(
+                    value: exercise.effort?.rpe,
                     label: "RPE",
-                    effort: exercise.effort,
-                    inheritLabel: "none",
-                    onChange: onEffortChange
+                    clearLabel: "none",
+                    onChange: { rpe in onEffortChange(rpe.map { EffortTarget(rpe: $0) }) }
                 )
                 RestMenu(seconds: restSeconds, isMixed: restIsMixed, onChange: onRestChange)
                 Spacer(minLength: 0)
@@ -356,7 +356,9 @@ private struct PlannedSetRow: View {
     /// looking like nothing was prescribed.
     let inheritedEffort: EffortTarget?
     let resolvedWeight: Measurement<UnitMass>?
-    let showsRest: Bool
+    /// Rest this set actually resolves to, its own value or the block's default
+    /// — shown either way, so "how long here?" never needs a second screen.
+    let resolvedRest: Int
     let onChange: ((inout PlannedSet) -> Void) -> Void
     let onEditNote: () -> Void
     let onDelete: () -> Void
@@ -364,15 +366,37 @@ private struct PlannedSetRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             quantities
+            annotations
+        }
+        .padding(.vertical, 2)
+    }
+
+    /// Rest, plus whatever the controls above don't already say.
+    ///
+    /// Rest is authored per set here, matching where it's stored
+    /// (`PlannedSet.restTime`) and how the tracker now edits it. The exercise
+    /// header still writes all of them at once, because "three minutes on
+    /// squats" is usually one instruction — but a day that wants three minutes
+    /// before the top single and ninety seconds after can now say so.
+    private var annotations: some View {
+        HStack(alignment: .center, spacing: 10) {
+            RestPicker(
+                seconds: resolvedRest,
+                isExplicit: self.set.restTime != nil,
+                resetLabel: self.set.restTime == nil ? nil : "use block default",
+                onChange: { seconds in onChange { $0.restTime = seconds } }
+            )
+
             if let annotationText {
                 Text(annotationText)
                     .font(Theme.data(10))
                     .foregroundStyle(Theme.inkFaint)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.leading, 26)
             }
+
+            Spacer(minLength: 0)
         }
-        .padding(.vertical, 2)
+        .padding(.leading, 26)
     }
 
     private var quantities: some View {
@@ -399,17 +423,18 @@ private struct PlannedSetRow: View {
             }
             .fixedSize()
 
-            EffortMenu(
-                effort: self.set.effort,
-                inheritLabel: inheritedEffort.map { "inherit (\($0.rpe.rpeDescription))" } ?? "none",
+            RPEPicker(
+                value: self.set.effort?.rpe,
+                placeholder: inheritedEffort?.rpe.rpeDescription,
                 // "@7" rather than a bare 7 — the same shorthand the block
                 // overview uses, so the number beside "% goal" can't be read as
                 // part of the load.
                 prefix: "@",
-                placeholder: inheritedEffort?.rpe.rpeDescription,
-                onChange: { effort in onChange { $0.effort = effort } }
+                clearLabel: inheritedEffort.map { "inherit (\($0.rpe.rpeDescription))" } ?? "none",
+                onChange: { rpe in
+                    onChange { $0.effort = rpe.map { EffortTarget(rpe: $0) } }
+                }
             )
-            .fixedSize()
 
             Menu {
                 Picker("Set Type", selection: typeBinding) {
@@ -441,9 +466,6 @@ private struct PlannedSetRow: View {
             // The referenced max isn't on record. Say so rather than showing a
             // blank where a weight belongs (Core Tenets §10).
             parts.append("no max on record")
-        }
-        if showsRest, let rest = self.set.restTime {
-            parts.append("rest \(rest / 60):\(String(format: "%02d", rest % 60))")
         }
         if let type = self.set.type, type != .working {
             parts.append(type.rawValue.uppercased())
@@ -593,58 +615,8 @@ private struct LoadModeMenu: View {
     }
 }
 
-/// RPE on the app's 1–10 by 0.5 scale (Core Tenets §3) — a menu rather than a
-/// field, so an out-of-range or RIR-scaled value can't be entered.
-private struct EffortMenu: View {
-    /// Shown before the value on the exercise header; omitted in a set row,
-    /// where the column position already says what it is.
-    var label: String?
-    let effort: EffortTarget?
-    /// What the "clear this" option reads as.
-    let inheritLabel: String
-    /// Glued to the value in the same font ("@7"), unlike `label`.
-    var prefix: String?
-    /// Displayed greyed when nothing is set here — the inherited value, so an
-    /// exercise-level RPE 7 is visible on every set row rather than looking
-    /// like no effort was prescribed.
-    var placeholder: String?
-    let onChange: (EffortTarget?) -> Void
-
-    var body: some View {
-        Menu {
-            Button(inheritLabel) { onChange(nil) }
-            Divider()
-            ForEach(options, id: \.self) { value in
-                Button(value.rpeDescription) { onChange(EffortTarget(rpe: value)) }
-            }
-        } label: {
-            HStack(spacing: 4) {
-                if let label {
-                    Text(label)
-                        .font(Theme.label)
-                        .tracking(1.2)
-                        .foregroundStyle(Theme.inkMuted)
-                }
-                Text(displayValue)
-                    .font(Theme.data(13, weight: .medium))
-                    .foregroundStyle(effort == nil ? Theme.inkFaint : Theme.signal)
-            }
-            .fixedSize()
-        }
-    }
-
-    private var displayValue: String {
-        let value = effort?.rpe.rpeDescription ?? placeholder ?? "—"
-        return (prefix ?? "") + value
-    }
-
-    private var options: [Float] {
-        stride(from: Float(1), through: Float(10), by: 0.5).map { $0 }
-    }
-}
-
-/// Rest between sets. Stored per set, written per exercise — "3 minutes on
-/// squats" is one instruction.
+/// Rest for a whole exercise at once — writes every one of its sets. The sets
+/// each carry their own `RestPicker` for the cases that differ.
 private struct RestMenu: View {
     let seconds: Int?
     /// The exercise's sets don't agree, so there's no single value to show.
@@ -656,7 +628,7 @@ private struct RestMenu: View {
             Button("block default") { onChange(nil) }
             Divider()
             ForEach(options, id: \.self) { value in
-                Button(format(value)) { onChange(value) }
+                Button(value.restClockDescription) { onChange(value) }
             }
         } label: {
             HStack(spacing: 4) {
@@ -664,21 +636,24 @@ private struct RestMenu: View {
                     .font(Theme.label)
                     .tracking(1.2)
                     .foregroundStyle(Theme.inkMuted)
+                // Same chip as `RestPicker` and `RPEPicker` wear, so the three
+                // controls on this header read as one family of editable
+                // values rather than one field and two labels.
                 Text(displayValue)
                     .font(Theme.data(13, weight: .medium))
                     .foregroundStyle(seconds == nil ? Theme.inkFaint : Theme.ink)
+                    .padding(.vertical, 3)
+                    .padding(.horizontal, 5)
+                    .background(Theme.panelRaised)
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
             }
             .fixedSize()
         }
     }
 
     private var displayValue: String {
-        if let seconds { return format(seconds) }
+        if let seconds { return seconds.restClockDescription }
         return isMixed ? "mixed" : "—"
-    }
-
-    private func format(_ seconds: Int) -> String {
-        String(format: "%d:%02d", seconds / 60, seconds % 60)
     }
 
     private var options: [Int] { [30, 45, 60, 90, 120, 150, 180, 240, 300] }

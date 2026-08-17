@@ -126,6 +126,10 @@ struct WorkoutSet {
 	// "Rest is prescribed, not measured" below. Kept only so history logged
 	// before that decision isn't destroyed.
 	var restTime: Int?
+	// rest the lifter set for THIS set, overriding the prescription. Distinct
+	// from restTime above (measured, legacy) and from plannedFrom.restTime
+	// (what the program asked for). See "Rest is prescribed, not measured".
+	var restOverride: Int?
 	// achieved effort as the lifter rated it, per set — never defaulted from the
 	// prescription. Same scale as #RPE.
 	var rpe: Float?
@@ -171,7 +175,11 @@ struct PlannedSet {
 ```
 
 ## Rest is prescribed, not measured
-Rest exists in the model in exactly one place: #PlannedSet `restTime`, falling back to the #WorkoutBlock's `defaultRestTimes` for that #SetType, then an app default. That's rest *owed*.
+Rest owed resolves in one chain: #WorkoutSet `restOverride`, then #PlannedSet `restTime`, then the #WorkoutBlock's `defaultRestTimes` for that #SetType, then an app default. `WorkoutSession.restTarget(afterSetWith:)` walks it; `prescribedRest(afterSetWith:)` walks the same chain minus the override, which is what "back to prescribed" reverts to.
+
+`restOverride` is the lifter's own rest for one set, tuned in the tracker. It's a separate field from `plannedFrom.restTime` on purpose: writing into the snapshot would make a lifter's 3:30 read back later as though the program had prescribed it, and planned vs. actual are never silently substituted ([[Core Tenets]] §6). It outranks everything below it — the person doing the lift is the most specific authority on how long they're resting (§1) — and it's per set, because back-off sets after a heavy triple don't want the triple's three minutes.
+
+Rest is also authorable per set in the planner (#PlannedSet `restTime` was always per set; only the UI wrote it uniformly). The exercise-level control still writes every set at once, since "three minutes on squats" is usually one instruction.
 
 Rest *taken* is deliberately not recorded. It used to be, derived as the gap between two completion timestamps, and that number is wrong in a way that doesn't average out: it's the rest plus however long it took to pick the phone up and check a box, so it always reads long. A measurement biased one direction every time is worse than no measurement, because it still looks like data — and #Ideas' whole reason for wanting logged history is analysis. `WorkoutSet.restTime` survives as a legacy column so rows written before this decision aren't destroyed; nothing writes it.
 

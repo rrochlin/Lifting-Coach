@@ -168,10 +168,27 @@ public struct WorkoutSession: Equatable, Sendable {
         return group[address.index]
     }
 
-    /// How long the lifter should rest after the given set: the prescription's
-    /// own `restTime`, then the block's default for that set type, then the app
-    /// default. Mirrors `WorkoutBlock.restTime(for:appDefault:)` for logged sets.
+    /// How long the lifter should rest after the given set: their own override
+    /// for this set, then the prescription's `restTime`, then the block's
+    /// default for that set type, then the app default. Mirrors
+    /// `WorkoutBlock.restTime(for:appDefault:)` for logged sets.
+    ///
+    /// The override wins outright, and on purpose — the lifter saying "three
+    /// and a half minutes on this one" is the most specific instruction in the
+    /// chain, and the app doesn't get to average it against the program
+    /// (Core Tenets §1).
     public func restTarget(afterSetWith id: UUID) -> Int {
+        guard let set = workout.allSets.first(where: { $0.id == id }) else {
+            return appDefaultRestTime
+        }
+        if let override = set.restOverride { return override }
+        return prescribedRest(afterSetWith: id)
+    }
+
+    /// What the plan asks for after this set, ignoring any override the lifter
+    /// has set. Lets the rest control offer "back to prescribed" without the
+    /// view having to re-walk the fallback chain itself.
+    public func prescribedRest(afterSetWith id: UUID) -> Int {
         guard let set = workout.allSets.first(where: { $0.id == id }) else {
             return appDefaultRestTime
         }
@@ -240,6 +257,21 @@ public struct WorkoutSession: Equatable, Sendable {
         mutateSet(id: id, change)
     }
 
+    /// Sets (or clears, with `nil`) the lifter's own rest for one set.
+    ///
+    /// Clamped at zero — "no rest here" is a legitimate thing to want and lands
+    /// on a timer that's already finished, but negative rest isn't a duration.
+    /// Rest stays a per-set value: back-off sets after a heavy triple don't
+    /// need the same three minutes the triple did, and the whole point of
+    /// tuning it is that the plan's uniform number is a starting point
+    /// (Core Tenets §1).
+    @discardableResult
+    public mutating func setRest(_ seconds: Int?, forSetWith id: UUID) -> Bool {
+        mutateSet(id: id) { set in
+            set.restOverride = seconds.map { max(0, $0) }
+        }
+    }
+
     /// General mutator for exercise-level fields (currently just `notes`/
     /// `usernotes`) — the exercise-level counterpart to `updateSet`.
     @discardableResult
@@ -271,7 +303,11 @@ public struct WorkoutSession: Equatable, Sendable {
                 reps: template?.reps,
                 weight: template?.weight,
                 complete: false,
-                type: template?.type ?? .working
+                type: template?.type ?? .working,
+                // Carried, unlike `plannedFrom`: a tuned rest is the lifter's
+                // own instruction for this lift today, and re-tuning it on
+                // every added set is exactly the friction being removed.
+                restOverride: template?.restOverride
             )
             newID = new.id
             exercise.sets = (exercise.sets ?? []) + [new]

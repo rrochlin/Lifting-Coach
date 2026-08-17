@@ -173,6 +173,15 @@ final class TrackerModel {
         mutate { $0.updateSet(id: id, change) }
     }
 
+    /// Tunes (or clears, with `nil`) one set's rest.
+    ///
+    /// Deliberately does **not** touch a rest period already counting down: the
+    /// timer is this rest, the set's value is the next one. Retuning what's on
+    /// the clock is what the timer's own ±30 buttons are for.
+    func setRest(_ seconds: Int?, forSetWith id: UUID) {
+        mutate { $0.setRest(seconds, forSetWith: id) }
+    }
+
     func updateExercise(id: UUID, _ change: (inout WorkoutExercise) -> Void) {
         mutate { $0.updateExercise(id: id, change) }
     }

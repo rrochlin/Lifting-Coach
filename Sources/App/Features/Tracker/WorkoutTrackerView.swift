@@ -393,10 +393,12 @@ private struct ActiveWorkoutList: View {
                     set: set,
                     isNextUp: model.session?.nextSet?.id == set.id,
                     restTarget: model.session?.restTarget(afterSetWith: set.id) ?? 120,
+                    prescribedRest: model.session?.prescribedRest(afterSetWith: set.id) ?? 120,
                     onToggle: { toggle(set) },
                     onRepsChange: { reps in model.updateSet(id: set.id) { $0.reps = reps } },
                     onWeightChange: { weight in model.updateSet(id: set.id) { $0.weight = weight } },
                     onRPEChange: { rpe in model.updateSet(id: set.id) { $0.rpe = rpe } },
+                    onRestChange: { seconds in model.setRest(seconds, forSetWith: set.id) },
                     onEditNote: { noteEditorTarget = .set(set.id) }
                 )
                 .panelGroupRow(.middle, accent: accent)
@@ -698,14 +700,16 @@ private struct SetRow: View {
     let number: Int
     let set: WorkoutSet
     let isNextUp: Bool
-    /// Seconds of rest this set is prescribed — shown before it's performed so
-    /// the lifter knows what they're resting for, not just that a clock is
-    /// running.
+    /// Seconds of rest that will actually be counted after this set — the
+    /// lifter's own value if they've tuned one, otherwise the prescription.
     let restTarget: Int
+    /// What the plan asks for, ignoring any tuning — what "revert" goes back to.
+    let prescribedRest: Int
     let onToggle: () -> Void
     let onRepsChange: (Int?) -> Void
     let onWeightChange: (Measurement<UnitMass>?) -> Void
     let onRPEChange: (Float?) -> Void
+    let onRestChange: (Int?) -> Void
     let onEditNote: () -> Void
 
     var body: some View {
@@ -717,9 +721,10 @@ private struct SetRow: View {
     }
 
     /// Every quantity is visible and directly tappable — no expand step. Reps
-    /// and weight are inline text fields; RPE is a menu constrained to the
-    /// app's 1–10 by 0.5 scale (Core Tenets §3), so an out-of-range or
-    /// RIR-scaled value can't be entered.
+    /// and weight are inline text fields; RPE is a chip opening `RPEPicker`,
+    /// constrained to the app's 1–10 by 0.5 scale (Core Tenets §3) so an
+    /// out-of-range or RIR-scaled value can't be entered. Rest is the same kind
+    /// of control, on the line below for room.
     ///
     /// Width-agnostic by construction: nothing here has a fixed width, and the
     /// two fields share the free space proportionally. An earlier version
@@ -753,8 +758,11 @@ private struct SetRow: View {
                 .foregroundStyle(Theme.inkFaint)
                 .fixedSize()
 
-            rpePicker
-                .fixedSize()
+            RPEPicker(
+                value: self.set.rpe,
+                clearLabel: "not rated",
+                onChange: onRPEChange
+            )
 
             Button(action: onEditNote) {
                 Image(systemName: hasNote ? "note.text" : "square.and.pencil")
@@ -766,36 +774,32 @@ private struct SetRow: View {
         }
     }
 
-    /// The menu shows a bare number; "RPE" is carried once by the annotation
-    /// line below rather than repeated inside every picker, which is what made
-    /// this the widest element in the row.
-    private var rpePicker: some View {
-        Picker("", selection: rpeBinding) {
-            Text("—").tag(Float?.none)
-            ForEach(rpeOptions, id: \.self) { value in
-                Text(value.rpeDescription).tag(Float?.some(value))
-            }
-        }
-        .labelsHidden()
-        .pickerStyle(.menu)
-        .font(Theme.data(13, weight: .medium))
-        .tint(self.set.rpe == nil ? Theme.inkFaint : Theme.ink)
-    }
-
-    /// The quiet second line: what was prescribed, and the rest — planned
-    /// before the set is done, actually taken after.
+    /// The second line: this set's rest, as a control, plus what was prescribed.
     ///
-    /// This line also carries the word "RPE" for the picker above it, so the
-    /// picker itself can stay a bare number and not dominate the row's width.
-    /// It wraps rather than truncating: this is the only place a percentage
-    /// prescription that didn't resolve to a weight is visible at all, and
-    /// silently clipping it would violate Core Tenets §10.
+    /// Rest sits here rather than up in `quantities` for room — the top row is
+    /// already at its limit at 375pt — but it's the same kind of thing as the
+    /// fields above it, and styled to say so. The prescription text wraps
+    /// rather than truncating: this is the only place a percentage that didn't
+    /// resolve to a weight is visible at all, and silently clipping it would
+    /// violate Core Tenets §10.
     private var annotations: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Text(annotationText)
-                .font(Theme.data(10))
-                .foregroundStyle(done ? Theme.inkMuted : Theme.inkFaint)
-                .fixedSize(horizontal: false, vertical: true)
+        HStack(alignment: .center, spacing: 10) {
+            RestPicker(
+                seconds: restTarget,
+                isExplicit: self.set.restOverride != nil,
+                // Only offered once there's something to go back to.
+                resetLabel: self.set.restOverride == nil
+                    ? nil
+                    : "use prescribed \(prescribedRest.restClockDescription)",
+                onChange: onRestChange
+            )
+
+            if let prescription {
+                Text(prescription)
+                    .font(Theme.data(10))
+                    .foregroundStyle(done ? Theme.inkMuted : Theme.inkFaint)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
 
             Spacer(minLength: 0)
 
@@ -808,12 +812,6 @@ private struct SetRow: View {
             }
         }
         .padding(.leading, 38)
-    }
-
-    private var annotationText: String {
-        var parts = [restLabel]
-        if let prescription { parts.append(prescription) }
-        return parts.joined(separator: "   ")
     }
 
     /// No fixed width — the field takes what's available and shares it with its
@@ -834,20 +832,6 @@ private struct SetRow: View {
             .padding(.vertical, 3)
             .background(Theme.panelRaised)
             .clipShape(RoundedRectangle(cornerRadius: 4))
-    }
-
-    /// The rest prescribed after this set — before and after it's logged.
-    ///
-    /// It used to switch to "rested 3:05" once done, measured between completion
-    /// timestamps. That number was rest plus fumbling for the phone, biased long
-    /// every time, so it's gone rather than shown as if it were observed. The
-    /// prescription is what the app actually knows.
-    private var restLabel: String {
-        "rest \(formatted(restTarget))"
-    }
-
-    private func formatted(_ seconds: Int) -> String {
-        String(format: "%d:%02d", seconds / 60, seconds % 60)
     }
 
     private var checkboxButton: some View {
@@ -888,14 +872,6 @@ private struct SetRow: View {
             get: { self.set.weight?.value ?? 0 },
             set: { onWeightChange(Measurement(value: $0, unit: weightUnit)) }
         )
-    }
-
-    private var rpeBinding: Binding<Float?> {
-        Binding(get: { self.set.rpe }, set: { onRPEChange($0) })
-    }
-
-    private var rpeOptions: [Float] {
-        stride(from: Float(1), through: Float(10), by: 0.5).map { $0 }
     }
 
     /// Where to resolve the weight field's unit from when the set doesn't

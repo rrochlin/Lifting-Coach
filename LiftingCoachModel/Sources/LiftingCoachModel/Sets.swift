@@ -61,6 +61,18 @@ public struct WorkoutSet: Codable, Hashable, Identifiable, Sendable {
     /// is what the tracker displays. Kept as a column so existing history isn't
     /// destroyed (Design.md), not as a field to start writing again.
     public var restTime: Int?
+    /// Rest the lifter set for *this* set, in seconds, overriding whatever the
+    /// resolution chain would otherwise produce (`WorkoutSession.restTarget`).
+    ///
+    /// Deliberately a field of its own rather than a write into
+    /// `plannedFrom.restTime`: the snapshot is what the plan asked for, and
+    /// editing it in place would make a lifter's own 3:30 read back as though
+    /// the program prescribed it. Planned and actual are never silently
+    /// substituted (Core Tenets §6), and this is the "actual" side of rest.
+    ///
+    /// Also distinct from `restTime` above, which is legacy *measured* rest.
+    /// This one is a chosen duration, not an observation.
+    public var restOverride: Int?
     /// Achieved effort as the lifter rated it, per set — never defaulted from
     /// the prescription. Same 1–10 scale as `EffortTarget`.
     public var rpe: Float?
@@ -80,6 +92,7 @@ public struct WorkoutSet: Codable, Hashable, Identifiable, Sendable {
         type: SetType? = nil,
         timeComplete: Date? = nil,
         restTime: Int? = nil,
+        restOverride: Int? = nil,
         rpe: Float? = nil,
         notes: String? = nil,
         usernotes: String? = nil,
@@ -92,6 +105,7 @@ public struct WorkoutSet: Codable, Hashable, Identifiable, Sendable {
         self.type = type
         self.timeComplete = timeComplete
         self.restTime = restTime
+        self.restOverride = restOverride
         self.rpe = rpe
         self.notes = notes
         self.usernotes = usernotes

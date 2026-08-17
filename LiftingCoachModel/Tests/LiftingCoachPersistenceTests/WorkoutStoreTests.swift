@@ -123,6 +123,28 @@ struct WorkoutStoreTests {
         #expect(set?.plannedFrom?.load == .percentOf(0.85, of: .goal))
     }
 
+    @Test("Tuned rest survives a round trip, without disturbing the prescription")
+    func preservesRestOverride() throws {
+        let (store, _) = try makeStore()
+
+        let prescribed = PlannedSet(reps: 5, type: .working, restTime: 180)
+        var session = WorkoutSession.start(
+            from: PlannedWorkout(exercises: [[PlannedExercise(exercise: squat, sets: [prescribed])]]),
+            at: noon
+        )
+        session.setRest(210, forSetWith: session.workout.allSets[0].id)
+
+        try store.save(session.workout)
+        let set = try store.fetch(id: session.workout.id)?.allSets.first
+
+        #expect(set?.restOverride == 210)
+        // Two columns, two meanings: what the lifter chose, and what the
+        // program asked for. Neither overwrites the other.
+        #expect(set?.plannedFrom?.restTime == 180)
+        // And the legacy measured column stays empty — nothing writes it.
+        #expect(set?.restTime == nil)
+    }
+
     @Test("Saving the same workout twice replaces rather than duplicates")
     func saveIsIdempotent() throws {
         let (store, database) = try makeStore()
