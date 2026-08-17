@@ -107,17 +107,24 @@ public struct PlannedWorkout: Codable, Hashable, Identifiable, Sendable {
     public var date: Date?
     public var exercises: [[PlannedExercise]]?
     public var notes: String?
+    /// When the lifter deliberately skipped this programmed day. Persisted
+    /// rather than a UI-only dismiss — a skip is a decision, and it should stay
+    /// visible in history the same way a completed workout does (Core Tenets
+    /// §10: honest empty states, not silently hidden ones).
+    public var skippedAt: Date?
 
     public init(
         id: UUID = UUID(),
         date: Date? = nil,
         exercises: [[PlannedExercise]]? = nil,
-        notes: String? = nil
+        notes: String? = nil,
+        skippedAt: Date? = nil
     ) {
         self.id = id
         self.date = date
         self.exercises = exercises
         self.notes = notes
+        self.skippedAt = skippedAt
     }
 
     /// Every prescribed set, flattened across superset groups and exercises.

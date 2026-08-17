@@ -247,6 +247,21 @@ public struct WorkoutSession: Equatable, Sendable {
         mutateSet(id: id, change)
     }
 
+    /// General mutator for exercise-level fields (currently just `notes`/
+    /// `usernotes`) — the exercise-level counterpart to `updateSet`.
+    @discardableResult
+    public mutating func updateExercise(
+        id: UUID,
+        _ change: (inout WorkoutExercise) -> Void
+    ) -> Bool {
+        var changed = false
+        mutateExercise(id: id) { exercise in
+            change(&exercise)
+            changed = true
+        }
+        return changed
+    }
+
     // MARK: - Editing the workout mid-session
 
     /// Appends a set to an exercise, copying the shape of its last set so adding
@@ -327,6 +342,25 @@ public struct WorkoutSession: Equatable, Sendable {
         let adjusted = destination > source ? destination - 1 : destination
         groups.insert(group, at: min(adjusted, groups.count))
         workout.exercises = groups
+    }
+
+    /// Reorders sets within a single exercise — mirrors `moveGroup` for whole
+    /// exercises. Out-of-range or no-op moves are ignored, not a crash.
+    public mutating func moveSet(from source: Int, to destination: Int, within exerciseID: UUID) {
+        mutateExercise(id: exerciseID) { exercise in
+            guard var sets = exercise.sets,
+                  sets.indices.contains(source),
+                  destination >= 0, destination <= sets.count,
+                  source != destination
+            else { return }
+
+            let set = sets.remove(at: source)
+            // Same shift-adjustment as moveGroup: removing shifts everything
+            // after `source` down by one.
+            let adjusted = destination > source ? destination - 1 : destination
+            sets.insert(set, at: min(adjusted, sets.count))
+            exercise.sets = sets
+        }
     }
 
     // MARK: - Finishing

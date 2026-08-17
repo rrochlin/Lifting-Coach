@@ -140,6 +140,147 @@ struct Chip: View {
     }
 }
 
+// MARK: - Grouped rows
+
+/// Which edges/corners a row draws when several contiguous `List` rows are
+/// meant to read as one panel (an exercise header + its set rows, each now a
+/// real row of its own so per-set swipe actions actually apply to that set —
+/// see `WorkoutTrackerView`).
+enum PanelRowPosition {
+    case top, middle, bottom, single
+}
+
+extension View {
+    /// Styles one row as part of a multi-row panel group. `position` controls
+    /// which corners round and how much vertical gap surrounds the row, so a
+    /// header row plus several set rows read as one continuous block instead of
+    /// N separate floating panels.
+    ///
+    /// Grouped rows use a thin leading accent rail rather than `Panel`'s full
+    /// border — a full stroke on every contiguous row would double the line at
+    /// each seam between rows in the same group. The rail also reads as a
+    /// status indicator (active exercise, superset membership), which suits a
+    /// HUD better than a border would anyway.
+    func panelGroupRow(_ position: PanelRowPosition, accent: Color = Theme.hairline) -> some View {
+        let radius: CGFloat = 6
+        let corners: RectangleCornerRadii
+        switch position {
+        case .single:
+            corners = RectangleCornerRadii(
+                topLeading: radius, bottomLeading: radius,
+                bottomTrailing: radius, topTrailing: radius
+            )
+        case .top:
+            corners = RectangleCornerRadii(topLeading: radius, topTrailing: radius)
+        case .middle:
+            corners = RectangleCornerRadii()
+        case .bottom:
+            corners = RectangleCornerRadii(bottomLeading: radius, bottomTrailing: radius)
+        }
+
+        return self
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Theme.panel)
+            .overlay(alignment: .leading) {
+                Rectangle().fill(accent).frame(width: 2)
+            }
+            .clipShape(UnevenRoundedRectangle(cornerRadii: corners, style: .continuous))
+            .listRowBackground(Color.clear)
+            .listRowSeparator(.hidden)
+            // Zero vertical inset between rows of the same group so the shared
+            // background reads continuous; the gap goes outside the group.
+            .listRowInsets(EdgeInsets(
+                top: position == .top || position == .single ? 6 : 0,
+                leading: 16,
+                bottom: position == .bottom || position == .single ? 6 : 0,
+                trailing: 16
+            ))
+            .listRowSpacing(0)
+    }
+}
+
+// MARK: - Themed confirmation
+
+/// Replacement for the system `.confirmationDialog`, in the app's own HUD
+/// language rather than a bare system sheet.
+struct ThemedConfirmDialog: View {
+    let title: String
+    var message: String?
+    var confirmLabel: String = "Confirm"
+    var confirmRole: ButtonRole? = .destructive
+    var cancelLabel: String = "Cancel"
+    let onConfirm: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        ZStack {
+            Theme.void.opacity(0.72)
+                .ignoresSafeArea()
+                .onTapGesture(perform: onCancel)
+
+            Panel(accent: confirmRole == .destructive ? Theme.alert.opacity(0.5) : Theme.hairline) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(title.uppercased())
+                        .font(Theme.heading)
+                        .foregroundStyle(Theme.ink)
+                    if let message {
+                        Text(message)
+                            .font(Theme.body)
+                            .foregroundStyle(Theme.inkMuted)
+                    }
+                    HStack {
+                        Button(cancelLabel, action: onCancel)
+                            .foregroundStyle(Theme.inkMuted)
+                        Spacer()
+                        Button(confirmLabel, action: onConfirm)
+                            .foregroundStyle(confirmRole == .destructive ? Theme.alert : Theme.signal)
+                    }
+                    .font(Theme.label)
+                    .tracking(1.2)
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 32)
+        }
+    }
+}
+
+extension View {
+    /// Presents a `ThemedConfirmDialog` as an overlay when `isPresented` is
+    /// true — the themed stand-in for `.confirmationDialog`.
+    func themedConfirm(
+        isPresented: Binding<Bool>,
+        title: String,
+        message: String? = nil,
+        confirmLabel: String = "Confirm",
+        confirmRole: ButtonRole? = .destructive,
+        cancelLabel: String = "Cancel",
+        onConfirm: @escaping () -> Void
+    ) -> some View {
+        overlay {
+            if isPresented.wrappedValue {
+                ThemedConfirmDialog(
+                    title: title,
+                    message: message,
+                    confirmLabel: confirmLabel,
+                    confirmRole: confirmRole,
+                    cancelLabel: cancelLabel,
+                    onConfirm: {
+                        isPresented.wrappedValue = false
+                        onConfirm()
+                    },
+                    onCancel: { isPresented.wrappedValue = false }
+                )
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                .zIndex(1)
+            }
+        }
+        .animation(.easeOut(duration: 0.16), value: isPresented.wrappedValue)
+    }
+}
+
 // MARK: - Screen chrome
 
 extension View {

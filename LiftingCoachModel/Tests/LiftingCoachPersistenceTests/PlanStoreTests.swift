@@ -252,6 +252,58 @@ struct PlanStoreTests {
         #expect(try fixture.plans.fetchPlanned(on: day(2026, 3, 3)).isEmpty)
     }
 
+    @Test("Planned workouts are found across a date range, ordered and bounded")
+    func fetchesPlannedByRange() throws {
+        let fixture = try makeFixture()
+        try fixture.plans.save(block(), userId: fixture.user.id)
+
+        // Range covers both programmed days (Mar 2, Mar 4).
+        let inRange = try fixture.plans.fetchPlanned(from: day(2026, 3, 1), to: day(2026, 3, 7))
+        #expect(inRange.count == 2)
+        #expect(inRange.first?.date == day(2026, 3, 2))
+        #expect(inRange.last?.date == day(2026, 3, 4))
+
+        // A range that excludes Mar 4 only returns Mar 2.
+        let narrower = try fixture.plans.fetchPlanned(from: day(2026, 3, 1), to: day(2026, 3, 3))
+        #expect(narrower.count == 1)
+        #expect(narrower.first?.date == day(2026, 3, 2))
+
+        // A range entirely outside the program returns nothing.
+        #expect(try fixture.plans.fetchPlanned(from: day(2026, 4, 1), to: day(2026, 4, 30)).isEmpty)
+    }
+
+    @Test("Skipping and unskipping round-trip through fetchPlanned and fetchBlock")
+    func skipRoundTrips() throws {
+        let fixture = try makeFixture()
+        let original = block()
+        try fixture.plans.save(original, userId: fixture.user.id)
+        let workoutID = original.program![day(2026, 3, 2)]!.first!.id
+
+        try fixture.plans.markSkipped(workoutID: workoutID, at: day(2026, 3, 2))
+
+        let viaRange = try fixture.plans.fetchPlanned(from: day(2026, 3, 1), to: day(2026, 3, 7))
+        #expect(viaRange.first { $0.id == workoutID }?.skippedAt == day(2026, 3, 2))
+
+        let viaBlock = try fixture.plans.fetchBlock(id: original.id)
+        #expect(viaBlock?.program?[day(2026, 3, 2)]?.first?.skippedAt == day(2026, 3, 2))
+
+        try fixture.plans.unmarkSkipped(workoutID: workoutID)
+        let afterUnskip = try fixture.plans.fetchPlanned(from: day(2026, 3, 1), to: day(2026, 3, 7))
+        #expect(afterUnskip.first { $0.id == workoutID }?.skippedAt == nil)
+    }
+
+    @Test("A pre-v4 row with no explicit skippedAt hydrates as nil")
+    func missingSkippedAtHydratesAsNil() throws {
+        // Guards the additive migration: a row written before v4_skippedWorkouts
+        // existed (no skippedAt column value set) must still hydrate cleanly
+        // rather than failing to decode.
+        let fixture = try makeFixture()
+        try fixture.plans.save(block(), userId: fixture.user.id)
+
+        let loaded = try fixture.plans.fetchPlanned(on: day(2026, 3, 2))
+        #expect(loaded.first?.skippedAt == nil)
+    }
+
     @Test("Deleting a block leaves logged workouts standing")
     func deletingBlockKeepsHistory() throws {
         let fixture = try makeFixture()

@@ -30,6 +30,7 @@ private struct PlannedWorkoutRow: Codable, FetchableRecord, PersistableRecord {
     var blockId: String
     var date: Date?
     var notes: String?
+    var skippedAt: Date?
 }
 
 private struct PlannedExerciseRow: Codable, FetchableRecord, PersistableRecord {
@@ -155,7 +156,8 @@ public struct PlanStore: Sendable {
             id: workout.id.uuidString,
             blockId: blockId.uuidString,
             date: calendar.startOfDay(for: workout.date ?? day),
-            notes: workout.notes
+            notes: workout.notes,
+            skippedAt: workout.skippedAt
         ).insert(db)
 
         for (groupIndex, group) in (workout.exercises ?? []).enumerated() {
@@ -222,6 +224,43 @@ public struct PlanStore: Sendable {
                 .filter(Column("date") == start)
                 .fetchAll(db)
                 .map { try hydrate($0, db) }
+        }
+    }
+
+    /// Workouts programmed within a date range (inclusive), across every block
+    /// — backs the Tracker's week view, so a lifter sees more than just today
+    /// and can start or skip an adjacent day.
+    public func fetchPlanned(from start: Date, to end: Date) throws -> [PlannedWorkout] {
+        let startDay = calendar.startOfDay(for: start)
+        let endDay = calendar.startOfDay(for: end)
+        return try database.writer.read { db in
+            try PlannedWorkoutRow
+                .filter(Column("date") >= startDay && Column("date") <= endDay)
+                .order(Column("date"))
+                .fetchAll(db)
+                .map { try hydrate($0, db) }
+        }
+    }
+
+    /// Marks a planned workout skipped without deleting it — a narrow direct
+    /// update rather than routing through `save(_:in:)`, since flipping one
+    /// column shouldn't require reconstructing the whole nested plan graph.
+    public func markSkipped(workoutID: UUID, at date: Date = Date()) throws {
+        try database.writer.write { db in
+            try db.execute(
+                sql: "UPDATE plannedWorkout SET skippedAt = ? WHERE id = ?",
+                arguments: [date, workoutID.uuidString]
+            )
+        }
+    }
+
+    /// Reverses a skip.
+    public func unmarkSkipped(workoutID: UUID) throws {
+        try database.writer.write { db in
+            try db.execute(
+                sql: "UPDATE plannedWorkout SET skippedAt = NULL WHERE id = ?",
+                arguments: [workoutID.uuidString]
+            )
         }
     }
 
@@ -320,7 +359,8 @@ public struct PlanStore: Sendable {
             id: UUID(uuidString: row.id) ?? UUID(),
             date: row.date,
             exercises: groups.isEmpty ? nil : groups,
-            notes: row.notes
+            notes: row.notes,
+            skippedAt: row.skippedAt
         )
     }
 

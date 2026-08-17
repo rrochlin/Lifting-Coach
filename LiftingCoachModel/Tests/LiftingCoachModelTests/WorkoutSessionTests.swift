@@ -415,6 +415,71 @@ struct WorkoutSessionEditingTests {
 
         #expect(session.exerciseGroups.count == before)
     }
+
+    @Test("Sets reorder correctly in both directions")
+    func reordersSets() {
+        var session = WorkoutSession.start(
+            from: plannedWorkout([(squat, [
+                PlannedSet(reps: 5, load: .absolute(Measurement(value: 135, unit: .pounds))),
+                PlannedSet(reps: 3, load: .absolute(Measurement(value: 225, unit: .pounds))),
+                PlannedSet(reps: 1, load: .absolute(Measurement(value: 315, unit: .pounds))),
+            ])]),
+            at: noon
+        )
+        let exerciseID = session.exerciseGroups[0][0].id
+        func order(_ s: WorkoutSession) -> [Double] {
+            s.exerciseGroups[0][0].sets!.map { $0.weight!.value }
+        }
+
+        // Same shift-adjustment semantics as moveGroup: removing index 0 then
+        // inserting at the shifted index 1 lands the moved set second, not last.
+        session.moveSet(from: 0, to: 2, within: exerciseID)
+        #expect(order(session) == [225, 135, 315])
+
+        session.moveSet(from: 2, to: 0, within: exerciseID)
+        #expect(order(session) == [315, 225, 135])
+    }
+
+    @Test("Out-of-range set reorders are ignored rather than crashing")
+    func setReorderBoundsAreSafe() {
+        var session = self.session()
+        let exerciseID = session.exerciseGroups[0][0].id
+        let before = session.exerciseGroups[0][0].sets?.count
+
+        session.moveSet(from: 9, to: 0, within: exerciseID)
+        session.moveSet(from: 0, to: -1, within: exerciseID)
+        session.moveSet(from: 0, to: 0, within: exerciseID)
+        // An unknown exercise id is also a no-op, not a crash.
+        session.moveSet(from: 0, to: 0, within: UUID())
+
+        #expect(session.exerciseGroups[0][0].sets?.count == before)
+    }
+
+    @Test("moveSet only reorders its target exercise's own sets")
+    func moveSetIsScopedToItsExercise() {
+        var session = self.session()
+        let squatID = session.exerciseGroups[0][0].id
+        let benchSetsBefore = session.exerciseGroups[1][0].sets
+
+        // Squat has only one set, so this is a no-op move, but it must not
+        // touch bench's sets either way.
+        session.moveSet(from: 0, to: 0, within: squatID)
+
+        #expect(session.exerciseGroups[1][0].sets == benchSetsBefore)
+    }
+
+    @Test("updateExercise mutates notes and reports whether it found the exercise")
+    func updateExerciseMutatesNotes() {
+        var session = self.session()
+        let exerciseID = session.exerciseGroups[0][0].id
+
+        let didUpdate = session.updateExercise(id: exerciseID) { $0.usernotes = "felt heavy today" }
+        #expect(didUpdate)
+        #expect(session.exerciseGroups[0][0].usernotes == "felt heavy today")
+
+        let didUpdateUnknown = session.updateExercise(id: UUID()) { $0.usernotes = "x" }
+        #expect(!didUpdateUnknown)
+    }
 }
 
 @Suite("Finishing")

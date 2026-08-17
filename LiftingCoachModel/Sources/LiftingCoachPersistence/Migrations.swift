@@ -262,6 +262,17 @@ extension AppDatabase {
             }
         }
 
+        // Additive, same reasoning as v2/v3 above — a real device now holds
+        // real data.
+        //
+        // Backs PlannedWorkout.skippedAt (Concepts.md): a skip must survive as
+        // a persisted, visible status, not a client-side dismiss.
+        migrator.registerMigration("v4_skippedWorkouts") { db in
+            try db.alter(table: "plannedWorkout") { t in
+                t.add(column: "skippedAt", .datetime)
+            }
+        }
+
         return migrator
     }
 }

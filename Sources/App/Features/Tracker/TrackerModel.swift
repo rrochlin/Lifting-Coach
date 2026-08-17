@@ -17,6 +17,10 @@ final class TrackerModel {
 
     /// When the current rest period is due to end. `nil` when not resting.
     private(set) var restEndsAt: Date?
+    /// The exercise the current rest period belongs to — `nil` when not
+    /// resting. Lets the view render the rest timer directly beneath the lift
+    /// it follows instead of once, globally, at the top of the screen.
+    private(set) var restingExerciseID: UUID?
 
     /// A just-recorded achieved max, for a transient banner. The lifter should
     /// know the PR was actually captured, not just quietly written to disk.
@@ -73,6 +77,7 @@ final class TrackerModel {
         session.finish(at: date)
         self.session = session
         restEndsAt = nil
+        restingExerciseID = nil
         persist()
         self.session = nil
     }
@@ -84,6 +89,7 @@ final class TrackerModel {
         }
         session = nil
         restEndsAt = nil
+        restingExerciseID = nil
     }
 
     // MARK: Editing
@@ -92,8 +98,9 @@ final class TrackerModel {
         mutate { $0.completeSet(id: id, reps: reps, weight: weight, rpe: rpe, at: date) }
 
         // Start the rest clock from the set that was just logged.
-        if let session, session.workout.allSets.contains(where: { $0.id == id }) {
+        if let session, let exercise = session.exercise(containingSetID: id) {
             restEndsAt = date.addingTimeInterval(TimeInterval(session.restTarget(afterSetWith: id)))
+            restingExerciseID = exercise.id
         }
 
         recordAchievedMaxIfNeeded(setID: id, at: date)
@@ -135,6 +142,10 @@ final class TrackerModel {
         mutate { $0.updateSet(id: id, change) }
     }
 
+    func updateExercise(id: UUID, _ change: (inout WorkoutExercise) -> Void) {
+        mutate { $0.updateExercise(id: id, change) }
+    }
+
     func addSet(toExerciseWith id: UUID) {
         mutate { $0.addSet(toExerciseWith: id) }
     }
@@ -155,8 +166,13 @@ final class TrackerModel {
         mutate { $0.moveGroup(from: source, to: destination) }
     }
 
+    func moveSet(from source: Int, to destination: Int, within exerciseID: UUID) {
+        mutate { $0.moveSet(from: source, to: destination, within: exerciseID) }
+    }
+
     func dismissRest() {
         restEndsAt = nil
+        restingExerciseID = nil
     }
 
     // MARK: Plumbing
