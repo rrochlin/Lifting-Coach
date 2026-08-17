@@ -23,3 +23,8 @@ build/
 
 ## macOS
 .DS_Store
+
+## Claude Code
+.claude/settings.local.json
+# Worktrees are their own git checkouts — never commit them into this one.
+.claude/worktrees/

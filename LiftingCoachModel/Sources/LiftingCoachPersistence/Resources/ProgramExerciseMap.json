@@ -1,0 +1,170 @@
+[
+  {
+    "programName": "Bench press — heavy (paused, comp grip)",
+    "slug": "Barbell_Bench_Press_-_Medium_Grip",
+    "openChoice": false,
+    "slots": 1,
+    "muscleGroups": ["Chest"]
+  },
+  {
+    "programName": "Bench — back-off (paused)",
+    "slug": "Barbell_Bench_Press_-_Medium_Grip",
+    "openChoice": false,
+    "slots": 1,
+    "muscleGroups": ["Chest"]
+  },
+  {
+    "programName": "Squat — volume (comp stance)",
+    "slug": "Barbell_Squat",
+    "openChoice": false,
+    "slots": 1,
+    "muscleGroups": ["Quadriceps"]
+  },
+  {
+    "programName": "Triceps (overhead ext / pushdown)",
+    "slug": null,
+    "openChoice": true,
+    "slots": 1,
+    "muscleGroups": ["Triceps"]
+  },
+  {
+    "programName": "Deadlift — heavy (straight bar)",
+    "slug": "Barbell_Deadlift",
+    "openChoice": false,
+    "slots": 1,
+    "muscleGroups": ["Lower Back"]
+  },
+  {
+    "programName": "Deficit DL (1.5\")",
+    "slug": "Deficit_Deadlift",
+    "openChoice": false,
+    "slots": 1,
+    "muscleGroups": ["Lower Back"]
+  },
+  {
+    "programName": "RDL",
+    "slug": "Romanian_Deadlift",
+    "openChoice": false,
+    "slots": 1,
+    "muscleGroups": ["Hamstrings"]
+  },
+  {
+    "programName": "Chest-supported row (or seal row)",
+    "slug": "Leverage_Iso_Row",
+    "openChoice": false,
+    "slots": 1,
+    "muscleGroups": ["Lats"]
+  },
+  {
+    "programName": "Walk with wife (recovery)",
+    "slug": null,
+    "openChoice": true,
+    "slots": 1,
+    "muscleGroups": ["Cardio"]
+  },
+  {
+    "programName": "Bench volume — Spoto press (1\" off chest)",
+    "slug": "Barbell_Bench_Press_-_Medium_Grip",
+    "openChoice": false,
+    "slots": 1,
+    "muscleGroups": ["Chest"]
+  },
+  {
+    "programName": "Overhead press (standing, to chest)",
+    "slug": "Standing_Military_Press",
+    "openChoice": false,
+    "slots": 1,
+    "muscleGroups": ["Shoulders"]
+  },
+  {
+    "programName": "Close-grip bench (straight bar, shoulder-width)",
+    "slug": "Close-Grip_Barbell_Bench_Press",
+    "openChoice": false,
+    "slots": 1,
+    "muscleGroups": ["Chest"]
+  },
+  {
+    "programName": "Incline press (BB or DB)",
+    "slug": "Barbell_Incline_Bench_Press_-_Medium_Grip",
+    "openChoice": false,
+    "slots": 1,
+    "muscleGroups": ["Chest"]
+  },
+  {
+    "programName": "Lat pulldown / cable row + face pulls",
+    "slug": null,
+    "openChoice": true,
+    "slots": 1,
+    "muscleGroups": ["Lats"]
+  },
+  {
+    "programName": "Deadlift — speed from floor (straight bar)",
+    "slug": "Barbell_Deadlift",
+    "openChoice": false,
+    "slots": 1,
+    "muscleGroups": ["Lower Back"]
+  },
+  {
+    "programName": "Squat — paused (2s, comp stance)",
+    "slug": "Barbell_Squat",
+    "openChoice": false,
+    "slots": 1,
+    "muscleGroups": ["Quadriceps"]
+  },
+  {
+    "programName": "Hack squat (quad / leg drive off floor)",
+    "slug": "Hack_Squat",
+    "openChoice": false,
+    "slots": 1,
+    "muscleGroups": ["Quadriceps"]
+  },
+  {
+    "programName": "Pull-ups (weighted if easy)",
+    "slug": "Weighted_Pull_Ups",
+    "openChoice": false,
+    "slots": 1,
+    "muscleGroups": ["Lats"]
+  },
+  {
+    "programName": "Triceps + biceps",
+    "slug": null,
+    "openChoice": true,
+    "slots": 2,
+    "muscleGroups": ["Triceps", "Biceps"]
+  },
+  {
+    "programName": "Core (ab wheel / hanging leg raise)",
+    "slug": null,
+    "openChoice": true,
+    "slots": 1,
+    "muscleGroups": ["Abdominals"]
+  },
+  {
+    "programName": "Paused DL (below knee)",
+    "slug": "Barbell_Deadlift",
+    "openChoice": false,
+    "slots": 1,
+    "muscleGroups": ["Lower Back"]
+  },
+  {
+    "programName": "Bench volume — light paused bench",
+    "slug": "Barbell_Bench_Press_-_Medium_Grip",
+    "openChoice": false,
+    "slots": 1,
+    "muscleGroups": ["Chest"]
+  },
+  {
+    "programName": "Bench volume — Larsen press (no leg drive)",
+    "slug": "Barbell_Bench_Press_-_Medium_Grip",
+    "openChoice": false,
+    "slots": 1,
+    "muscleGroups": ["Chest"]
+  },
+  {
+    "programName": "Bench volume — long-pause bench (3s)",
+    "slug": "Barbell_Bench_Press_-_Medium_Grip",
+    "openChoice": false,
+    "slots": 1,
+    "muscleGroups": ["Chest"]
+  }
+]

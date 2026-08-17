@@ -571,7 +571,13 @@ private struct ExerciseHeaderRow: View {
                     Text(exercise.exercise.name)
                         .font(Theme.heading)
                         .foregroundStyle(Theme.ink)
-                        .lineLimit(1)
+                        // Two lines rather than one: program exercise names are
+                        // long and descriptive ("Deadlift — heavy (straight
+                        // bar)"), and a single line truncates the part that
+                        // distinguishes it from the other three deadlift days.
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
                     if isActive {
                         Chip(text: "active", color: Theme.live)
                     }
@@ -655,39 +661,41 @@ private struct SetRow: View {
     /// and weight are inline text fields; RPE is a menu constrained to the
     /// app's 1–10 by 0.5 scale (Core Tenets §3), so an out-of-range or
     /// RIR-scaled value can't be entered.
+    ///
+    /// Width-agnostic by construction: nothing here has a fixed width, and the
+    /// two fields share the free space proportionally. An earlier version
+    /// pinned each field to a point width, which at 375pt (SE) overflowed and
+    /// let iOS truncate the *labels* instead — the set number rendered as "…"
+    /// and the unit "lb" as "l", which reads as corrupted data rather than a
+    /// tight layout.
     private var quantities: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             checkboxButton
 
             Text(String(format: "%02d", number))
                 .font(Theme.data(11))
                 .foregroundStyle(Theme.inkFaint)
+                // Never let the index be the thing that gets truncated.
+                .fixedSize()
 
-            numberField(value: repsBinding, width: 34, format: .number)
+            numberField(value: repsBinding, format: .number)
+                .layoutPriority(1)
+
             Text("×")
                 .font(Theme.data(12))
                 .foregroundStyle(Theme.inkFaint)
-            numberField(
-                value: weightBinding,
-                width: 62,
-                format: .number.precision(.fractionLength(0...2))
-            )
+                .fixedSize()
+
+            numberField(value: weightBinding, format: .number.precision(.fractionLength(0...2)))
+                .layoutPriority(2)
+
             Text(weightUnit.symbol)
                 .font(Theme.data(11))
                 .foregroundStyle(Theme.inkFaint)
+                .fixedSize()
 
-            Spacer(minLength: 4)
-
-            Picker("", selection: rpeBinding) {
-                Text("RPE —").tag(Float?.none)
-                ForEach(rpeOptions, id: \.self) { value in
-                    Text("RPE \(value.rpeDescription)").tag(Float?.some(value))
-                }
-            }
-            .labelsHidden()
-            .pickerStyle(.menu)
-            .font(Theme.data(12))
-            .tint(self.set.rpe == nil ? Theme.inkFaint : Theme.ink)
+            rpePicker
+                .fixedSize()
 
             Button(action: onEditNote) {
                 Image(systemName: hasNote ? "note.text" : "square.and.pencil")
@@ -695,22 +703,40 @@ private struct SetRow: View {
                     .foregroundStyle(hasNote ? Theme.signal : Theme.inkFaint)
             }
             .buttonStyle(.plain)
+            .fixedSize()
         }
+    }
+
+    /// The menu shows a bare number; "RPE" is carried once by the annotation
+    /// line below rather than repeated inside every picker, which is what made
+    /// this the widest element in the row.
+    private var rpePicker: some View {
+        Picker("", selection: rpeBinding) {
+            Text("—").tag(Float?.none)
+            ForEach(rpeOptions, id: \.self) { value in
+                Text(value.rpeDescription).tag(Float?.some(value))
+            }
+        }
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .font(Theme.data(13, weight: .medium))
+        .tint(self.set.rpe == nil ? Theme.inkFaint : Theme.ink)
     }
 
     /// The quiet second line: what was prescribed, and the rest — planned
     /// before the set is done, actually taken after.
+    ///
+    /// This line also carries the word "RPE" for the picker above it, so the
+    /// picker itself can stay a bare number and not dominate the row's width.
+    /// It wraps rather than truncating: this is the only place a percentage
+    /// prescription that didn't resolve to a weight is visible at all, and
+    /// silently clipping it would violate Core Tenets §10.
     private var annotations: some View {
-        HStack(spacing: 10) {
-            Text(restLabel)
+        HStack(alignment: .top, spacing: 10) {
+            Text(annotationText)
                 .font(Theme.data(10))
                 .foregroundStyle(done ? Theme.inkMuted : Theme.inkFaint)
-
-            if let prescription {
-                Text(prescription)
-                    .font(Theme.data(10))
-                    .foregroundStyle(setTypeAccent)
-            }
+                .fixedSize(horizontal: false, vertical: true)
 
             Spacer(minLength: 0)
 
@@ -719,14 +745,23 @@ private struct SetRow: View {
                     .font(Theme.label)
                     .tracking(1.1)
                     .foregroundStyle(Theme.inkFaint)
+                    .fixedSize()
             }
         }
-        .padding(.leading, 40)
+        .padding(.leading, 38)
     }
 
+    private var annotationText: String {
+        var parts = [restLabel]
+        if let prescription { parts.append(prescription) }
+        return parts.joined(separator: "   ")
+    }
+
+    /// No fixed width — the field takes what's available and shares it with its
+    /// sibling by layout priority, so the row reflows instead of overflowing on
+    /// a narrow screen.
     private func numberField<F: ParseableFormatStyle>(
         value: Binding<F.FormatInput>,
-        width: CGFloat,
         format: F
     ) -> some View where F.FormatOutput == String {
         TextField("", value: value, format: format)
@@ -736,7 +771,7 @@ private struct SetRow: View {
             .font(Theme.data(15, weight: done ? .regular : .medium))
             .foregroundStyle(done ? Theme.inkMuted : Theme.ink)
             .multilineTextAlignment(.center)
-            .frame(width: width)
+            .frame(minWidth: 30, maxWidth: 72)
             .padding(.vertical, 3)
             .background(Theme.panelRaised)
             .clipShape(RoundedRectangle(cornerRadius: 4))
