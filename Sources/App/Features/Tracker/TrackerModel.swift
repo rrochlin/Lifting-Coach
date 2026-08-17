@@ -28,6 +28,9 @@ final class TrackerModel {
 
     private let workouts: WorkoutStore
     private let users: UserStore
+    /// Used to resolve a performed variation to its canonical lift when
+    /// recording an achieved max — see `canonicalExercise(for:)`.
+    private let exercises: ExerciseStore
     private let userID: UUID
     /// Called after an achieved max is recorded, so the view can refresh
     /// `AppEnvironment.currentUser` — TrackerModel doesn't hold a reference to
@@ -37,11 +40,13 @@ final class TrackerModel {
     init(
         workouts: WorkoutStore,
         users: UserStore,
+        exercises: ExerciseStore,
         userID: UUID,
         onAchievedMaxRecorded: @escaping () -> Void = {}
     ) {
         self.workouts = workouts
         self.users = users
+        self.exercises = exercises
         self.userID = userID
         self.onAchievedMaxRecorded = onAchievedMaxRecorded
     }
@@ -109,25 +114,46 @@ final class TrackerModel {
     /// Achieved maxes come from sets, not manual entry (Core Tenets §6) — a
     /// heavier weight than the current best *is* the new best, checked every
     /// time a set is completed.
+    ///
+    /// The max is recorded against the **canonical** lift, not the variation
+    /// that was performed: a heavy Spoto press updates the bench press max
+    /// rather than starting a separate one. Without this, every program
+    /// variation accrues its own max, so the first working set of each one
+    /// reads as a PR and the banner fires constantly.
     private func recordAchievedMaxIfNeeded(setID: UUID, at date: Date) {
         guard let session,
-              let exercise = session.exercise(containingSetID: setID)?.exercise,
+              let performed = session.exercise(containingSetID: setID)?.exercise,
               let set = session.workout.allSets.first(where: { $0.id == setID })
         else { return }
 
         do {
-            let currentBest = try users.fetch(id: userID)?.latestAchievedMax(for: exercise.id)
-            guard let update = AchievedMaxUpdate.evaluate(set: set, for: exercise, currentBest: currentBest, at: date) else {
-                return
-            }
-            try users.recordAchievedMax(update, exerciseId: exercise.id, for: userID)
-            newAchievedMax = (exercise, update)
+            let canonical = try canonicalExercise(for: performed)
+            let currentBest = try users.fetch(id: userID)?.latestAchievedMax(for: canonical.id)
+            guard let update = AchievedMaxUpdate.evaluate(
+                set: set, for: performed, currentBest: currentBest, at: date
+            ) else { return }
+
+            try users.recordAchievedMax(update, exerciseId: canonical.id, for: userID)
+            // Report the canonical lift — "NEW MAX — BARBELL FULL SQUAT" is
+            // what the number actually belongs to.
+            newAchievedMax = (canonical, update)
             onAchievedMaxRecorded()
         } catch {
             // A missed max update shouldn't interrupt logging the set itself —
             // the workout write already succeeded via `persist()`.
             saveError = error.localizedDescription
         }
+    }
+
+    /// The catalog entry a performed exercise's max belongs to.
+    ///
+    /// `matchedSlug` is the link `CatalogMatcher` already establishes from a
+    /// program-authored variation to the canonical catalog entry it borrowed
+    /// metadata from; here it doubles as the rollup target. An exercise with no
+    /// match is its own canonical lift.
+    private func canonicalExercise(for exercise: Exercise) throws -> Exercise {
+        guard let slug = exercise.matchedSlug else { return exercise }
+        return try exercises.fetch(sourceSlug: slug) ?? exercise
     }
 
     func dismissAchievedMaxBanner() {

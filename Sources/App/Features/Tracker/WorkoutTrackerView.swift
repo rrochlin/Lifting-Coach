@@ -33,6 +33,7 @@ struct WorkoutTrackerView: View {
                 let model = TrackerModel(
                     workouts: environment.workouts,
                     users: environment.users,
+                    exercises: environment.exercises,
                     userID: userID,
                     onAchievedMaxRecorded: { environment.reloadUser() }
                 )
@@ -246,6 +247,9 @@ private struct ActiveWorkoutList: View {
     /// this is the active exercise" — a manual tap can push either direction.
     @State private var expandedOverrides: [UUID: Bool] = [:]
     @State private var noteEditorTarget: NoteEditorTarget?
+    /// The exercise whose slot is being filled — an open-choice slot being
+    /// resolved, or any exercise being swapped mid-workout.
+    @State private var choosingFor: ChoosingTarget?
 
     var body: some View {
         List {
@@ -260,6 +264,14 @@ private struct ActiveWorkoutList: View {
                 programmedNote: programmedNote(for: target),
                 usernote: usernoteBinding(for: target)
             )
+        }
+        .sheet(item: $choosingFor) { target in
+            ExercisePicker(initialMuscleFilter: target.muscleGroup) { picked in
+                // Recording what actually filled the slot: the logged exercise
+                // becomes the real movement, so history and achieved-max
+                // tracking reference something specific rather than a goal.
+                model.updateExercise(id: target.id) { $0.exercise = picked }
+            }
         }
     }
 
@@ -320,7 +332,13 @@ private struct ActiveWorkoutList: View {
             isExpanded: expanded,
             onToggleExpanded: { expandedOverrides[exercise.id] = !expanded },
             onDelete: { model.deleteExercise(id: exercise.id) },
-            onEditNote: { noteEditorTarget = .exercise(exercise.id) }
+            onEditNote: { noteEditorTarget = .exercise(exercise.id) },
+            onChooseExercise: {
+                choosingFor = ChoosingTarget(
+                    id: exercise.id,
+                    muscleGroup: exercise.exercise.isOpenChoice ? exercise.exercise.muscleGroup : nil
+                )
+            }
         )
         .panelGroupRow(expanded ? .top : .single, accent: accent)
 
@@ -330,6 +348,7 @@ private struct ActiveWorkoutList: View {
                     number: index + 1,
                     set: set,
                     isNextUp: model.session?.nextSet?.id == set.id,
+                    restTarget: model.session?.restTarget(afterSetWith: set.id) ?? 120,
                     onToggle: { toggle(set) },
                     onRepsChange: { reps in model.updateSet(id: set.id) { $0.reps = reps } },
                     onWeightChange: { weight in model.updateSet(id: set.id) { $0.weight = weight } },
@@ -450,6 +469,14 @@ private struct ActiveWorkoutList: View {
     }
 }
 
+/// Which exercise slot the picker is filling, and what to pre-filter it by.
+private struct ChoosingTarget: Identifiable {
+    let id: UUID
+    /// Non-nil for an open-choice slot — the muscle group the coach specified,
+    /// used to pre-filter the picker to plausible choices.
+    let muscleGroup: String?
+}
+
 /// Identifies which planned-vs-logged item the note editor sheet is open on.
 private enum NoteEditorTarget: Identifiable {
     case exercise(UUID)
@@ -531,6 +558,7 @@ private struct ExerciseHeaderRow: View {
     let onToggleExpanded: () -> Void
     let onDelete: () -> Void
     let onEditNote: () -> Void
+    let onChooseExercise: () -> Void
 
     var body: some View {
         HStack(spacing: 8) {
@@ -573,6 +601,14 @@ private struct ExerciseHeaderRow: View {
             }
 
             Menu {
+                // An open-choice slot names a goal, not a movement — recording
+                // which exercise actually filled it is the whole point, so it
+                // leads the menu while unresolved.
+                Button(
+                    exercise.exercise.isOpenChoice ? "Choose Exercise" : "Swap Exercise",
+                    systemImage: "arrow.triangle.2.circlepath",
+                    action: onChooseExercise
+                )
                 Button("Edit Note", systemImage: "note.text", action: onEditNote)
                 Button("Delete Exercise", systemImage: "trash", role: .destructive, action: onDelete)
             } label: {
@@ -597,160 +633,127 @@ private struct SetRow: View {
     let number: Int
     let set: WorkoutSet
     let isNextUp: Bool
+    /// Seconds of rest this set is prescribed — shown before it's performed so
+    /// the lifter knows what they're resting for, not just that a clock is
+    /// running.
+    let restTarget: Int
     let onToggle: () -> Void
     let onRepsChange: (Int?) -> Void
     let onWeightChange: (Measurement<UnitMass>?) -> Void
     let onRPEChange: (Float?) -> Void
     let onEditNote: () -> Void
 
-    /// Whether the reps/weight/RPE editors are showing. Defaults open only for
-    /// the next set to perform — see `onAppear` — everywhere else stays
-    /// collapsed to a single dense line until tapped.
-    @State private var isExpanded = false
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            header
-            if isExpanded {
-                editors
-            }
+        VStack(alignment: .leading, spacing: 5) {
+            quantities
+            annotations
         }
-        .padding(.vertical, 1)
-        .onAppear {
-            if isNextUp { isExpanded = true }
-        }
+        .padding(.vertical, 2)
     }
 
-    private var header: some View {
-        HStack(spacing: 10) {
+    /// Every quantity is visible and directly tappable — no expand step. Reps
+    /// and weight are inline text fields; RPE is a menu constrained to the
+    /// app's 1–10 by 0.5 scale (Core Tenets §3), so an out-of-range or
+    /// RIR-scaled value can't be entered.
+    private var quantities: some View {
+        HStack(spacing: 8) {
             checkboxButton
 
             Text(String(format: "%02d", number))
                 .font(Theme.data(11))
                 .foregroundStyle(Theme.inkFaint)
 
-            HStack(spacing: 8) {
-                Text(summary)
-                    .font(Theme.data(14, weight: done ? .regular : .medium))
-                    .foregroundStyle(done ? Theme.inkMuted : Theme.ink)
-                    .strikethrough(done, color: Theme.inkFaint)
+            numberField(value: repsBinding, width: 34, format: .number)
+            Text("×")
+                .font(Theme.data(12))
+                .foregroundStyle(Theme.inkFaint)
+            numberField(
+                value: weightBinding,
+                width: 62,
+                format: .number.precision(.fractionLength(0...2))
+            )
+            Text(weightUnit.symbol)
+                .font(Theme.data(11))
+                .foregroundStyle(Theme.inkFaint)
 
-                Spacer(minLength: 8)
+            Spacer(minLength: 4)
 
-                if let prescription {
-                    Text(prescription)
-                        .font(Theme.data(11))
-                        .foregroundStyle(setTypeAccent)
-                }
-
-                if hasNote {
-                    Image(systemName: "note.text")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Theme.signal)
-                }
-
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(Theme.inkFaint)
-                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
-            }
-            .contentShape(.rect)
-            .onTapGesture { isExpanded.toggle() }
-        }
-    }
-
-    /// Reps, weight, and RPE — every set is fully editable regardless of
-    /// completion state, since the checkbox and the editors are two decoupled
-    /// actions: edit whatever needs correcting, then check it off.
-    ///
-    /// Three labeled fields on one row, aligned under the summary line they
-    /// edit. Each carries its own micro-label because an unlabeled stepper and
-    /// a bare number are ambiguous mid-workout.
-    private var editors: some View {
-        // .top so every field's micro-label shares one baseline; the controls
-        // below them differ in height (stepper vs. text field vs. menu) and
-        // bottom-aligning made the labels stagger.
-        HStack(alignment: .top, spacing: 12) {
-            field("reps") {
-                HStack(spacing: 6) {
-                    stepperButton("minus") {
-                        onRepsChange(Swift.max(0, (self.set.reps ?? 0) - 1))
-                    }
-                    Text("\(self.set.reps ?? 0)")
-                        .font(Theme.data(15, weight: .medium))
-                        .foregroundStyle(Theme.ink)
-                        .frame(minWidth: 22)
-                    stepperButton("plus") {
-                        onRepsChange(Swift.min(30, (self.set.reps ?? 0) + 1))
-                    }
+            Picker("", selection: rpeBinding) {
+                Text("RPE —").tag(Float?.none)
+                ForEach(rpeOptions, id: \.self) { value in
+                    Text("RPE \(value.rpeDescription)").tag(Float?.some(value))
                 }
             }
-
-            field("weight") {
-                HStack(spacing: 3) {
-                    TextField("0", value: weightBinding, format: .number.precision(.fractionLength(0...2)))
-                        #if os(iOS)
-                        .keyboardType(.decimalPad)
-                        #endif
-                        .font(Theme.data(15, weight: .medium))
-                        .foregroundStyle(Theme.ink)
-                        .multilineTextAlignment(.trailing)
-                        .frame(width: 54)
-                    Text(weightUnit.symbol)
-                        .font(Theme.data(11))
-                        .foregroundStyle(Theme.inkFaint)
-                }
-            }
-
-            field("rpe") {
-                Picker("", selection: rpeBinding) {
-                    Text("—").tag(Float?.none)
-                    ForEach(rpeOptions, id: \.self) { value in
-                        Text(value.rpeDescription).tag(Float?.some(value))
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.menu)
-                .tint(Theme.ink)
-            }
-
-            Spacer(minLength: 0)
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .font(Theme.data(12))
+            .tint(self.set.rpe == nil ? Theme.inkFaint : Theme.ink)
 
             Button(action: onEditNote) {
-                Image(systemName: "note.text")
-                    .font(.system(size: 15))
+                Image(systemName: hasNote ? "note.text" : "square.and.pencil")
+                    .font(.system(size: 13))
                     .foregroundStyle(hasNote ? Theme.signal : Theme.inkFaint)
             }
             .buttonStyle(.plain)
         }
-        .padding(.leading, 50)
-        .padding(.top, 2)
     }
 
-    private func field<Content: View>(
-        _ label: String,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(label.uppercased())
-                .font(Theme.label)
-                .tracking(1.2)
-                .foregroundStyle(Theme.inkFaint)
-            content()
-                .frame(height: 26)
+    /// The quiet second line: what was prescribed, and the rest — planned
+    /// before the set is done, actually taken after.
+    private var annotations: some View {
+        HStack(spacing: 10) {
+            Text(restLabel)
+                .font(Theme.data(10))
+                .foregroundStyle(done ? Theme.inkMuted : Theme.inkFaint)
+
+            if let prescription {
+                Text(prescription)
+                    .font(Theme.data(10))
+                    .foregroundStyle(setTypeAccent)
+            }
+
+            Spacer(minLength: 0)
+
+            if let type = self.set.type, type != .working {
+                Text(type.rawValue.uppercased())
+                    .font(Theme.label)
+                    .tracking(1.1)
+                    .foregroundStyle(Theme.inkFaint)
+            }
         }
+        .padding(.leading, 40)
     }
 
-    private func stepperButton(_ symbol: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: symbol)
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(Theme.signal)
-                .frame(width: 26, height: 26)
-                .background(Theme.panelRaised)
-                .clipShape(RoundedRectangle(cornerRadius: 4))
+    private func numberField<F: ParseableFormatStyle>(
+        value: Binding<F.FormatInput>,
+        width: CGFloat,
+        format: F
+    ) -> some View where F.FormatOutput == String {
+        TextField("", value: value, format: format)
+            #if os(iOS)
+            .keyboardType(.decimalPad)
+            #endif
+            .font(Theme.data(15, weight: done ? .regular : .medium))
+            .foregroundStyle(done ? Theme.inkMuted : Theme.ink)
+            .multilineTextAlignment(.center)
+            .frame(width: width)
+            .padding(.vertical, 3)
+            .background(Theme.panelRaised)
+            .clipShape(RoundedRectangle(cornerRadius: 4))
+    }
+
+    /// Before the set is logged this is the target ("rest 2:00"); after, it's
+    /// what was actually taken ("rested 3:05"), which `completeSet` measures
+    /// from the previous completed set.
+    private var restLabel: String {
+        if done, let actual = self.set.restTime {
+            return "rested \(formatted(actual))"
         }
-        .buttonStyle(.plain)
+        return "rest \(formatted(restTarget))"
+    }
+
+    private func formatted(_ seconds: Int) -> String {
+        String(format: "%d:%02d", seconds / 60, seconds % 60)
     }
 
     private var checkboxButton: some View {
@@ -818,38 +821,28 @@ private struct SetRow: View {
         self.set.type == .warmup ? Theme.inkFaint : Theme.inkMuted
     }
 
-    private var summary: String {
-        let reps = set.reps.map { "\($0)" } ?? "—"
-        guard let weight = set.weight else { return "\(reps) reps" }
-        return "\(reps) × \(weight.liftedDescription)"
-    }
-
-    /// The trailing label. Priority is what the lifter most needs to see:
-    /// what they actually rated the set, then the target they were chasing, then
-    /// a deviation from the prescribed reps.
+    /// What was *prescribed* — the logged values now have their own always-
+    /// visible controls, so this line carries only the target being chased:
+    /// the effort target, and the load as written when it differs from the
+    /// resolved weight (Core Tenets §10 — "80% goal" beats showing nothing).
     private var prescription: String? {
+        var parts: [String] = []
+
         // The effort target rides in the snapshot, materialized from the
         // exercise at workout start.
-        let target = set.plannedFrom?.effort?.rpe
-
-        // A logged RPE is the whole point of logging RPE — show it whatever the
-        // prescription was, alongside the target when there is one.
-        if let logged = set.rpe {
-            guard let target else { return "RPE \(logged.rpeDescription)" }
-            return "RPE \(logged.rpeDescription) / \(target.rpeDescription)"
+        if let target = self.set.plannedFrom?.effort?.rpe {
+            parts.append("target RPE \(target.rpeDescription)")
         }
-        if let target {
-            return "RPE \(target.rpeDescription)"
+        if case .percentOf = self.set.plannedFrom?.load,
+           let load = self.set.plannedFrom?.load {
+            parts.append(load.prescriptionDescription)
         }
-        // A percentage that didn't resolve to a weight still shows what was
-        // asked — "80% goal" beats a blank row (Core Tenets §10).
-        if set.weight == nil, let load = set.plannedFrom?.load {
-            return load.prescriptionDescription
+        if let plannedReps = self.set.plannedFrom?.reps,
+           let actual = self.set.reps,
+           plannedReps != actual {
+            parts.append("planned \(plannedReps)")
         }
-        if let plannedReps = set.plannedFrom?.reps, let actual = set.reps, plannedReps != actual {
-            return "planned \(plannedReps)"
-        }
-        return nil
+        return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 }
 
@@ -965,34 +958,42 @@ private struct ExercisePicker: View {
     @Environment(AppEnvironment.self) private var environment
     @Environment(\.dismiss) private var dismiss
 
+    /// Pre-selects a muscle filter — set when filling an open-choice slot the
+    /// coach targeted at a specific muscle group.
+    var initialMuscleFilter: String?
     let onPick: (Exercise) -> Void
 
     @State private var exercises: [Exercise] = []
     @State private var query = ""
+    @State private var muscleFilter: String?
+    @State private var equipmentFilter: String?
 
     var body: some View {
         NavigationStack {
-            List(filtered) { exercise in
-                Button {
-                    onPick(exercise)
-                    dismiss()
-                } label: {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(exercise.name)
-                        HStack(spacing: 4) {
-                            Text(exercise.muscleGroup)
-                            if let equipment = exercise.equipment {
-                                Text("· \(equipment.capitalized)")
+            VStack(spacing: 0) {
+                filterBar
+                List(filtered) { exercise in
+                    Button {
+                        onPick(exercise)
+                        dismiss()
+                    } label: {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(exercise.name)
+                            HStack(spacing: 4) {
+                                Text(exercise.muscleGroup)
+                                if let equipment = exercise.equipment {
+                                    Text("· \(equipment.capitalized)")
+                                }
                             }
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                         }
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
                     }
+                    .buttonStyle(.plain)
                 }
-                .buttonStyle(.plain)
             }
             .searchable(text: $query)
-            .navigationTitle("Add Exercise")
+            .navigationTitle(initialMuscleFilter == nil ? "Add Exercise" : "Choose Exercise")
             // iOS-only, and the app is iOS-only — the guard exists so these
             // sources still typecheck against the macOS SDK, which is currently
             // the only way to compile-check them on this machine.
@@ -1006,13 +1007,62 @@ private struct ExercisePicker: View {
             }
             .task {
                 exercises = (try? environment.exercises.fetchAll()) ?? []
+                if muscleFilter == nil { muscleFilter = initialMuscleFilter }
             }
         }
     }
 
+    /// Muscle and equipment chips. Lift-family grouping (Larsen/Spoto/close-grip
+    /// as bench variations) isn't here yet — that needs a real notion of family
+    /// on the catalog, not a name-substring guess.
+    private var filterBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 6) {
+                ForEach(muscleOptions, id: \.self) { muscle in
+                    filterChip(muscle, isOn: muscleFilter == muscle) {
+                        muscleFilter = muscleFilter == muscle ? nil : muscle
+                    }
+                }
+                Divider().frame(height: 18)
+                ForEach(equipmentOptions, id: \.self) { equipment in
+                    filterChip(equipment.capitalized, isOn: equipmentFilter == equipment) {
+                        equipmentFilter = equipmentFilter == equipment ? nil : equipment
+                    }
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+        }
+    }
+
+    private func filterChip(_ label: String, isOn: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label)
+                .font(Theme.data(11))
+                .foregroundStyle(isOn ? Theme.void : Theme.inkMuted)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 5)
+                .background(isOn ? Theme.signal : Theme.panelRaised)
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var muscleOptions: [String] {
+        Array(Set(exercises.map(\.muscleGroup))).sorted()
+    }
+
+    private var equipmentOptions: [String] {
+        Array(Set(exercises.compactMap(\.equipment))).sorted()
+    }
+
     private var filtered: [Exercise] {
-        guard !query.isEmpty else { return exercises }
-        return exercises.filter { $0.name.localizedCaseInsensitiveContains(query) }
+        exercises.filter { exercise in
+            if let muscleFilter, exercise.muscleGroup != muscleFilter { return false }
+            if let equipmentFilter, exercise.equipment != equipmentFilter { return false }
+            if !query.isEmpty, !exercise.name.localizedCaseInsensitiveContains(query) { return false }
+            return true
+        }
     }
 }
 
