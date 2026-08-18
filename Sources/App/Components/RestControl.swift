@@ -1,31 +1,26 @@
 import SwiftUI
 import LiftingCoachModel
 
-/// Rest, as one control in two states.
+/// Rest. The whole of it — there is no other rest control in this app.
 ///
-/// There used to be two of these: a countdown row in the tracker, and a
-/// separate editor behind the per-set chip. They did the same job with
-/// different layouts, different buttons, and different ideas about where the
-/// clock goes — so tuning rest mid-workout meant learning a second control at
-/// the exact moment there's least attention to spare.
+/// One line sits under every set: the rest that follows *that* set. It's the
+/// same line whether rest is prescribed, being edited, or counting down, and
+/// what tells the three apart is colour, not layout. Inactive is quiet ink.
+/// Active is amber with a track draining under it. Complete is cyan.
 ///
-/// One component now, in two modes. `.prescription` is a rest value being set;
-/// `.running` is that value counting down. The skeleton is identical in both —
-/// clock, track, steppers, presets, one action — and only what has to differ
-/// does: the running state moves, fills its track, and turns amber for the live
-/// moment (cyan the instant it's up). Learn it once, in either place.
+/// This replaced three separate surfaces that could all be on screen at once —
+/// a chip on every set row, a popover the chip opened, and a countdown block
+/// with its own copy of the same buttons. Three ways to say one thing, two of
+/// them stacked on top of the third.
 ///
-/// **A running clock shows nothing but the clock.** Rest is meant to proceed
-/// unmolested: while it counts down there are no steppers and no presets, just
-/// the time and the track it's draining. Tapping it opens the editing interface
-/// — the same rows the `.prescription` state shows, because they're the same
-/// control — and tapping again puts them away. Everything is still inline; it's
-/// simply not all on screen at once, and it grows and shrinks rather than
-/// appearing.
+/// **Collapsed until asked.** All that shows is `REST ——— 2:00`, and while a
+/// rest is running it just runs, unmolested. Tapping opens the editor — ±30/±15,
+/// the presets, and the one action that applies — and tapping again puts it
+/// away, growing and shrinking rather than blinking in and out.
 ///
-/// The exception is expiry, which auto-opens: the moment rest is up is exactly
-/// when the lifter wants the controls, and a REST COMPLETE readout with no way
-/// to acknowledge it would be a dead end.
+/// Expiry opens it once, because a REST COMPLETE readout with no way to
+/// acknowledge it is a dead end. It can be closed again from there; that's why
+/// the open state is a latch rather than something derived from `hasExpired`.
 struct RestControl: View {
     enum Mode {
         /// A rest value being set — a set's own rest, or the default it
@@ -54,28 +49,22 @@ struct RestControl: View {
     private static let maximum = 1800
     private static let presets = [60, 90, 120, 150, 180, 240, 300]
 
-    /// Whether the editing rows are showing. Only the running state collapses;
-    /// the prescription state *is* the editor, so there'd be nothing left of it.
+    /// Whether the editor is showing. A latch, deliberately — an expired timer
+    /// opens itself, and the lifter has to be able to close it again.
     @State private var isEditing = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
-            if isRunning {
-                Button {
-                    isEditing.toggle()
-                } label: {
-                    readout.contentShape(.rect)
-                }
-                .buttonStyle(.plain)
-            } else {
-                readout
+            Button { isEditing.toggle() } label: {
+                readout.contentShape(.rect)
             }
+            .buttonStyle(.plain)
 
             // Two rows when open: how to nudge the clock, and where to jump to.
             // The action rides on the stepper row rather than taking a third —
             // inline under a set, every row costs the lifter screen they'd
             // rather spend on the next set.
-            if showsControls {
+            if isEditing {
                 VStack(alignment: .leading, spacing: 9) {
                     stepperRow
                     presetRow
@@ -89,16 +78,14 @@ struct RestControl: View {
         // Amber to cyan is a real change of state and worth a beat; snapping
         // between them mid-glance reads as a glitch.
         .animation(.easeInOut(duration: 0.3), value: isOver)
+        // Opens once when rest is up — on appear as well as on change, because
+        // a rest of zero seconds is already over before this view exists and
+        // nothing would observe a change that already happened.
+        .onAppear { if isOver { isEditing = true } }
+        .onChange(of: isOver) { _, over in
+            if over { isEditing = true }
+        }
     }
-
-    /// The prescription state is always open — it's what the chip was tapped to
-    /// get at. The running state opens on a tap.
-    ///
-    /// An expired timer is open regardless, and derived rather than latched into
-    /// `isEditing`: a rest of zero seconds is already over before this view
-    /// exists, so nothing would observe the change and REST COMPLETE would sit
-    /// there with no way to acknowledge it.
-    private var showsControls: Bool { !isRunning || isEditing || isOver }
 
     // MARK: Readout
 
@@ -146,7 +133,12 @@ struct RestControl: View {
                     .fill(Theme.hairline)
                     .frame(height: 1)
                 Text(seconds.restClockDescription)
-                    .font(Theme.data(24, weight: .medium))
+                    // The live clock is the biggest thing on the row; a
+                    // prescribed one is annotation and sits back. Size is part
+                    // of what separates the two states, along with the colour
+                    // and the track — three quiet 2:00s under three sets
+                    // shouldn't shout as loudly as the one that's running.
+                    .font(Theme.data(isRunning ? 24 : 17, weight: .medium))
                     .foregroundStyle(clockInk)
                     // Digits keep their column as the count changes, so the
                     // readout doesn't jitter every second — and the clock is the
@@ -155,15 +147,16 @@ struct RestControl: View {
                     .monospacedDigit()
                     .contentTransition(.numericText(countsDown: isRunning))
                     .fixedSize()
-                // Only the running clock hides anything, so only it claims to
-                // open. It points up once the controls are out.
-                if isRunning {
-                    FieldCaret(color: accent.opacity(0.85))
-                        .rotationEffect(.degrees(showsControls ? 180 : 0))
-                }
+                FieldCaret(color: accent.opacity(0.85))
+                    .rotationEffect(.degrees(isEditing ? 180 : 0))
             }
 
-            track(progress)
+            // Only a running rest draws a track. Its presence is half of what
+            // says "this one is live" — a dim rule under every set would be
+            // noise, and under the running one it wouldn't mean anything.
+            if isRunning {
+                track(progress)
+            }
         }
     }
 
@@ -267,10 +260,13 @@ struct RestControl: View {
         return false
     }
 
+    /// The whole of the active/inactive distinction. A prescribed rest is
+    /// annotation and reads like it; a running one is the live moment and gets
+    /// the app's one amber; a finished one is cyan, like every other completion.
     private var accent: Color {
         switch mode {
         case .running: isOver ? Theme.signal : Theme.live
-        case .prescription: Theme.inkMuted
+        case .prescription(_, let isExplicit): isExplicit ? Theme.inkMuted : Theme.inkFaint
         }
     }
 

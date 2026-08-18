@@ -70,16 +70,30 @@ struct WorkoutTrackerView: View {
     /// target comes from the prescription and an ad-hoc set has none.
     private func startRestDemoIfRequested(_ model: TrackerModel) {
         guard let seconds = LaunchArguments.restDemoSeconds, !model.isActive else { return }
-        guard let exercise = try? environment.exercises.fetchAll().first else { return }
+        let catalog = (try? environment.exercises.fetchAll()) ?? []
+        guard let first = catalog.first else { return }
 
         model.startAdHoc()
-        model.addExercise(exercise, sets: 3)
-        guard let first = model.session?.workout.allSets.first else { return }
-        model.updateSet(id: first.id) { $0.reps = 5; $0.weight = Measurement(value: 225, unit: .pounds) }
-        model.completeSet(id: first.id)
-        if let started = model.session?.exercise(containingSetID: first.id) {
-            model.startRest(for: started, afterSetWith: first.id, seconds: seconds)
+        model.addExercise(first, sets: 2)
+        // A second lift so the first one can be *finished* — completing an
+        // exercise's last set hands "active" to the next, which is the state
+        // that used to fold the finished exercise shut with a live countdown
+        // still inside it. Reproducing that here is the only way to see it
+        // without a UI test target.
+        if catalog.count > 1 {
+            model.addExercise(catalog[1], sets: 3)
         }
+
+        let sets = model.session?.exerciseGroups.first?.first?.sets ?? []
+        for set in sets {
+            model.updateSet(id: set.id) { $0.reps = 5; $0.weight = Measurement(value: 225, unit: .pounds) }
+            model.completeSet(id: set.id)
+        }
+
+        guard let last = sets.last,
+              let started = model.session?.exercise(containingSetID: last.id)
+        else { return }
+        model.startRest(for: started, afterSetWith: last.id, seconds: seconds)
     }
     #endif
 
@@ -369,12 +383,13 @@ private struct ActiveWorkoutList: View {
     @ViewBuilder
     private func exerciseRows(exercise: WorkoutExercise, groupIndex: Int) -> some View {
         let isActiveGroup = model.session?.activeExercise?.group == groupIndex
-        // Defaults to expanded only for the exercise currently being worked;
-        // a tap can override in either direction without losing the default
-        // once the workout moves on to the next lift.
-        let expanded = expandedOverrides[exercise.id] ?? isActiveGroup
         let sets = exercise.sets ?? []
         let restTimer = model.rest?.exerciseID == exercise.id ? model.rest : nil
+        // Defaults to expanded for the exercise being worked, and for one whose
+        // rest is still running: completing an exercise's last set hands
+        // "active" to the next lift, which used to fold this one shut with a
+        // live countdown inside it. A tap still overrides in either direction.
+        let expanded = expandedOverrides[exercise.id] ?? (isActiveGroup || restTimer != nil)
         let accent = isActiveGroup ? Theme.live.opacity(0.55) : Theme.hairline
 
         ExerciseHeaderRow(
@@ -409,24 +424,19 @@ private struct ActiveWorkoutList: View {
                         number: index + 1,
                         set: set,
                         isNextUp: model.session?.nextSet?.id == set.id,
-                        restTarget: model.session?.restTarget(afterSetWith: set.id) ?? 120,
-                        prescribedRest: model.session?.prescribedRest(afterSetWith: set.id) ?? 120,
                         unit: unit,
                         onToggle: { toggle(set) },
                         onRepsChange: { reps in model.updateSet(id: set.id) { $0.reps = reps } },
                         onWeightChange: { weight in model.updateSet(id: set.id) { $0.weight = weight } },
                         onRPEChange: { rpe in model.updateSet(id: set.id) { $0.rpe = rpe } },
-                        onRestChange: { seconds in model.setRest(seconds, forSetWith: set.id) },
                         onEditNote: { noteEditorTarget = .set(set.id) }
                     )
 
-                    if let restTimer, restingHere {
-                        Divider()
-                            .overlay(Theme.hairline)
-                            .padding(.top, 10)
-                        restControl(restTimer)
-                            .padding(.top, 10)
-                    }
+                    // Every set carries its rest, on the line under it, in the
+                    // one control the app has for rest. When this set's rest is
+                    // the one running, that same line *is* the countdown.
+                    restControl(for: set, timer: restingHere ? restTimer : nil)
+                        .padding(.top, 8)
                 }
                 .panelGroupRow(.middle, accent: restingHere ? Theme.live : accent)
                 .swipeActions(edge: .trailing) {
@@ -444,7 +454,7 @@ private struct ActiveWorkoutList: View {
             // The rest is still real, so it falls back to the foot of the
             // exercise rather than vanishing along with the row.
             if let restTimer, !sets.contains(where: { $0.id == restTimer.setID }) {
-                restControl(restTimer)
+                runningRestControl(restTimer)
                     .panelGroupRow(.middle, accent: Theme.live)
             }
 
@@ -458,10 +468,27 @@ private struct ActiveWorkoutList: View {
         }
     }
 
-    /// The rest period in progress, as the same control the per-set rest chip
-    /// opens — see `RestControl`. Rest is one idea and wears one face; this is
-    /// that face with the clock moving.
-    private func restControl(_ timer: RestTimer) -> some View {
+    /// A set's rest — the prescription, or the countdown when it's this set's
+    /// rest that's running. One control either way; see `RestControl`.
+    @ViewBuilder
+    private func restControl(for set: WorkoutSet, timer: RestTimer?) -> some View {
+        if let timer {
+            runningRestControl(timer)
+        } else {
+            let target = model.session?.restTarget(afterSetWith: set.id) ?? 120
+            let prescribed = model.session?.prescribedRest(afterSetWith: set.id) ?? 120
+            let isTuned = set.restOverride != nil
+            RestControl(
+                mode: .prescription(seconds: target, isExplicit: isTuned),
+                onSet: { model.setRest($0, forSetWith: set.id) },
+                // Only offered once there's something to go back to.
+                actionLabel: isTuned ? "reset \(prescribed.restClockDescription)" : nil,
+                onAction: isTuned ? { model.setRest(nil, forSetWith: set.id) } : nil
+            )
+        }
+    }
+
+    private func runningRestControl(_ timer: RestTimer) -> some View {
         RestControl(
             mode: .running(timer),
             onAdjust: { model.adjustRest(by: $0) },
@@ -742,26 +769,26 @@ private struct SetRow: View {
     let number: Int
     let set: WorkoutSet
     let isNextUp: Bool
-    /// Seconds of rest that will actually be counted after this set — the
-    /// lifter's own value if they've tuned one, otherwise the prescription.
-    let restTarget: Int
-    /// What the plan asks for, ignoring any tuning — what "revert" goes back to.
-    let prescribedRest: Int
     /// The unit this row reads and writes weights in.
     let unit: WeightUnit
     let onToggle: () -> Void
     let onRepsChange: (Int?) -> Void
     let onWeightChange: (Measurement<UnitMass>?) -> Void
     let onRPEChange: (Float?) -> Void
-    let onRestChange: (Int?) -> Void
     let onEditNote: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             quantities
-            annotations
+            if hasAnnotations {
+                annotations
+            }
         }
         .padding(.vertical, 2)
+    }
+
+    private var hasAnnotations: Bool {
+        prescription != nil || (self.set.type.map { $0 != .working } ?? false)
     }
 
     /// Every quantity is visible and directly tappable — no expand step. Reps
@@ -818,26 +845,19 @@ private struct SetRow: View {
         }
     }
 
-    /// The second line: this set's rest, as a control, plus what was prescribed.
+    /// The quiet second line: what was *prescribed*, where that isn't already
+    /// the number in a field above.
     ///
-    /// Rest sits here rather than up in `quantities` for room — the top row is
-    /// already at its limit at 375pt — but it's the same kind of thing as the
-    /// fields above it, and styled to say so. The prescription text wraps
-    /// rather than truncating: this is the only place a percentage that didn't
-    /// resolve to a weight is visible at all, and silently clipping it would
-    /// violate Core Tenets §10.
+    /// Rest used to live here as a chip. It has its own line under this row now
+    /// — the same `RestControl` that becomes the countdown — because a chip
+    /// here plus a countdown below plus the popover the chip opened made three
+    /// ways to say one thing, two of them on screen at once.
+    ///
+    /// The prescription text wraps rather than truncating: this is the only
+    /// place a percentage that didn't resolve to a weight is visible at all,
+    /// and silently clipping it would violate Core Tenets §10.
     private var annotations: some View {
         HStack(alignment: .center, spacing: 10) {
-            RestPicker(
-                seconds: restTarget,
-                isExplicit: self.set.restOverride != nil,
-                // Only offered once there's something to go back to.
-                resetLabel: self.set.restOverride == nil
-                    ? nil
-                    : "reset \(prescribedRest.restClockDescription)",
-                onChange: onRestChange
-            )
-
             if let prescription {
                 Text(prescription)
                     .font(Theme.data(10))

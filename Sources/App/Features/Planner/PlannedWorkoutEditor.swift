@@ -366,27 +366,17 @@ private struct PlannedSetRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             quantities
-            annotations
+            if annotationText != nil {
+                annotations
+            }
+            rest
         }
         .padding(.vertical, 2)
     }
 
-    /// Rest, plus whatever the controls above don't already say.
-    ///
-    /// Rest is authored per set here, matching where it's stored
-    /// (`PlannedSet.restTime`) and how the tracker now edits it. The exercise
-    /// header still writes all of them at once, because "three minutes on
-    /// squats" is usually one instruction — but a day that wants three minutes
-    /// before the top single and ninety seconds after can now say so.
+    /// Whatever the controls above don't already say.
     private var annotations: some View {
         HStack(alignment: .center, spacing: 10) {
-            RestPicker(
-                seconds: resolvedRest,
-                isExplicit: self.set.restTime != nil,
-                resetLabel: self.set.restTime == nil ? nil : "use block default",
-                onChange: { seconds in onChange { $0.restTime = seconds } }
-            )
-
             if let annotationText {
                 Text(annotationText)
                     .font(Theme.data(10))
@@ -396,6 +386,25 @@ private struct PlannedSetRow: View {
 
             Spacer(minLength: 0)
         }
+        .padding(.leading, 26)
+    }
+
+    /// The same `RestControl` the tracker puts under a set — there is one rest
+    /// control in this app, and authoring a rest and counting one down are the
+    /// same idea seen at different times.
+    ///
+    /// Rest is authored per set here, matching where it's stored
+    /// (`PlannedSet.restTime`). The exercise header still writes all of them at
+    /// once, because "three minutes on squats" is usually one instruction — but
+    /// a day that wants three minutes before the top single and ninety seconds
+    /// after can say so.
+    private var rest: some View {
+        RestControl(
+            mode: .prescription(seconds: resolvedRest, isExplicit: self.set.restTime != nil),
+            onSet: { seconds in onChange { $0.restTime = seconds } },
+            actionLabel: self.set.restTime == nil ? nil : "use block default",
+            onAction: self.set.restTime == nil ? nil : { onChange { $0.restTime = nil } }
+        )
         .padding(.leading, 26)
     }
 
@@ -622,7 +631,7 @@ private struct LoadModeMenu: View {
 }
 
 /// Rest for a whole exercise at once — writes every one of its sets. The sets
-/// each carry their own `RestPicker` for the cases that differ.
+/// each carry their own `RestControl` for the cases that differ.
 private struct RestMenu: View {
     let seconds: Int?
     /// The exercise's sets don't agree, so there's no single value to show.
@@ -642,7 +651,7 @@ private struct RestMenu: View {
                     .font(Theme.label)
                     .tracking(1.2)
                     .foregroundStyle(Theme.inkMuted)
-                // Same field as `RestPicker` and `RPEPicker` wear, so the three
+                // Same field as `RPEPicker` wears, so the header's controls
                 // controls on this header read as one family of editable
                 // values rather than one field and two labels.
                 HStack(spacing: 5) {
