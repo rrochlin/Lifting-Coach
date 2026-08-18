@@ -10,7 +10,7 @@ struct WorkoutTrackerView: View {
     @State private var model: TrackerModel?
     @State private var isPickingExercise = false
     @State private var isConfirmingFinish = false
-    @State private var editMode: EditMode = .inactive
+    @State private var isConfirmingDiscard = false
     /// The current calendar week's plan — a lifter should be able to see (and
     /// start, or skip) more than just today.
     @State private var weekPlan: [PlannedWorkout] = []
@@ -27,7 +27,6 @@ struct WorkoutTrackerView: View {
             .navigationTitle("Workout")
             .toolbar { toolbar }
         }
-        .environment(\.editMode, $editMode)
         .task {
             if model == nil, let userID = environment.currentUser?.id {
                 let model = TrackerModel(
@@ -232,8 +231,7 @@ struct WorkoutTrackerView: View {
         ActiveWorkoutList(
             model: model,
             unit: environment.weightUnit,
-            onAddExercise: { isPickingExercise = true },
-            onRequestFinish: { isConfirmingFinish = true }
+            onAddExercise: { isPickingExercise = true }
         )
         .themedConfirm(
             isPresented: $isConfirmingFinish,
@@ -243,6 +241,17 @@ struct WorkoutTrackerView: View {
             cancelLabel: "Keep Going",
             onConfirm: { model.finish() }
         )
+        // Discard throws away every set logged so far and there is no undo, so
+        // it asks first — the same courtesy finishing already got, for the
+        // action that actually destroys something.
+        .themedConfirm(
+            isPresented: $isConfirmingDiscard,
+            title: "Discard this workout?",
+            message: discardWarning(for: model),
+            confirmLabel: "Discard",
+            cancelLabel: "Keep Going",
+            onConfirm: { model.discard() }
+        )
     }
 
     /// Say what's about to be dropped rather than letting it be discovered later.
@@ -251,6 +260,20 @@ struct WorkoutTrackerView: View {
         let skipped = progress.total - progress.completed
         guard skipped > 0 else { return "All sets are logged." }
         return "\(skipped) unfinished set\(skipped == 1 ? "" : "s") won't be saved."
+    }
+
+    /// Count what's about to be thrown away. "Nothing is logged yet" is worth
+    /// saying too — it's the difference between a misfire and a real loss.
+    private func discardWarning(for model: TrackerModel) -> String {
+        let logged = model.session?.progress.completed ?? 0
+        guard logged > 0 else { return "Nothing is logged yet." }
+        return "\(logged) logged set\(logged == 1 ? "" : "s") will be deleted. This can't be undone."
+    }
+
+    /// A workout with nothing logged has nothing to finish; discarding is what
+    /// that one wants.
+    private func canFinish(_ model: TrackerModel) -> Bool {
+        (model.session?.progress.completed ?? 0) > 0
     }
 
     @ToolbarContentBuilder
@@ -265,15 +288,19 @@ struct WorkoutTrackerView: View {
                     .font(Theme.data(13, weight: .medium))
                     .foregroundStyle(progress.completed == progress.total ? Theme.signal : Theme.inkMuted)
             }
+            // The two ways a workout ends, and nothing else. There was an
+            // EditButton here driving \.editMode for drag-to-reorder; reorder
+            // still works by long-pressing a row, and a mode toggle isn't worth
+            // a permanent seat next to the only two decisions that matter.
             ToolbarItem(placement: .primaryAction) {
-                // Drives drag-to-reorder for both exercise groups and sets —
-                // SwiftUI wires EditButton to the shared \.editMode binding
-                // automatically, and suppresses .swipeActions while active so
-                // reorder and delete never contend for the same gesture.
-                EditButton()
+                Button("FINISH") { isConfirmingFinish = true }
+                    .font(Theme.label)
+                    .tracking(1.2)
+                    .foregroundStyle(canFinish(model) ? Theme.signal : Theme.inkFaint)
+                    .disabled(!canFinish(model))
             }
             ToolbarItem(placement: .primaryAction) {
-                Button("DISCARD", role: .destructive) { model.discard() }
+                Button("DISCARD", role: .destructive) { isConfirmingDiscard = true }
                     .font(Theme.label)
                     .tracking(1.2)
                     .foregroundStyle(Theme.alert)
@@ -294,7 +321,6 @@ private struct ActiveWorkoutList: View {
     /// deliberately a plain view over its inputs.
     let unit: WeightUnit
     let onAddExercise: () -> Void
-    let onRequestFinish: () -> Void
 
     /// Per-exercise expand override. Absent means "default to expanded only if
     /// this is the active exercise" — a manual tap can push either direction.
@@ -498,6 +524,9 @@ private struct ActiveWorkoutList: View {
         )
     }
 
+    /// Adding an exercise is the only action that belongs at the foot of the
+    /// list. Finishing moved to the toolbar — a second "Finish Workout" button
+    /// down here was a second way to do the one thing.
     private var actionSection: some View {
         VStack(spacing: 8) {
             Button(action: onAddExercise) {
@@ -511,28 +540,10 @@ private struct ActiveWorkoutList: View {
                     )
             }
             .foregroundStyle(Theme.ink)
-
-            Button(action: onRequestFinish) {
-                Label("Finish Workout", systemImage: "checkmark.circle")
-                    .font(Theme.body.weight(.semibold))
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 11)
-                    .background(canFinish ? Theme.signalDim.opacity(0.28) : Color.clear)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .strokeBorder(canFinish ? Theme.signal : Theme.hairline, lineWidth: 1)
-                    )
-            }
-            .foregroundStyle(canFinish ? Theme.signal : Theme.inkFaint)
-            .disabled(!canFinish)
         }
         .buttonStyle(.plain)
         .padding(.top, 6)
         .panelRow()
-    }
-
-    private var canFinish: Bool {
-        (model.session?.progress.completed ?? 0) > 0
     }
 
     private func toggle(_ set: WorkoutSet) {
