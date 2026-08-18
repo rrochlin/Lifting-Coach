@@ -15,10 +15,17 @@ import LiftingCoachModel
 /// does: the running state moves, fills its track, and turns amber for the live
 /// moment (cyan the instant it's up). Learn it once, in either place.
 ///
-/// **Everything is inline.** The running state carries its own presets rather
-/// than opening a sheet to reach them, which is what makes "make it three
-/// minutes" one tap instead of six, and removes a presentation that used to
-/// hang off a view rebuilding itself every second.
+/// **A running clock shows nothing but the clock.** Rest is meant to proceed
+/// unmolested: while it counts down there are no steppers and no presets, just
+/// the time and the track it's draining. Tapping it opens the editing interface
+/// — the same rows the `.prescription` state shows, because they're the same
+/// control — and tapping again puts them away. Everything is still inline; it's
+/// simply not all on screen at once, and it grows and shrinks rather than
+/// appearing.
+///
+/// The exception is expiry, which auto-opens: the moment rest is up is exactly
+/// when the lifter wants the controls, and a REST COMPLETE readout with no way
+/// to acknowledge it would be a dead end.
 struct RestControl: View {
     enum Mode {
         /// A rest value being set — a set's own rest, or the default it
@@ -47,17 +54,51 @@ struct RestControl: View {
     private static let maximum = 1800
     private static let presets = [60, 90, 120, 150, 180, 240, 300]
 
+    /// Whether the editing rows are showing. Only the running state collapses;
+    /// the prescription state *is* the editor, so there'd be nothing left of it.
+    @State private var isEditing = false
+
     var body: some View {
-        // Three rows in both modes: what the clock says, how to nudge it, and
-        // where to jump to. The action rides on the stepper row rather than
-        // taking a fourth — inline under a set, every row costs the lifter
-        // screen they'd rather spend on the next set.
         VStack(alignment: .leading, spacing: 9) {
-            readout
-            stepperRow
-            presetRow
+            if isRunning {
+                Button {
+                    isEditing.toggle()
+                } label: {
+                    readout.contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+            } else {
+                readout
+            }
+
+            // Two rows when open: how to nudge the clock, and where to jump to.
+            // The action rides on the stepper row rather than taking a third —
+            // inline under a set, every row costs the lifter screen they'd
+            // rather spend on the next set.
+            if showsControls {
+                VStack(alignment: .leading, spacing: 9) {
+                    stepperRow
+                    presetRow
+                }
+                // Grows out of the readout above it rather than blinking into
+                // existence under the lifter's thumb.
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
         }
+        .animation(.easeInOut(duration: 0.22), value: isEditing)
+        // Amber to cyan is a real change of state and worth a beat; snapping
+        // between them mid-glance reads as a glitch.
+        .animation(.easeInOut(duration: 0.3), value: isOver)
     }
+
+    /// The prescription state is always open — it's what the chip was tapped to
+    /// get at. The running state opens on a tap.
+    ///
+    /// An expired timer is open regardless, and derived rather than latched into
+    /// `isEditing`: a rest of zero seconds is already over before this view
+    /// exists, so nothing would observe the change and REST COMPLETE would sit
+    /// there with no way to acknowledge it.
+    private var showsControls: Bool { !isRunning || isEditing || isOver }
 
     // MARK: Readout
 
@@ -114,6 +155,12 @@ struct RestControl: View {
                     .monospacedDigit()
                     .contentTransition(.numericText(countsDown: isRunning))
                     .fixedSize()
+                // Only the running clock hides anything, so only it claims to
+                // open. It points up once the controls are out.
+                if isRunning {
+                    FieldCaret(color: accent.opacity(0.85))
+                        .rotationEffect(.degrees(showsControls ? 180 : 0))
+                }
             }
 
             track(progress)
