@@ -424,13 +424,8 @@ private struct ActiveWorkoutList: View {
                         Divider()
                             .overlay(Theme.hairline)
                             .padding(.top, 10)
-                        RestTimerRow(
-                            timer: restTimer,
-                            onAdjust: { model.adjustRest(by: $0) },
-                            onSetRemaining: { model.setRestRemaining($0) },
-                            onDismiss: { model.dismissRest() }
-                        )
-                        .padding(.top, 10)
+                        restControl(restTimer)
+                            .padding(.top, 10)
                     }
                 }
                 .panelGroupRow(.middle, accent: restingHere ? Theme.live : accent)
@@ -449,13 +444,8 @@ private struct ActiveWorkoutList: View {
             // The rest is still real, so it falls back to the foot of the
             // exercise rather than vanishing along with the row.
             if let restTimer, !sets.contains(where: { $0.id == restTimer.setID }) {
-                RestTimerRow(
-                    timer: restTimer,
-                    onAdjust: { model.adjustRest(by: $0) },
-                    onSetRemaining: { model.setRestRemaining($0) },
-                    onDismiss: { model.dismissRest() }
-                )
-                .panelGroupRow(.middle, accent: Theme.live)
+                restControl(restTimer)
+                    .panelGroupRow(.middle, accent: Theme.live)
             }
 
             Button { model.addSet(toExerciseWith: exercise.id) } label: {
@@ -466,6 +456,19 @@ private struct ActiveWorkoutList: View {
             .buttonStyle(.plain)
             .panelGroupRow(.bottom, accent: accent)
         }
+    }
+
+    /// The rest period in progress, as the same control the per-set rest chip
+    /// opens — see `RestControl`. Rest is one idea and wears one face; this is
+    /// that face with the clock moving.
+    private func restControl(_ timer: RestTimer) -> some View {
+        RestControl(
+            mode: .running(timer),
+            onAdjust: { model.adjustRest(by: $0) },
+            onSet: { model.setRestRemaining($0) },
+            actionLabel: timer.hasExpired ? "done" : "skip",
+            onAction: { model.dismissRest() }
+        )
     }
 
     private var actionSection: some View {
@@ -831,7 +834,7 @@ private struct SetRow: View {
                 // Only offered once there's something to go back to.
                 resetLabel: self.set.restOverride == nil
                     ? nil
-                    : "use prescribed \(prescribedRest.restClockDescription)",
+                    : "reset \(prescribedRest.restClockDescription)",
                 onChange: onRestChange
             )
 
@@ -1044,141 +1047,6 @@ private struct AchievedMaxBanner: View {
 }
 
 // MARK: - Rest timer
-
-/// The rest countdown, sitting under the lift it follows.
-///
-/// Rendered from the clock on every tick rather than from `Text(timerInterval:)`,
-/// which counts straight past zero into negative time. Rest owed can't be
-/// negative — once it's up the row says so and stops, instead of quietly
-/// becoming a stopwatch measuring how late the lifter is.
-private struct RestTimerRow: View {
-    let timer: RestTimer
-    /// Seconds to add (or, negative, subtract).
-    let onAdjust: (Int) -> Void
-    /// Puts a specific duration on the clock, replacing what's left.
-    let onSetRemaining: (Int) -> Void
-    let onDismiss: () -> Void
-
-    /// The countdown is editable, not just nudgeable: ±30 is fine for "one more
-    /// breath," but "make it three minutes" took six taps and arithmetic. What
-    /// opens is the same `RestAdjuster` the per-set rest chip uses — one editor
-    /// for one idea.
-    @State private var isEditing = false
-    @State private var editingRemaining = 0
-
-    var body: some View {
-        // One second is the finest granularity the display shows, so that's how
-        // often it needs to redraw.
-        TimelineView(.periodic(from: timer.startedAt, by: 1)) { context in
-            let isOver = timer.isOver(at: context.date)
-            let accent = isOver ? Theme.signal : Theme.live
-
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 10) {
-                    Image(systemName: isOver ? "checkmark.circle.fill" : "timer")
-                        .font(.system(size: 13))
-                        .foregroundStyle(accent)
-                    Text(isOver ? "REST COMPLETE" : "REST")
-                        .font(Theme.label)
-                        .tracking(1.6)
-                        .foregroundStyle(accent)
-                    Spacer(minLength: 6)
-                    Button {
-                        editingRemaining = Int(timer.remaining(at: Date()).rounded(.up))
-                        isEditing = true
-                    } label: {
-                        HStack(spacing: 6) {
-                            Text(clock(timer.remaining(at: context.date)))
-                                .font(Theme.data(22, weight: .medium))
-                                .foregroundStyle(isOver ? accent : Theme.ink)
-                                // Digits keep their column as the count changes,
-                                // so the readout doesn't jitter every second.
-                                .monospacedDigit()
-                                .contentTransition(.numericText(countsDown: true))
-                            FieldCaret(color: accent.opacity(0.85))
-                        }
-                        .editableField(isActive: true, accent: accent.opacity(0.55))
-                        .contentShape(.rect)
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                ProgressView(value: timer.progress(at: context.date))
-                    .progressViewStyle(.linear)
-                    .tint(accent)
-                    .scaleEffect(y: 0.6, anchor: .center)
-
-                HStack(spacing: 8) {
-                    // Adjusting is the interaction this row is *for* — the
-                    // prescription is a starting point, not a rule (Core Tenets
-                    // §1) — so both controls are drawn as buttons rather than
-                    // left as bare tappable text.
-                    adjustButton(label: "−30", seconds: -30, enabled: !isOver)
-                    adjustButton(label: "+30", seconds: 30, enabled: true)
-                    Spacer(minLength: 6)
-                    actionButton(title: isOver ? "DISMISS" : "SKIP REST", accent: accent)
-                }
-            }
-            .padding(.vertical, 2)
-        }
-        // Anchored outside the `TimelineView` on purpose: that closure rebuilds
-        // every second, and a presentation hung off a view being rebuilt each
-        // tick is a presentation asking to be dismissed under the lifter.
-        .popover(isPresented: $isEditing) {
-            RestAdjuster(
-                title: "rest remaining",
-                seconds: editingRemaining,
-                onChange: { seconds in
-                    guard let seconds else { return }
-                    editingRemaining = seconds
-                    onSetRemaining(seconds)
-                },
-                onDismiss: { isEditing = false }
-            )
-            .presentationCompactAdaptation(.popover)
-        }
-    }
-
-    private func adjustButton(label: String, seconds: Int, enabled: Bool) -> some View {
-        Button { onAdjust(seconds) } label: {
-            Text(label)
-                .font(Theme.data(13, weight: .medium))
-                .foregroundStyle(enabled ? Theme.ink : Theme.inkFaint)
-                .frame(minWidth: 52, minHeight: 30)
-                .background(Theme.panelRaised)
-                .clipShape(RoundedRectangle(cornerRadius: 5))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 5)
-                        .strokeBorder(Theme.hairline, lineWidth: 1)
-                )
-        }
-        .buttonStyle(.plain)
-        .disabled(!enabled)
-    }
-
-    private func actionButton(title: String, accent: Color) -> some View {
-        Button(action: onDismiss) {
-            Text(title)
-                .font(Theme.label)
-                .tracking(1.2)
-                .foregroundStyle(accent)
-                .padding(.horizontal, 12)
-                .frame(minHeight: 30)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 5)
-                        .strokeBorder(accent.opacity(0.6), lineWidth: 1)
-                )
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func clock(_ seconds: TimeInterval) -> String {
-        // Rounded up, so a timer showing 1:00 has a full minute left rather than
-        // flicking to 0:59 the instant it starts.
-        let total = Int(seconds.rounded(.up))
-        return String(format: "%d:%02d", total / 60, total % 60)
-    }
-}
 
 // MARK: - Exercise picker
 
