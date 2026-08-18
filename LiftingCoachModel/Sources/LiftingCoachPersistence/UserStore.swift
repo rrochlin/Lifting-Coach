@@ -8,6 +8,7 @@ private struct UserRow: Codable, FetchableRecord, PersistableRecord {
     var id: String
     var name: String
     var email: String
+    var preferredUnit: String
 }
 
 private struct BodyWeightRow: Codable, FetchableRecord, PersistableRecord {
@@ -60,7 +61,8 @@ public struct UserStore: Sendable {
             try UserRow(
                 id: user.id.uuidString,
                 name: user.name,
-                email: user.email
+                email: user.email,
+                preferredUnit: user.preferredUnit.rawValue
             ).save(db)
 
             // Metrics are replaced wholesale rather than diffed — there are at
@@ -124,6 +126,22 @@ public struct UserStore: Sendable {
         let user = User(name: "Me", email: "")
         try save(user)
         return user
+    }
+
+    /// Sets the unit weights are read and entered in.
+    ///
+    /// Touches one column and nothing else. Deliberately does **not** rewrite
+    /// any stored weight: history keeps the unit it was logged in, and the
+    /// preference is applied on the way to the screen (see
+    /// `Measurement.expressed(in:)`). Converting the table would round every
+    /// row a little and make a display choice destructive.
+    public func setPreferredUnit(_ unit: WeightUnit, for userId: UUID) throws {
+        try database.writer.write { db in
+            try db.execute(
+                sql: "UPDATE user SET preferredUnit = ? WHERE id = ?",
+                arguments: [unit.rawValue, userId.uuidString]
+            )
+        }
     }
 
     /// Records a bodyweight entry without rewriting the rest of the user.
@@ -222,7 +240,8 @@ public struct UserStore: Sendable {
                 uniqueKeysWithValues: weights.map {
                     ($0.day, measurement(value: $0.value, symbol: $0.unit))
                 }
-            )
+            ),
+            preferredUnit: WeightUnit(rawValue: row.preferredUnit) ?? .pounds
         )
     }
 }

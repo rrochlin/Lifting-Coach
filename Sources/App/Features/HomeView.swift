@@ -48,7 +48,7 @@ struct HomeView: View {
             .task { load() }
         }
         .sheet(isPresented: $isLoggingBodyWeight) {
-            LogBodyWeightSheet { weight in
+            LogBodyWeightSheet(unit: environment.weightUnit) { weight in
                 logBodyWeight(weight)
             }
         }
@@ -190,7 +190,8 @@ struct HomeView: View {
             VStack(spacing: 9) {
                 Readout(
                     label: "bodyweight",
-                    value: environment.currentUser?.currentBodyWeight?.liftedDescription ?? "——",
+                    value: environment.currentUser?.currentBodyWeight?
+                        .liftedDescription(in: environment.weightUnit) ?? "——",
                     accent: environment.currentUser?.currentBodyWeight == nil ? Theme.inkFaint : Theme.ink,
                     size: 17
                 )
@@ -273,8 +274,9 @@ struct HomeView: View {
     /// "achieved / goal", each blank where unrecorded — "— / 495 lb" is an
     /// honest state, not a display bug.
     private func maxSummary(_ id: Int) -> String {
-        let achieved = environment.currentUser?.max(.achieved, for: id)?.liftedDescription ?? "—"
-        let goal = environment.currentUser?.max(.goal, for: id)?.liftedDescription ?? "—"
+        let unit = environment.weightUnit
+        let achieved = environment.currentUser?.max(.achieved, for: id)?.liftedDescription(in: unit) ?? "—"
+        let goal = environment.currentUser?.max(.goal, for: id)?.liftedDescription(in: unit) ?? "—"
         return "\(achieved) / \(goal)"
     }
 
@@ -300,10 +302,13 @@ struct HomeView: View {
 
 private struct LogBodyWeightSheet: View {
     @Environment(\.dismiss) private var dismiss
+    /// Opens on the lifter's own unit. The picker stays, because one weigh-in
+    /// on a gym scale in the other unit shouldn't mean converting by hand.
+    let unit: WeightUnit
     let onSave: (Measurement<UnitMass>) -> Void
 
     @State private var text = ""
-    @State private var unit: UnitMass = .pounds
+    @State private var entryUnit: UnitMass = .pounds
 
     var body: some View {
         NavigationStack {
@@ -311,7 +316,7 @@ private struct LogBodyWeightSheet: View {
                 HStack {
                     TextField("Weight", text: $text)
                         .keyboardType(.decimalPad)
-                    Picker("Unit", selection: $unit) {
+                    Picker("Unit", selection: $entryUnit) {
                         Text("lb").tag(UnitMass.pounds)
                         Text("kg").tag(UnitMass.kilograms)
                     }
@@ -320,6 +325,7 @@ private struct LogBodyWeightSheet: View {
                 }
             }
             .navigationTitle("Log Bodyweight")
+            .onAppear { entryUnit = unit.unit }
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
@@ -327,7 +333,7 @@ private struct LogBodyWeightSheet: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
                         guard let value = Double(text) else { return }
-                        onSave(Measurement(value: value, unit: unit))
+                        onSave(Measurement(value: value, unit: entryUnit))
                         dismiss()
                     }
                     .disabled(Double(text) == nil)

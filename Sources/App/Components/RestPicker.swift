@@ -33,27 +33,35 @@ struct RestPicker: View {
 
     var body: some View {
         Button { isPresented = true } label: {
-            HStack(spacing: 4) {
+            HStack(spacing: 5) {
                 if let label {
                     Text(label)
                         .font(Theme.label)
                         .tracking(1.2)
                         .foregroundStyle(Theme.inkMuted)
                 }
-                Text(seconds.restClockDescription)
-                    .font(Theme.data(13, weight: .medium))
-                    .foregroundStyle(isExplicit ? Theme.ink : Theme.inkFaint)
-                    .padding(.vertical, 3)
-                    .padding(.horizontal, 5)
-                    .background(Theme.panelRaised)
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                HStack(spacing: 5) {
+                    Image(systemName: "timer")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(isExplicit ? Theme.ink : Theme.inkFaint)
+                    Text(seconds.restClockDescription)
+                        .font(Theme.data(13, weight: .medium))
+                        .foregroundStyle(isExplicit ? Theme.ink : Theme.inkFaint)
+                    FieldCaret(color: isExplicit ? Theme.inkMuted : Theme.inkFaint)
+                }
+                // Outlined like the reps and weight fields because it is the
+                // same kind of thing. Drawn as a bare filled rectangle it read
+                // as annotation — a number the app was telling you, not one you
+                // could tell the app.
+                .editableField(isActive: isExplicit, accent: Theme.fieldEdge)
             }
             .fixedSize()
             .contentShape(.rect)
         }
         .buttonStyle(.plain)
         .popover(isPresented: $isPresented) {
-            RestScale(
+            RestAdjuster(
+                title: "rest",
                 seconds: seconds,
                 resetLabel: resetLabel,
                 onChange: onChange,
@@ -68,9 +76,18 @@ struct RestPicker: View {
 
 // MARK: - The adjuster
 
-private struct RestScale: View {
+/// The rest editor itself: a big readout, fine steppers, and the jumps.
+///
+/// Shared by the per-set `RestPicker` and by the running rest timer, which
+/// opens the same control to retune what's on the clock. Rest is one idea in
+/// this app and gets one editor — two different controls for "how long am I
+/// resting" would be two places to disagree.
+struct RestAdjuster: View {
+    /// What this instance is editing — "rest" for a set, "rest remaining" for a
+    /// countdown already running.
+    var title: String = "rest"
     let seconds: Int
-    let resetLabel: String?
+    var resetLabel: String?
     let onChange: (Int?) -> Void
     let onDismiss: () -> Void
 
@@ -79,7 +96,7 @@ private struct RestScale: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            SectionLabel(text: "rest")
+            SectionLabel(text: title)
 
             HStack(spacing: 6) {
                 Text(seconds.restClockDescription)

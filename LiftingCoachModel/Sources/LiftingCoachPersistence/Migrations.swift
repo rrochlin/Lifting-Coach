@@ -334,6 +334,22 @@ extension AppDatabase {
             }
         }
 
+        // Additive, same reasoning as v2-v7 above.
+        //
+        // Backs User.preferredUnit: the unit weights are read and entered in.
+        // A display preference, so nothing already stored changes — every
+        // logged set keeps the unit it was entered in, and the app converts on
+        // the way to the screen.
+        //
+        // Defaults to lb rather than to the device locale. This is the owner's
+        // own training log and it's written in pounds; a locale lookup would be
+        // guessing at something already known.
+        migrator.registerMigration("v9_userPreferredUnit") { db in
+            try db.alter(table: "user") { t in
+                t.add(column: "preferredUnit", .text).notNull().defaults(to: "lb")
+            }
+        }
+
         return migrator
     }
 }

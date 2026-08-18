@@ -84,10 +84,17 @@ final class PlannerModel {
     /// A prescription as a real weight, where the referenced max is recorded.
     /// `nil` is a legitimate answer — the caller shows the prescription as
     /// written instead of inventing a number.
+    ///
+    /// Comes back in the lifter's own unit, because every caller is displaying
+    /// it. Note the split this creates in the planner and it is the intended
+    /// one: an *authored* absolute load keeps the unit it was written in (the
+    /// load mode menu is where that's chosen), while a weight the app *derives*
+    /// — 72% of a 495 lb goal — reads in whatever the lifter asked to read in.
     func resolvedWeight(for load: LoadPrescription, exercise: Exercise) -> Measurement<UnitMass>? {
         // Absolute loads don't need the lifter at all, so resolve through the
         // prescription rather than gating everything behind an optional User.
-        load.resolvedWeight { reference in user?.max(reference, for: exercise.id) }
+        let weight = load.resolvedWeight { reference in user?.max(reference, for: exercise.id) }
+        return weight?.expressed(in: user?.preferredUnit ?? .pounds)
     }
 
     /// Rest a planned set resolves to: its own value, then the selected block's

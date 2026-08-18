@@ -42,6 +42,15 @@ public struct User: Codable, Hashable, Identifiable, Sendable {
     public var goalMaxes: [Int: GoalMax]?
     /// Keyed by start of day, same convention as `WorkoutBlock`'s dictionaries.
     public var bodyWeight: [Date: Measurement<UnitMass>]?
+    /// The unit weights are read and entered in.
+    ///
+    /// A display and entry preference, not a storage format: weights are still
+    /// persisted in whatever unit they were entered in (see
+    /// `Measurement.expressed(in:)`), so switching this converts what's on
+    /// screen without rewriting a single logged set. It belongs on the lifter
+    /// rather than on a workout because it's about who's reading, not about
+    /// what happened.
+    public var preferredUnit: WeightUnit
 
     public init(
         id: UUID = UUID(),
@@ -50,7 +59,8 @@ public struct User: Codable, Hashable, Identifiable, Sendable {
         workoutPlan: WorkoutPlan? = nil,
         achievedMaxes: [Int: [AchievedMax]]? = nil,
         goalMaxes: [Int: GoalMax]? = nil,
-        bodyWeight: [Date: Measurement<UnitMass>]? = nil
+        bodyWeight: [Date: Measurement<UnitMass>]? = nil,
+        preferredUnit: WeightUnit = .pounds
     ) {
         self.id = id
         self.name = name
@@ -59,6 +69,7 @@ public struct User: Codable, Hashable, Identifiable, Sendable {
         self.achievedMaxes = achievedMaxes
         self.goalMaxes = goalMaxes
         self.bodyWeight = bodyWeight
+        self.preferredUnit = preferredUnit
     }
 
     /// Most recently recorded bodyweight, if any.

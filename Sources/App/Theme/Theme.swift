@@ -25,6 +25,11 @@ enum Theme {
     /// Hairline rules and panel edges. Cool, low-contrast — structure you feel
     /// more than see.
     static let hairline = Color(red: 0.145, green: 0.188, blue: 0.251)
+    /// The edge of an editable field. Brighter than `hairline` on purpose: a
+    /// structural rule can afford to be felt rather than seen, but the outline
+    /// that says "you can change this number" has to be seen, in a gym, at
+    /// arm's length, mid-set.
+    static let fieldEdge = Color(red: 0.243, green: 0.318, blue: 0.412)
 
     // MARK: Ink
 
@@ -136,6 +141,49 @@ struct Chip: View {
             .overlay(
                 RoundedRectangle(cornerRadius: 3)
                     .strokeBorder(color.opacity(0.5), lineWidth: 1)
+            )
+    }
+}
+
+/// The "you can change this" cue: a small caret on a value that opens a picker.
+///
+/// Strong and Hevy both mark a tappable value this way, and it's the difference
+/// between a number that reads as a readout and one that reads as a control.
+/// Every quantity in a set row was previously drawn as a quiet filled rectangle
+/// with no edge and no caret, which made an editable RPE look exactly like the
+/// static annotation text beside it.
+struct FieldCaret: View {
+    var color: Color = Theme.inkFaint
+
+    var body: some View {
+        Image(systemName: "chevron.down")
+            .font(.system(size: 8, weight: .bold))
+            .foregroundStyle(color)
+    }
+}
+
+extension View {
+    /// Draws a value as an editable field: filled, outlined, and tall enough to
+    /// hit with a thumb mid-set.
+    ///
+    /// The one shared look for every quantity a lifter can change — reps,
+    /// weight, RPE, rest — so that "this is a control" is a single visual fact
+    /// rather than something each screen re-decides. 30pt is short of Apple's
+    /// 44pt guidance and deliberately so: a set row carries five of these
+    /// side by side at 375pt, and the fields sit inside a row whose own
+    /// padding carries the rest of the target.
+    ///
+    /// `isActive` brightens the edge for a value the lifter set themselves, so
+    /// an inherited default and a deliberate choice don't look identical.
+    func editableField(isActive: Bool = false, accent: Color = Theme.fieldEdge) -> some View {
+        self
+            .padding(.horizontal, 7)
+            .frame(minHeight: 30)
+            .background(Theme.panelRaised)
+            .clipShape(RoundedRectangle(cornerRadius: 5))
+            .overlay(
+                RoundedRectangle(cornerRadius: 5)
+                    .strokeBorder(isActive ? accent : Theme.fieldEdge, lineWidth: 1)
             )
     }
 }

@@ -488,9 +488,8 @@ private struct PlannedSetRow: View {
             .foregroundStyle(Theme.ink)
             .multilineTextAlignment(.center)
             .frame(minWidth: 30, maxWidth: 72)
-            .padding(.vertical, 3)
-            .background(Theme.panelRaised)
-            .clipShape(RoundedRectangle(cornerRadius: 4))
+            // Outlined like the tracker's fields — same contract, same look.
+            .editableField(isActive: true)
     }
 
     // `self.` throughout: a bare `set` opening a computed property's body parses
@@ -571,9 +570,16 @@ private struct LoadModeMenu: View {
             Divider()
             Button("No load", role: .destructive) { switchTo(.cleared) }
         } label: {
-            Text(label)
-                .font(Theme.data(11, weight: .medium))
-                .foregroundStyle(load == nil ? Theme.inkFaint : Theme.inkMuted)
+            // The unit sat here as bare text, which made the one control that
+            // says "this number is pounds, not a percentage" look like a label
+            // on the field beside it. A caret is the whole fix.
+            HStack(spacing: 3) {
+                Text(label)
+                    .font(Theme.data(11, weight: .medium))
+                FieldCaret(color: load == nil ? Theme.inkFaint : Theme.inkMuted)
+            }
+            .foregroundStyle(load == nil ? Theme.inkFaint : Theme.inkMuted)
+            .fixedSize()
         }
     }
 
@@ -636,16 +642,19 @@ private struct RestMenu: View {
                     .font(Theme.label)
                     .tracking(1.2)
                     .foregroundStyle(Theme.inkMuted)
-                // Same chip as `RestPicker` and `RPEPicker` wear, so the three
+                // Same field as `RestPicker` and `RPEPicker` wear, so the three
                 // controls on this header read as one family of editable
                 // values rather than one field and two labels.
-                Text(displayValue)
-                    .font(Theme.data(13, weight: .medium))
-                    .foregroundStyle(seconds == nil ? Theme.inkFaint : Theme.ink)
-                    .padding(.vertical, 3)
-                    .padding(.horizontal, 5)
-                    .background(Theme.panelRaised)
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                HStack(spacing: 5) {
+                    Image(systemName: "timer")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(seconds == nil ? Theme.inkFaint : Theme.ink)
+                    Text(displayValue)
+                        .font(Theme.data(13, weight: .medium))
+                        .foregroundStyle(seconds == nil ? Theme.inkFaint : Theme.ink)
+                    FieldCaret(color: seconds == nil ? Theme.inkFaint : Theme.inkMuted)
+                }
+                .editableField(isActive: seconds != nil)
             }
             .fixedSize()
         }

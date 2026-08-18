@@ -227,6 +227,15 @@ final class TrackerModel {
         scheduleExpiry(for: timer, now: now)
     }
 
+    /// Replaces what's left on the clock — the lifter tapping the countdown
+    /// itself and picking a duration, rather than nudging it by ±30.
+    func setRestRemaining(_ seconds: Int, now: Date = Date()) {
+        guard var timer = rest else { return }
+        timer.setRemaining(seconds, now: now)
+        rest = timer
+        scheduleExpiry(for: timer, now: now)
+    }
+
     /// Ends rest early, or dismisses an expired timer.
     func dismissRest() {
         rest = nil

@@ -276,11 +276,25 @@ struct User {
 	var goalMaxes: Dictionary<Int, GoalMax>?
 	// always use start of day, same as WorkoutBlock's dictionaries
 	var bodyWeight: Dictionary<Date, Measurement<UnitMass>>?
+	var preferredUnit: WeightUnit  // lb | kg — a reading preference, see below
 	var email: String
 	var uuid: UUID
 	var name: String
 }
 ```
+
+## Units are a reading preference, not a storage format
+
+Weights are stored in whatever unit they were entered in — `Measurement<UnitMass>` persists as value plus unit symbol, never normalized. `User.preferredUnit` decides what a lifter *reads*, and every weight the app displays is converted on the way to the screen.
+
+The two rules that follow from that split:
+
+- **Switching units rewrites nothing.** A set logged at 225 lb is still a 225 lb row after the lifter switches to kg; it simply reads as 102.1 kg. Converting the tables instead would round every historical row and make a display choice destructive.
+- **A conversion rounds to a tenth; an unconverted weight is left exactly alone.** 157.5 lb read in pounds is what the lifter typed, and rounding it would be the app editing their log. A converted weight's extra decimals are conversion noise — a tenth of a kilo is more than ten times finer than the smallest plate on any bar.
+
+There's one deliberate asymmetry, in the planner. An **authored** absolute load keeps the unit it was written in (the load mode menu is where lb/kg is chosen for a prescription — that's authorship, and the plan means what it says). A **derived** weight — 72% of a 495 lb goal — reads in the lifter's unit like everything else.
+
+`WeightUnit` is a two-case enum rather than all of `UnitMass`: grams and stones are real units and neither is a plausible answer to "what do you load your bar in." Its raw values are the same symbols weights are stored under, so a preference and a stored weight's unit column speak the same language.
 
 ## Exercise Catalog
 Resolved: backed by a vendored snapshot of `yuhonas/free-exercise-db` (public domain, ~870 exercises — equipment, muscle groups, instructions, category). See `notes/Workout App/workout_assets_overview.md` for the license survey this came out of, and `LiftingCoachModel/Sources/LiftingCoachPersistence/Resources/FreeExerciseDB.LICENSE.txt` for exact provenance. Vendored, not fetched live — a shipped app depending on a third-party GitHub URL for its own catalog is an availability/integrity risk not worth taking for data this static.

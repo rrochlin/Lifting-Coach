@@ -75,6 +75,20 @@ public struct RestTimer: Identifiable, Equatable, Sendable {
         hasExpired = isOver(at: now)
     }
 
+    /// Puts a specific amount of time on the clock, replacing what's left.
+    ///
+    /// The ± buttons nudge; this is the lifter tapping the countdown itself and
+    /// saying "three minutes." Same principle either way (Core Tenets §1) — the
+    /// prescription started the clock, the lifter owns it from there.
+    ///
+    /// `startedAt` deliberately stays put, so the bar still measures this rest
+    /// period from when it actually began rather than restarting under the
+    /// lifter's thumb.
+    public mutating func setRemaining(_ seconds: Int, now: Date = Date()) {
+        endsAt = now.addingTimeInterval(TimeInterval(max(0, seconds)))
+        hasExpired = isOver(at: now)
+    }
+
     /// Floored at one second so `progress` can't divide by zero on a rest
     /// prescription of nothing.
     public var duration: TimeInterval { max(1, endsAt.timeIntervalSince(startedAt)) }

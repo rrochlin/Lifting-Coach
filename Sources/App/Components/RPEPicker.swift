@@ -45,14 +45,16 @@ struct RPEPicker: View {
                         .tracking(1.2)
                         .foregroundStyle(Theme.inkMuted)
                 }
-                Text(displayValue)
-                    .font(Theme.data(13, weight: .medium))
-                    .foregroundStyle(value == nil ? Theme.inkFaint : Theme.signal)
-                    .frame(minWidth: 26)
-                    .padding(.vertical, 3)
-                    .padding(.horizontal, 5)
-                    .background(Theme.panelRaised)
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                HStack(spacing: 5) {
+                    Text(displayValue)
+                        .font(Theme.data(13, weight: .medium))
+                        .foregroundStyle(value == nil ? Theme.inkFaint : Theme.signal)
+                    FieldCaret(color: value == nil ? Theme.inkFaint : Theme.signal.opacity(0.75))
+                }
+                // Outlined and caretted rather than drawn as a quiet filled
+                // rectangle: an RPE chip that looked like the annotation text
+                // beside it gave a lifter no reason to believe it was tappable.
+                .editableField(isActive: value != nil, accent: Theme.signal.opacity(0.5))
             }
             .fixedSize()
             .contentShape(.rect)
@@ -73,9 +75,15 @@ struct RPEPicker: View {
         }
     }
 
+    /// An unset RPE reads "RPE", not "—".
+    ///
+    /// A dash says "there's nothing here"; the field's own name says "there's
+    /// nothing here *yet*, and here's what it wants." Costs nothing in width at
+    /// 375pt, and it's how Strong and Hevy label an empty field.
     private var displayValue: String {
-        let text = value?.rpeDescription ?? placeholder ?? "—"
-        return (prefix ?? "") + text
+        if let value { return (prefix ?? "") + value.rpeDescription }
+        if let placeholder { return (prefix ?? "") + placeholder }
+        return label == nil ? "RPE" : "—"
     }
 }
 

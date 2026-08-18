@@ -84,6 +84,23 @@ public final class AppEnvironment {
         )
     }
 
+    /// The unit weights are read and entered in, app-wide.
+    ///
+    /// Falls back to pounds only in the window before the lifter is resolved at
+    /// launch — every real read has a user behind it.
+    public var weightUnit: WeightUnit { currentUser?.preferredUnit ?? .pounds }
+
+    /// Switches the unit every screen reads weights in.
+    ///
+    /// Nothing stored changes: a set logged at 225 lb is still 225 lb on disk,
+    /// and simply reads as 102.06 kg from here on. Converting the tables would
+    /// make a display choice destructive and would round every historical row.
+    public func setWeightUnit(_ unit: WeightUnit) {
+        guard let user = currentUser, user.preferredUnit != unit else { return }
+        try? users.setPreferredUnit(unit, for: user.id)
+        reloadUser()
+    }
+
     /// Re-reads the lifter after their metrics change, so a newly recorded 1RM
     /// is reflected the next time a plan resolves a `%1RM` prescription.
     public func reloadUser() {

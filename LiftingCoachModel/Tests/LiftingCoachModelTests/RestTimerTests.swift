@@ -84,6 +84,38 @@ struct RestTimerTests {
         #expect(rest.hasExpired)
     }
 
+    @Test("Setting the remaining time replaces what's left on the clock")
+    func setRemaining() {
+        var rest = timer(120)
+        rest.setRemaining(180, now: later(60))
+
+        #expect(rest.remaining(at: later(60)) == 180)
+        #expect(!rest.hasExpired)
+        // `startedAt` stays where it was, so the bar still measures this rest
+        // period from when it actually began rather than restarting.
+        #expect(rest.duration == 240)
+    }
+
+    @Test("Setting the remaining time to nothing ends the rest")
+    func setRemainingToZero() {
+        var rest = timer(120)
+        rest.setRemaining(0, now: later(30))
+
+        #expect(rest.remaining(at: later(30)) == 0)
+        #expect(rest.isOver(at: later(30)))
+        #expect(rest.hasExpired)
+    }
+
+    @Test("Putting time back on an expired clock revives it")
+    func setRemainingRevives() {
+        var rest = timer(60)
+        rest.hasExpired = true
+        rest.setRemaining(90, now: later(60))
+
+        #expect(rest.remaining(at: later(60)) == 90)
+        #expect(!rest.hasExpired)
+    }
+
     @Test("Adding time to a finished timer puts it back on the clock")
     func adjustRevivesAnExpiredTimer() {
         var rest = timer(60)

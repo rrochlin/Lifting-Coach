@@ -217,6 +217,7 @@ struct WorkoutTrackerView: View {
     private func activeWorkout(_ model: TrackerModel) -> some View {
         ActiveWorkoutList(
             model: model,
+            unit: environment.weightUnit,
             onAddExercise: { isPickingExercise = true },
             onRequestFinish: { isConfirmingFinish = true }
         )
@@ -274,6 +275,10 @@ struct WorkoutTrackerView: View {
 /// nested `ForEach`es, and half a dozen closures is more than it will solve.
 private struct ActiveWorkoutList: View {
     let model: TrackerModel
+    /// The unit the lifter reads weights in. Passed down rather than read from
+    /// the environment here, for the same reason `model` is: this list is
+    /// deliberately a plain view over its inputs.
+    let unit: WeightUnit
     let onAddExercise: () -> Void
     let onRequestFinish: () -> Void
 
@@ -332,7 +337,7 @@ private struct ActiveWorkoutList: View {
             .panelRow()
         }
         if let record = model.newAchievedMax {
-            AchievedMaxBanner(exercise: record.exercise, max: record.max) {
+            AchievedMaxBanner(exercise: record.exercise, max: record.max, unit: unit) {
                 model.dismissAchievedMaxBanner()
             }
             .panelRow()
@@ -406,6 +411,7 @@ private struct ActiveWorkoutList: View {
                         isNextUp: model.session?.nextSet?.id == set.id,
                         restTarget: model.session?.restTarget(afterSetWith: set.id) ?? 120,
                         prescribedRest: model.session?.prescribedRest(afterSetWith: set.id) ?? 120,
+                        unit: unit,
                         onToggle: { toggle(set) },
                         onRepsChange: { reps in model.updateSet(id: set.id) { $0.reps = reps } },
                         onWeightChange: { weight in model.updateSet(id: set.id) { $0.weight = weight } },
@@ -421,6 +427,7 @@ private struct ActiveWorkoutList: View {
                         RestTimerRow(
                             timer: restTimer,
                             onAdjust: { model.adjustRest(by: $0) },
+                            onSetRemaining: { model.setRestRemaining($0) },
                             onDismiss: { model.dismissRest() }
                         )
                         .padding(.top, 10)
@@ -445,6 +452,7 @@ private struct ActiveWorkoutList: View {
                 RestTimerRow(
                     timer: restTimer,
                     onAdjust: { model.adjustRest(by: $0) },
+                    onSetRemaining: { model.setRestRemaining($0) },
                     onDismiss: { model.dismissRest() }
                 )
                 .panelGroupRow(.middle, accent: Theme.live)
@@ -736,6 +744,8 @@ private struct SetRow: View {
     let restTarget: Int
     /// What the plan asks for, ignoring any tuning — what "revert" goes back to.
     let prescribedRest: Int
+    /// The unit this row reads and writes weights in.
+    let unit: WeightUnit
     let onToggle: () -> Void
     let onRepsChange: (Int?) -> Void
     let onWeightChange: (Measurement<UnitMass>?) -> Void
@@ -860,9 +870,10 @@ private struct SetRow: View {
             .foregroundStyle(done ? Theme.inkMuted : Theme.ink)
             .multilineTextAlignment(.center)
             .frame(minWidth: 30, maxWidth: 72)
-            .padding(.vertical, 3)
-            .background(Theme.panelRaised)
-            .clipShape(RoundedRectangle(cornerRadius: 4))
+            // Outlined and thumb-height, like every other editable value in the
+            // app. A filled rectangle with no edge reads as a readout — which
+            // is exactly what these looked like.
+            .editableField(isActive: !done)
     }
 
     private var checkboxButton: some View {
@@ -898,21 +909,28 @@ private struct SetRow: View {
         Binding(get: { self.set.reps ?? 0 }, set: { onRepsChange($0) })
     }
 
+    /// Reads and writes in the lifter's own unit.
+    ///
+    /// A set logged last month in pounds converts for display, and editing it
+    /// writes back in kg — which is right: the number on screen is the number
+    /// they're committing. `expressed(in:)` rounds to two decimals precisely so
+    /// that tapping into a converted field and tapping out again can't drift
+    /// the weight in a decimal place nobody can see.
     private var weightBinding: Binding<Double> {
         Binding(
-            get: { self.set.weight?.value ?? 0 },
+            get: { self.set.weight?.expressed(in: unit).value ?? 0 },
             set: { onWeightChange(Measurement(value: $0, unit: weightUnit)) }
         )
     }
 
-    /// Where to resolve the weight field's unit from when the set doesn't
-    /// have one yet: its own weight, then the prescribed absolute load, then a
-    /// plain default. No app-wide unit preference exists to consult here.
-    private var weightUnit: UnitMass {
-        if let unit = self.set.weight?.unit { return unit }
-        if case .absolute(let weight) = self.set.plannedFrom?.load { return weight.unit }
-        return .pounds
-    }
+    /// The lifter's unit, always — not the set's, and not the prescription's.
+    ///
+    /// This used to fall back through the set's own weight and then the
+    /// prescribed load, because there was no app-wide preference to consult.
+    /// There is one now (`User.preferredUnit`), and a preference that the
+    /// tracker overrode whenever a program happened to be written in pounds
+    /// would be a preference in name only.
+    private var weightUnit: UnitMass { unit.unit }
 
     /// Warmups read quieter than working sets — the HUD annotation layer
     /// carries set type without spending a column on it.
@@ -996,6 +1014,7 @@ private struct NoteEditorSheet: View {
 private struct AchievedMaxBanner: View {
     let exercise: Exercise
     let max: AchievedMax
+    let unit: WeightUnit
     let onDismiss: () -> Void
 
     var body: some View {
@@ -1009,7 +1028,7 @@ private struct AchievedMaxBanner: View {
                         .font(Theme.label)
                         .tracking(1.6)
                         .foregroundStyle(Theme.live)
-                    Text("\(exercise.name.uppercased()) — \(max.weight.liftedDescription)")
+                    Text("\(exercise.name.uppercased()) — \(max.weight.liftedDescription(in: unit))")
                         .font(Theme.data(15, weight: .semibold))
                         .foregroundStyle(Theme.ink)
                 }
@@ -1036,7 +1055,16 @@ private struct RestTimerRow: View {
     let timer: RestTimer
     /// Seconds to add (or, negative, subtract).
     let onAdjust: (Int) -> Void
+    /// Puts a specific duration on the clock, replacing what's left.
+    let onSetRemaining: (Int) -> Void
     let onDismiss: () -> Void
+
+    /// The countdown is editable, not just nudgeable: ±30 is fine for "one more
+    /// breath," but "make it three minutes" took six taps and arithmetic. What
+    /// opens is the same `RestAdjuster` the per-set rest chip uses — one editor
+    /// for one idea.
+    @State private var isEditing = false
+    @State private var editingRemaining = 0
 
     var body: some View {
         // One second is the finest granularity the display shows, so that's how
@@ -1055,13 +1083,24 @@ private struct RestTimerRow: View {
                         .tracking(1.6)
                         .foregroundStyle(accent)
                     Spacer(minLength: 6)
-                    Text(clock(timer.remaining(at: context.date)))
-                        .font(Theme.data(22, weight: .medium))
-                        .foregroundStyle(isOver ? accent : Theme.ink)
-                        // Digits keep their column as the count changes, so the
-                        // readout doesn't jitter every second.
-                        .monospacedDigit()
-                        .contentTransition(.numericText(countsDown: true))
+                    Button {
+                        editingRemaining = Int(timer.remaining(at: Date()).rounded(.up))
+                        isEditing = true
+                    } label: {
+                        HStack(spacing: 6) {
+                            Text(clock(timer.remaining(at: context.date)))
+                                .font(Theme.data(22, weight: .medium))
+                                .foregroundStyle(isOver ? accent : Theme.ink)
+                                // Digits keep their column as the count changes,
+                                // so the readout doesn't jitter every second.
+                                .monospacedDigit()
+                                .contentTransition(.numericText(countsDown: true))
+                            FieldCaret(color: accent.opacity(0.85))
+                        }
+                        .editableField(isActive: true, accent: accent.opacity(0.55))
+                        .contentShape(.rect)
+                    }
+                    .buttonStyle(.plain)
                 }
 
                 ProgressView(value: timer.progress(at: context.date))
@@ -1081,6 +1120,22 @@ private struct RestTimerRow: View {
                 }
             }
             .padding(.vertical, 2)
+        }
+        // Anchored outside the `TimelineView` on purpose: that closure rebuilds
+        // every second, and a presentation hung off a view being rebuilt each
+        // tick is a presentation asking to be dismissed under the lifter.
+        .popover(isPresented: $isEditing) {
+            RestAdjuster(
+                title: "rest remaining",
+                seconds: editingRemaining,
+                onChange: { seconds in
+                    guard let seconds else { return }
+                    editingRemaining = seconds
+                    onSetRemaining(seconds)
+                },
+                onDismiss: { isEditing = false }
+            )
+            .presentationCompactAdaptation(.popover)
         }
     }
 
