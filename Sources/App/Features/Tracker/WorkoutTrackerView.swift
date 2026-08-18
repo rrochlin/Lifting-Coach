@@ -330,6 +330,15 @@ private struct ActiveWorkoutList: View {
     /// resolved, or any exercise being swapped mid-workout.
     @State private var choosingFor: ChoosingTarget?
 
+    /// The one set whose rest editor is open, if any.
+    ///
+    /// Owned here rather than inside `RestControl` because the editor is a
+    /// *row* — placing it as a sibling of the set row is what keeps any single
+    /// row from changing height, which is what made the clock and the steppers
+    /// cross each other on the way in. One at a time, too: two open editors on
+    /// one screen is the sort of clutter this control keeps being pruned of.
+    @State private var expandedRest: UUID?
+
     var body: some View {
         List {
             statusSection
@@ -343,6 +352,9 @@ private struct ActiveWorkoutList: View {
         // covers the case where the app isn't on screen at all.
         .onChange(of: model.rest?.hasExpired) { _, expired in
             guard expired == true else { return }
+            // A REST COMPLETE line with no way to acknowledge it is a dead end,
+            // so the editor — and its DONE — opens itself.
+            expandedRest = model.rest?.setID
             #if os(iOS)
             UINotificationFeedbackGenerator().notificationOccurred(.success)
             #endif
@@ -461,7 +473,7 @@ private struct ActiveWorkoutList: View {
                     // Every set carries its rest, on the line under it, in the
                     // one control the app has for rest. When this set's rest is
                     // the one running, that same line *is* the countdown.
-                    restControl(for: set, timer: restingHere ? restTimer : nil)
+                    restLine(for: set, timer: restingHere ? restTimer : nil)
                         .padding(.top, 8)
                 }
                 .panelGroupRow(.middle, accent: restingHere ? Theme.live : accent)
@@ -469,6 +481,14 @@ private struct ActiveWorkoutList: View {
                     Button("Delete", systemImage: "trash", role: .destructive) {
                         model.deleteSet(id: set.id)
                     }
+                }
+
+                // The editor is a row of its own, under the set's. Nothing
+                // already on screen changes size when it appears, which is the
+                // whole reason it lives out here instead of inside the line.
+                if expandedRest == set.id {
+                    restEditor(for: set, timer: restingHere ? restTimer : nil)
+                        .panelGroupRow(.middle, accent: restingHere ? Theme.live : accent)
                 }
             }
             .onMove { offsets, destination in
@@ -480,8 +500,12 @@ private struct ActiveWorkoutList: View {
             // The rest is still real, so it falls back to the foot of the
             // exercise rather than vanishing along with the row.
             if let restTimer, !sets.contains(where: { $0.id == restTimer.setID }) {
-                runningRestControl(restTimer)
+                runningRestLine(restTimer)
                     .panelGroupRow(.middle, accent: Theme.live)
+                if expandedRest == restTimer.setID {
+                    runningRestEditor(restTimer)
+                        .panelGroupRow(.middle, accent: Theme.live)
+                }
             }
 
             Button { model.addSet(toExerciseWith: exercise.id) } label: {
@@ -497,15 +521,43 @@ private struct ActiveWorkoutList: View {
     /// A set's rest — the prescription, or the countdown when it's this set's
     /// rest that's running. One control either way; see `RestControl`.
     @ViewBuilder
-    private func restControl(for set: WorkoutSet, timer: RestTimer?) -> some View {
+    private func restLine(for set: WorkoutSet, timer: RestTimer?) -> some View {
+        RestControl(
+            mode: mode(for: set, timer: timer),
+            isExpanded: expandedRest == set.id,
+            onToggleExpanded: { expandedRest = expandedRest == set.id ? nil : set.id },
+            // A typed duration is this set's rest, or — while it's counting —
+            // what's left on the clock.
+            onSet: { seconds in
+                if timer == nil {
+                    model.setRest(seconds, forSetWith: set.id)
+                } else {
+                    model.setRestRemaining(seconds)
+                }
+            }
+        )
+    }
+
+    private func runningRestLine(_ timer: RestTimer) -> some View {
+        RestControl(
+            mode: .running(timer),
+            isExpanded: expandedRest == timer.setID,
+            onToggleExpanded: {
+                expandedRest = expandedRest == timer.setID ? nil : timer.setID
+            },
+            onSet: { model.setRestRemaining($0) }
+        )
+    }
+
+    @ViewBuilder
+    private func restEditor(for set: WorkoutSet, timer: RestTimer?) -> some View {
         if let timer {
-            runningRestControl(timer)
+            runningRestEditor(timer)
         } else {
-            let target = model.session?.restTarget(afterSetWith: set.id) ?? 120
             let prescribed = model.session?.prescribedRest(afterSetWith: set.id) ?? 120
             let isTuned = set.restOverride != nil
-            RestControl(
-                mode: .prescription(seconds: target, isExplicit: isTuned),
+            RestEditor(
+                mode: mode(for: set, timer: nil),
                 onSet: { model.setRest($0, forSetWith: set.id) },
                 // Only offered once there's something to go back to.
                 actionLabel: isTuned ? "reset \(prescribed.restClockDescription)" : nil,
@@ -514,13 +566,26 @@ private struct ActiveWorkoutList: View {
         }
     }
 
-    private func runningRestControl(_ timer: RestTimer) -> some View {
-        RestControl(
+    private func runningRestEditor(_ timer: RestTimer) -> some View {
+        RestEditor(
             mode: .running(timer),
             onAdjust: { model.adjustRest(by: $0) },
             onSet: { model.setRestRemaining($0) },
             actionLabel: timer.hasExpired ? "done" : "skip",
-            onAction: { model.dismissRest() }
+            onAction: {
+                model.dismissRest()
+                expandedRest = nil
+            }
+        )
+    }
+
+    /// A set's rest is its own countdown when one is running, and its
+    /// prescription otherwise — the line and the editor must agree on which.
+    private func mode(for set: WorkoutSet, timer: RestTimer?) -> RestControl.Mode {
+        if let timer { return .running(timer) }
+        return .prescription(
+            seconds: model.session?.restTarget(afterSetWith: set.id) ?? 120,
+            isExplicit: set.restOverride != nil
         )
     }
 

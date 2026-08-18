@@ -22,6 +22,10 @@ struct PlannedWorkoutEditor: View {
     @State private var isPickingExercise = false
     @State private var isConfirmingDiscard = false
     @State private var noteTarget: NoteTarget?
+    /// The one set whose rest editor is open. Owned here, not in the control:
+    /// the editor is a row of its own, so opening it never resizes a row that's
+    /// already on screen. See `RestControl`.
+    @State private var expandedRest: UUID?
     @State private var editMode: EditMode = .inactive
 
     init(model: PlannerModel, workout: PlannedWorkout) {
@@ -143,13 +147,33 @@ struct PlannedWorkoutEditor: View {
                 resolvedRest: model.restTime(for: set),
                 onChange: { change in draft.updateSet(id: set.id, change) },
                 onEditNote: { noteTarget = .set(set.id) },
-                onDelete: { draft.deleteSet(id: set.id) }
+                onDelete: { draft.deleteSet(id: set.id) },
+                isRestExpanded: expandedRest == set.id,
+                onToggleRest: { expandedRest = expandedRest == set.id ? nil : set.id }
             )
             .panelGroupRow(.middle)
             .swipeActions(edge: .trailing) {
                 Button("Delete", systemImage: "trash", role: .destructive) {
                     draft.deleteSet(id: set.id)
                 }
+            }
+
+            if expandedRest == set.id {
+                RestEditor(
+                    mode: .prescription(
+                        seconds: model.restTime(for: set),
+                        isExplicit: set.restTime != nil
+                    ),
+                    onSet: { seconds in
+                        draft.updateSet(id: set.id) { $0.restTime = seconds }
+                    },
+                    actionLabel: set.restTime == nil ? nil : "use block default",
+                    onAction: set.restTime == nil
+                        ? nil
+                        : { draft.updateSet(id: set.id) { $0.restTime = nil } }
+                )
+                .padding(.leading, 26)
+                .panelGroupRow(.middle)
             }
         }
         .onMove { offsets, destination in
@@ -362,6 +386,9 @@ private struct PlannedSetRow: View {
     let onChange: ((inout PlannedSet) -> Void) -> Void
     let onEditNote: () -> Void
     let onDelete: () -> Void
+    /// Whether the day editor is showing `RestEditor` under this row.
+    let isRestExpanded: Bool
+    let onToggleRest: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
@@ -401,9 +428,9 @@ private struct PlannedSetRow: View {
     private var rest: some View {
         RestControl(
             mode: .prescription(seconds: resolvedRest, isExplicit: self.set.restTime != nil),
-            onSet: { seconds in onChange { $0.restTime = seconds } },
-            actionLabel: self.set.restTime == nil ? nil : "use block default",
-            onAction: self.set.restTime == nil ? nil : { onChange { $0.restTime = nil } }
+            isExpanded: isRestExpanded,
+            onToggleExpanded: onToggleRest,
+            onSet: { seconds in onChange { $0.restTime = seconds } }
         )
         .padding(.leading, 26)
     }
