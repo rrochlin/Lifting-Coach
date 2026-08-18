@@ -37,7 +37,9 @@ struct RPEPicker: View {
     @State private var isPresented = false
 
     var body: some View {
-        Button { isPresented = true } label: {
+        // A popover presented over an open keyboard is the worst of both —
+        // and the number just typed hasn't committed until focus goes.
+        Button { dismissKeyboard(); isPresented = true } label: {
             HStack(spacing: 4) {
                 if let label {
                     Text(label)
@@ -47,7 +49,7 @@ struct RPEPicker: View {
                 }
                 HStack(spacing: 5) {
                     Text(displayValue)
-                        .font(Theme.data(13, weight: .medium))
+                        .font(Theme.data(14, weight: .medium))
                         .foregroundStyle(value == nil ? Theme.inkFaint : Theme.signal)
                     FieldCaret(color: value == nil ? Theme.inkFaint : Theme.signal.opacity(0.75))
                 }
@@ -195,7 +197,7 @@ private struct RPEScale: View {
         let selected = value == option
         return Button { onPick(option) } label: {
             Text(option.rpeDescription)
-                .font(Theme.data(isPrimary ? 16 : 13, weight: selected ? .semibold : .regular))
+                .font(Theme.data(isPrimary ? 17 : 15, weight: selected ? .semibold : .regular))
                 .foregroundStyle(selected ? Theme.void : (isPrimary ? Theme.ink : Theme.inkMuted))
                 // A gym-glove target, not a menu line.
                 .frame(width: isPrimary ? 44 : 42, height: 34)

@@ -156,6 +156,7 @@ struct PlannedWorkoutEditor: View {
                 Button("Delete", systemImage: "trash", role: .destructive) {
                     draft.deleteSet(id: set.id)
                 }
+                .tint(Theme.alert)
             }
 
             if expandedRest == set.id {
@@ -186,7 +187,7 @@ struct PlannedWorkoutEditor: View {
         // exercise title included — fired "Add Set".
         Button { draft.addSet(toExerciseWith: exercise.id) } label: {
             Label("Add Set", systemImage: "plus")
-                .font(Theme.data(11, weight: .medium))
+                .font(Theme.data(13, weight: .medium))
                 .foregroundStyle(Theme.inkMuted)
                 .contentShape(.rect)
         }
@@ -323,7 +324,7 @@ private struct PlannedExerciseHeaderRow: View {
                 Spacer(minLength: 4)
                 if !(exercise.notes ?? "").isEmpty {
                     Image(systemName: "note.text")
-                        .font(.system(size: 12))
+                        .font(.system(size: 13))
                         .foregroundStyle(Theme.signal)
                         .fixedSize()
                 }
@@ -406,7 +407,7 @@ private struct PlannedSetRow: View {
         HStack(alignment: .center, spacing: 10) {
             if let annotationText {
                 Text(annotationText)
-                    .font(Theme.data(10))
+                    .font(Theme.data(12))
                     .foregroundStyle(Theme.inkFaint)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -438,21 +439,39 @@ private struct PlannedSetRow: View {
     private var quantities: some View {
         HStack(spacing: 6) {
             Text(String(format: "%02d", number))
-                .font(Theme.data(11))
+                .font(Theme.data(13))
                 .foregroundStyle(Theme.inkFaint)
                 .fixedSize()
 
-            numberField(value: repsBinding, format: .number)
-                .layoutPriority(1)
+            NumberField(
+                value: repsBinding,
+                format: .number,
+                label: "reps",
+                font: Theme.data(15),
+                step: 1,
+                onStep: { delta in
+                    repsBinding.wrappedValue = max(0, repsBinding.wrappedValue + Int(delta))
+                }
+            )
+            .layoutPriority(1)
 
             Text("×")
-                .font(Theme.data(12))
+                .font(Theme.data(14))
                 .foregroundStyle(Theme.inkFaint)
                 .fixedSize()
 
-            numberField(value: loadBinding, format: .number.precision(.fractionLength(0...2)))
-                .layoutPriority(2)
-                .opacity(self.set.load == nil ? 0.45 : 1)
+            NumberField(
+                value: loadBinding,
+                format: .number.precision(.fractionLength(0...2)),
+                label: loadLabel,
+                font: Theme.data(15),
+                step: loadStep,
+                onStep: { delta in
+                    loadBinding.wrappedValue = max(0, loadBinding.wrappedValue + delta)
+                }
+            )
+            .layoutPriority(2)
+            .opacity(self.set.load == nil ? 0.45 : 1)
 
             LoadModeMenu(load: self.set.load) { newLoad in
                 onChange { $0.load = newLoad }
@@ -482,7 +501,7 @@ private struct PlannedSetRow: View {
                 Button("Delete Set", systemImage: "trash", role: .destructive, action: onDelete)
             } label: {
                 Image(systemName: hasNote ? "note.text" : "ellipsis")
-                    .font(.system(size: 13))
+                    .font(.system(size: 14))
                     .foregroundStyle(hasNote ? Theme.signal : Theme.inkFaint)
             }
             .fixedSize()
@@ -512,20 +531,23 @@ private struct PlannedSetRow: View {
         return parts.isEmpty ? nil : parts.joined(separator: "   ")
     }
 
-    private func numberField<F: ParseableFormatStyle>(
-        value: Binding<F.FormatInput>,
-        format: F
-    ) -> some View where F.FormatOutput == String {
-        TextField("", value: value, format: format)
-            #if os(iOS)
-            .keyboardType(.decimalPad)
-            #endif
-            .font(Theme.data(15))
-            .foregroundStyle(Theme.ink)
-            .multilineTextAlignment(.center)
-            .frame(minWidth: 30, maxWidth: 72)
-            // Outlined like the tracker's fields — same contract, same look.
-            .editableField(isActive: true)
+    /// The step this load moves in, in whatever the field currently means: one
+    /// plate per side for an absolute weight, 2.5 points for a percentage.
+    private var loadStep: Double {
+        switch self.set.load {
+        case .absolute(let weight): weight.unit == .kilograms ? 1 : 2.5
+        case .percentOf, nil: 2.5
+        }
+    }
+
+    /// Names the field on the keyboard bar in the terms it's being written in,
+    /// since the mode menu that says which is off screen behind the keyboard.
+    private var loadLabel: String {
+        switch self.set.load {
+        case .absolute(let weight): weight.unit.symbol
+        case .percentOf: "%"
+        case nil: "load"
+        }
     }
 
     // `self.` throughout: a bare `set` opening a computed property's body parses
@@ -611,7 +633,7 @@ private struct LoadModeMenu: View {
             // on the field beside it. A caret is the whole fix.
             HStack(spacing: 3) {
                 Text(label)
-                    .font(Theme.data(11, weight: .medium))
+                    .font(Theme.data(13, weight: .medium))
                 FieldCaret(color: load == nil ? Theme.inkFaint : Theme.inkMuted)
             }
             .foregroundStyle(load == nil ? Theme.inkFaint : Theme.inkMuted)
@@ -683,10 +705,10 @@ private struct RestMenu: View {
                 // values rather than one field and two labels.
                 HStack(spacing: 5) {
                     Image(systemName: "timer")
-                        .font(.system(size: 10, weight: .medium))
+                        .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(seconds == nil ? Theme.inkFaint : Theme.ink)
                     Text(displayValue)
-                        .font(Theme.data(13, weight: .medium))
+                        .font(Theme.data(14, weight: .medium))
                         .foregroundStyle(seconds == nil ? Theme.inkFaint : Theme.ink)
                     FieldCaret(color: seconds == nil ? Theme.inkFaint : Theme.inkMuted)
                 }

@@ -198,7 +198,7 @@ struct HomeView: View {
                 Rectangle().fill(Theme.hairline).frame(height: 1)
                 Button { isLoggingBodyWeight = true } label: {
                     Label("Log Weight", systemImage: "plus")
-                        .font(Theme.data(12, weight: .medium))
+                        .font(Theme.data(14, weight: .medium))
                         .foregroundStyle(Theme.signal)
                         .frame(maxWidth: .infinity)
                 }

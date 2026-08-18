@@ -177,6 +177,11 @@ final class TrackerModel {
         mutate { $0.addSet(toExerciseWith: id) }
     }
 
+    /// Ramp-up sets, in front of what the program prescribed.
+    func addWarmupSet(toExerciseWith id: UUID) {
+        mutate { $0.addWarmupSet(toExerciseWith: id) }
+    }
+
     func deleteSet(id: UUID) {
         mutate { $0.deleteSet(id: id) }
     }

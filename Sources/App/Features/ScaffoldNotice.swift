@@ -21,7 +21,7 @@ struct ScaffoldNotice: View {
                             .font(Theme.title)
                             .foregroundStyle(Theme.ink)
                         Text("Specified in \(doc)")
-                            .font(Theme.data(11))
+                            .font(Theme.data(13))
                             .foregroundStyle(Theme.inkFaint)
 
                         if !requirements.isEmpty {
@@ -30,7 +30,7 @@ struct ScaffoldNotice: View {
                                 ForEach(requirements, id: \.self) { requirement in
                                     HStack(alignment: .top, spacing: 9) {
                                         Text("—")
-                                            .font(Theme.data(11))
+                                            .font(Theme.data(13))
                                             .foregroundStyle(Theme.signalDim)
                                         Text(requirement)
                                             .font(Theme.caption)

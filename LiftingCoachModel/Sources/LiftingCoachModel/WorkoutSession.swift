@@ -315,6 +315,36 @@ public struct WorkoutSession: Equatable, Sendable {
         return newID
     }
 
+    /// Prepends a warmup set to an exercise — the ramp-up that gets you to the
+    /// first programmed set.
+    ///
+    /// A program prescribes working sets; how a lifter gets to 315 is theirs to
+    /// decide on the day, and it belongs *above* the prescription rather than
+    /// appended after it. Typed `.warmup` because that's what the button that
+    /// calls this says it makes, and the type is load-bearing: a heavy last
+    /// ramp-up single is not a maximal effort, and `AchievedMaxUpdate` is right
+    /// to ignore it.
+    ///
+    /// Deliberately empty rather than a copy of the first set. `addSet` copies
+    /// the set above it because a fourth set of the same thing usually is the
+    /// same thing; a warmup is by definition lighter than what follows, so
+    /// pre-filling the working weight would mean clearing it every time. The
+    /// rest carries over for the same reason it does on `addSet`.
+    @discardableResult
+    public mutating func addWarmupSet(toExerciseWith exerciseID: UUID) -> UUID? {
+        var newID: UUID?
+        mutateExercise(id: exerciseID) { exercise in
+            let new = WorkoutSet(
+                complete: false,
+                type: .warmup,
+                restOverride: exercise.sets?.first?.restOverride
+            )
+            newID = new.id
+            exercise.sets = [new] + (exercise.sets ?? [])
+        }
+        return newID
+    }
+
     @discardableResult
     public mutating func deleteSet(id: UUID) -> Bool {
         var removed = false

@@ -285,7 +285,7 @@ struct WorkoutTrackerView: View {
             // while this machine's Xcode can't build for iOS at all.
             ToolbarItem(placement: .navigation) {
                 Text("\(progress.completed)/\(progress.total)")
-                    .font(Theme.data(13, weight: .medium))
+                    .font(Theme.data(14, weight: .medium))
                     .foregroundStyle(progress.completed == progress.total ? Theme.signal : Theme.inkMuted)
             }
             // The two ways a workout ends, and nothing else. There was an
@@ -347,6 +347,11 @@ private struct ActiveWorkoutList: View {
         }
         .listStyle(.plain)
         .screenGround()
+        // A safe-area inset rather than an overlay: the list runs *under* the
+        // tab bar, so a bottom-aligned overlay puts the banner behind it. This
+        // sits above the bar and lifts the list instead of covering its last row.
+        .safeAreaInset(edge: .bottom, spacing: 0) { achievedMaxBanner }
+        .animation(.easeOut(duration: 0.22), value: model.newAchievedMax?.max.date)
         // The lifter who *is* watching the screen still deserves to be told,
         // and a phone on the bench is felt before it's read. The notification
         // covers the case where the app isn't on screen at all.
@@ -388,11 +393,26 @@ private struct ActiveWorkoutList: View {
             }
             .panelRow()
         }
+    }
+
+    /// A PR announces itself at the foot of the screen, not at the top of the
+    /// list.
+    ///
+    /// It used to be the first row — which is the one place it was guaranteed
+    /// not to be seen, since the set that earned it is somewhere further down
+    /// and that's where the lifter is looking. As an overlay it's on screen
+    /// wherever the list is scrolled to, and it stays until acknowledged: a max
+    /// is worth a deliberate tap, and a banner that vanishes on a timer while
+    /// someone is racking a bar is a banner they'll wonder if they imagined.
+    @ViewBuilder
+    private var achievedMaxBanner: some View {
         if let record = model.newAchievedMax {
             AchievedMaxBanner(exercise: record.exercise, max: record.max, unit: unit) {
                 model.dismissAchievedMaxBanner()
             }
-            .panelRow()
+            .padding(.horizontal, 16)
+            .padding(.bottom, 10)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }
 
@@ -450,6 +470,18 @@ private struct ActiveWorkoutList: View {
         .panelGroupRow(expanded ? .top : .single, accent: accent)
 
         if expanded {
+            // Ramp-up sets belong above the prescription, not appended after
+            // it: a program says what to work up *to*, and how you get there is
+            // the lifter's call on the day. Named for what it makes, because
+            // the type is load-bearing — a warmup never records an achieved max.
+            Button { model.addWarmupSet(toExerciseWith: exercise.id) } label: {
+                Label("Add Warmup Set", systemImage: "plus")
+                    .font(Theme.data(13, weight: .medium))
+                    .foregroundStyle(Theme.inkFaint)
+            }
+            .buttonStyle(.plain)
+            .panelGroupRow(.middle, accent: accent)
+
             ForEach(Array(sets.enumerated()), id: \.element.id) { index, set in
                 // The countdown lives *inside* this row rather than as a row of
                 // its own, so it stays welded to the set that started it —
@@ -481,6 +513,10 @@ private struct ActiveWorkoutList: View {
                     Button("Delete", systemImage: "trash", role: .destructive) {
                         model.deleteSet(id: set.id)
                     }
+                    // The app's accent is cyan, and a swipe action inherits it
+                    // — which drew "Delete" in the same colour as every safe,
+                    // affirmative control in the app. Destructive reads red.
+                    .tint(Theme.alert)
                 }
 
                 // The editor is a row of its own, under the set's. Nothing
@@ -510,7 +546,7 @@ private struct ActiveWorkoutList: View {
 
             Button { model.addSet(toExerciseWith: exercise.id) } label: {
                 Label("Add Set", systemImage: "plus")
-                    .font(Theme.data(11, weight: .medium))
+                    .font(Theme.data(13, weight: .medium))
                     .foregroundStyle(Theme.inkMuted)
             }
             .buttonStyle(.plain)
@@ -707,7 +743,7 @@ private struct PlannedSummaryRow: View {
                         Chip(text: "skipped", color: Theme.inkFaint)
                     } else {
                         Image(systemName: "chevron.right")
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(Theme.signal)
                     }
                 }
@@ -760,7 +796,7 @@ private struct ExerciseHeaderRow: View {
             Button(action: onToggleExpanded) {
                 HStack(spacing: 8) {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 10, weight: .semibold))
+                        .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(Theme.inkFaint)
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
                     VStack(alignment: .leading, spacing: 1) {
@@ -802,13 +838,13 @@ private struct ExerciseHeaderRow: View {
 
             if !isExpanded {
                 Text(collapsedProgress)
-                    .font(Theme.data(12))
+                    .font(Theme.data(14))
                     .foregroundStyle(Theme.inkMuted)
             }
 
             if let notes = exercise.usernotes, !notes.isEmpty {
                 Image(systemName: "note.text")
-                    .font(.system(size: 12))
+                    .font(.system(size: 13))
                     .foregroundStyle(Theme.signal)
             }
 
@@ -884,24 +920,46 @@ private struct SetRow: View {
             checkboxButton
 
             Text(String(format: "%02d", number))
-                .font(Theme.data(11))
+                .font(Theme.data(13))
                 .foregroundStyle(Theme.inkFaint)
                 // Never let the index be the thing that gets truncated.
                 .fixedSize()
 
-            numberField(value: repsBinding, format: .number)
-                .layoutPriority(1)
+            NumberField(
+                value: repsBinding,
+                format: .number,
+                label: "reps",
+                isActive: !done,
+                font: Theme.data(15, weight: done ? .regular : .medium),
+                foreground: done ? Theme.inkMuted : Theme.ink,
+                step: 1,
+                onStep: { delta in onRepsChange(max(0, (self.set.reps ?? 0) + Int(delta))) }
+            )
+            .layoutPriority(1)
 
             Text("×")
-                .font(Theme.data(12))
+                .font(Theme.data(14))
                 .foregroundStyle(Theme.inkFaint)
                 .fixedSize()
 
-            numberField(value: weightBinding, format: .number.precision(.fractionLength(0...2)))
-                .layoutPriority(2)
+            NumberField(
+                value: weightBinding,
+                format: .number.precision(.fractionLength(0...2)),
+                label: "weight",
+                isActive: !done,
+                font: Theme.data(15, weight: done ? .regular : .medium),
+                foreground: done ? Theme.inkMuted : Theme.ink,
+                // One plate per side, in the unit the plates are marked in.
+                step: unit == .pounds ? 2.5 : 1,
+                onStep: { delta in
+                    let current = self.set.weight?.expressed(in: unit).value ?? 0
+                    onWeightChange(Measurement(value: max(0, current + delta), unit: weightUnit))
+                }
+            )
+            .layoutPriority(2)
 
             Text(weightUnit.symbol)
-                .font(Theme.data(11))
+                .font(Theme.data(13))
                 .foregroundStyle(Theme.inkFaint)
                 .fixedSize()
 
@@ -913,7 +971,7 @@ private struct SetRow: View {
 
             Button(action: onEditNote) {
                 Image(systemName: hasNote ? "note.text" : "square.and.pencil")
-                    .font(.system(size: 13))
+                    .font(.system(size: 14))
                     .foregroundStyle(hasNote ? Theme.signal : Theme.inkFaint)
             }
             .buttonStyle(.plain)
@@ -936,7 +994,7 @@ private struct SetRow: View {
         HStack(alignment: .center, spacing: 10) {
             if let prescription {
                 Text(prescription)
-                    .font(Theme.data(10))
+                    .font(Theme.data(12))
                     .foregroundStyle(done ? Theme.inkMuted : Theme.inkFaint)
                     .fixedSize(horizontal: false, vertical: true)
             }
@@ -954,29 +1012,11 @@ private struct SetRow: View {
         .padding(.leading, 38)
     }
 
-    /// No fixed width — the field takes what's available and shares it with its
-    /// sibling by layout priority, so the row reflows instead of overflowing on
-    /// a narrow screen.
-    private func numberField<F: ParseableFormatStyle>(
-        value: Binding<F.FormatInput>,
-        format: F
-    ) -> some View where F.FormatOutput == String {
-        TextField("", value: value, format: format)
-            #if os(iOS)
-            .keyboardType(.decimalPad)
-            #endif
-            .font(Theme.data(15, weight: done ? .regular : .medium))
-            .foregroundStyle(done ? Theme.inkMuted : Theme.ink)
-            .multilineTextAlignment(.center)
-            .frame(minWidth: 30, maxWidth: 72)
-            // Outlined and thumb-height, like every other editable value in the
-            // app. A filled rectangle with no edge reads as a readout — which
-            // is exactly what these looked like.
-            .editableField(isActive: !done)
-    }
-
     private var checkboxButton: some View {
-        Button(action: onToggle) {
+        // Logging the set is what a lifter reaches for after typing into it, so
+        // it doubles as the way off the keyboard — and giving up focus is what
+        // commits the number they just typed.
+        Button { dismissKeyboard(); onToggle() } label: {
             ZStack {
                 RoundedRectangle(cornerRadius: 4)
                     .strokeBorder(done ? Theme.signal : Theme.hairline, lineWidth: 1)
@@ -987,7 +1027,7 @@ private struct SetRow: View {
                     .frame(width: 22, height: 22)
                 if done {
                     Image(systemName: "checkmark")
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(Theme.signal)
                 }
             }
@@ -1120,7 +1160,7 @@ private struct AchievedMaxBanner: View {
         Panel(accent: Theme.live) {
             HStack(spacing: 10) {
                 Image(systemName: "bolt.fill")
-                    .font(.system(size: 13))
+                    .font(.system(size: 14))
                     .foregroundStyle(Theme.live)
                 VStack(alignment: .leading, spacing: 2) {
                     Text("NEW MAX")
@@ -1224,7 +1264,7 @@ private struct ExercisePicker: View {
                         ForEach(suggestions, id: \.self) { suggestion in
                             Button { query = suggestion } label: {
                                 Text(suggestion)
-                                    .font(Theme.data(11))
+                                    .font(Theme.data(13))
                                     .foregroundStyle(Theme.signal)
                                     .padding(.horizontal, 9)
                                     .padding(.vertical, 5)
@@ -1267,7 +1307,7 @@ private struct ExercisePicker: View {
     private func filterChip(_ label: String, isOn: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(label)
-                .font(Theme.data(11))
+                .font(Theme.data(13))
                 .foregroundStyle(isOn ? Theme.void : Theme.inkMuted)
                 .padding(.horizontal, 9)
                 .padding(.vertical, 5)

@@ -240,6 +240,7 @@ private struct BlockOverview: View {
                 Button("Delete", systemImage: "trash", role: .destructive) {
                     model.deletePlannedWorkout(id: workout.id)
                 }
+                .tint(Theme.alert)
             }
         }
     }
@@ -287,7 +288,7 @@ private struct WeekHeaderRow: View {
         Button(action: onToggle) {
             HStack(spacing: 8) {
                 Image(systemName: "chevron.right")
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Theme.inkFaint)
                     .rotationEffect(.degrees(isCollapsed ? 0 : 90))
                 Text("WEEK \(week.index)")
@@ -302,7 +303,7 @@ private struct WeekHeaderRow: View {
                     .fill(Theme.hairline)
                     .frame(height: 1)
                 Text("\(week.days.count)d · \(setCount) sets")
-                    .font(Theme.data(10))
+                    .font(Theme.data(12))
                     .foregroundStyle(Theme.inkFaint)
                     .fixedSize()
             }
@@ -360,7 +361,7 @@ private struct PlannedDayPanel: View {
                 Chip(text: "skipped", color: Theme.inkFaint)
             }
             Image(systemName: "square.and.pencil")
-                .font(.system(size: 12))
+                .font(.system(size: 13))
                 .foregroundStyle(Theme.signal)
                 .fixedSize()
         }
@@ -420,7 +421,7 @@ private struct PlannedExerciseLine: View {
                 .truncationMode(.tail)
             if exercise.exercise.isOpenChoice {
                 Image(systemName: "questionmark.circle")
-                    .font(.system(size: 10))
+                    .font(.system(size: 12))
                     .foregroundStyle(Theme.inkFaint)
                     .fixedSize()
             }
@@ -437,18 +438,18 @@ private struct PrescriptionText: View {
     var body: some View {
         HStack(spacing: 8) {
             Text(countText)
-                .font(Theme.data(12, weight: .medium))
+                .font(Theme.data(14, weight: .medium))
                 .foregroundStyle(Theme.ink)
                 .fixedSize()
             if let loadText {
                 Text(loadText)
-                    .font(Theme.data(12))
+                    .font(Theme.data(14))
                     .foregroundStyle(Theme.inkMuted)
                     .fixedSize()
             }
             if let effort = group.effort {
                 Text("@\(effort.rpe.rpeDescription)")
-                    .font(Theme.data(12))
+                    .font(Theme.data(14))
                     .foregroundStyle(Theme.signal)
                     .fixedSize()
             }

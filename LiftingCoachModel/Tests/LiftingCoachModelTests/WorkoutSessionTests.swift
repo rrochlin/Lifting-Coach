@@ -415,6 +415,44 @@ struct WorkoutSessionEditingTests {
         #expect(added?.plannedFrom == nil)
     }
 
+    @Test("A warmup set goes in front of the prescription, empty and typed")
+    func warmupSetIsPrependedAndEmpty() {
+        var session = self.session()
+        let exerciseID = session.exerciseGroups[0][0].id
+
+        let newID = session.addWarmupSet(toExerciseWith: exerciseID)
+        let sets = session.exerciseGroups[0][0].sets ?? []
+
+        #expect(sets.count == 2)
+        // In front: a ramp-up leads to the working set, it doesn't follow it.
+        #expect(sets.first?.id == newID)
+        #expect(sets.first?.type == .warmup)
+        // Empty, not a copy — a warmup is lighter than the set it precedes, so
+        // pre-filling 225 would mean clearing it every time.
+        #expect(sets.first?.reps == nil)
+        #expect(sets.first?.weight == nil)
+        #expect(sets.first?.plannedFrom == nil)
+        // The prescribed set is untouched and still second.
+        #expect(sets.last?.reps == 5)
+    }
+
+    @Test("A warmup set is never an achieved max")
+    func warmupSetDoesNotRecordMax() {
+        var session = self.session()
+        let exerciseID = session.exerciseGroups[0][0].id
+        let newID = session.addWarmupSet(toExerciseWith: exerciseID)!
+
+        session.completeSet(
+            id: newID,
+            reps: 1,
+            weight: Measurement(value: 405, unit: .pounds),
+            at: noon
+        )
+        let warmup = session.workout.allSets.first { $0.id == newID }!
+
+        #expect(AchievedMaxUpdate.evaluate(set: warmup, for: squat, currentBest: nil) == nil)
+    }
+
     @Test("Sets and exercises can be removed")
     func removesSetsAndExercises() {
         var session = self.session()

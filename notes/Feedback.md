@@ -34,3 +34,21 @@ we should have the ability to drag to reorder the sets and whole exercises.
 
 ## Profile
 - fine for now
+
+## Backlog
+Not broken — wanted, and bigger than a fix.
+
+- **Plate calculator (lb and kg).** Given a target weight and a bar, say what to
+  load per side. Needs a real model of what's *available*: bar weight (45/35/15
+  lb, 20/15 kg), which plates the gym has and how many, and whether the lifter
+  wants the closest loadable weight or the nearest one under. Both units, and
+  not by converting one to the other — a kg gym has 25/20/15/10/5/2.5/1.25 kg
+  plates, not 55.1 lb ones, so rounding a converted target to "available plates"
+  in the wrong unit gives a number nobody can load. Reads naturally next to the
+  weight field, which since the numeric keyboard bar landed is also where the
+  ±2.5 lb / ±1 kg step lives — Strong puts both in the same panel.
+- **Set type in the tracker.** "Add Warmup Set" makes a `.warmup`; nothing in the
+  tracker can change a set's type after the fact, so a set added as the wrong
+  kind has to be deleted and remade. The planner has the control already.
+- **Bodyweight wheel selector**, prepopulated with the last recorded weight, to
+  1/10 of a unit (from Home, above) — still a plain text field.

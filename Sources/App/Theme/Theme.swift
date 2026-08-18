@@ -58,12 +58,12 @@ enum Theme {
     }
 
     /// Uppercase micro-labels — the HUD annotation layer.
-    static let label = Font.system(size: 10, weight: .semibold, design: .monospaced)
+    static let label = Font.system(size: 12, weight: .semibold, design: .monospaced)
 
     static let title = Font.system(size: 26, weight: .bold, design: .default)
     static let heading = Font.system(size: 16, weight: .semibold, design: .default)
     static let body = Font.system(size: 15, weight: .regular, design: .default)
-    static let caption = Font.system(size: 12, weight: .regular, design: .default)
+    static let caption = Font.system(size: 14, weight: .regular, design: .default)
 }
 
 // MARK: - Building blocks
@@ -98,6 +98,13 @@ struct SectionLabel: View {
                 .font(Theme.label)
                 .tracking(1.6)
                 .foregroundStyle(accent)
+                // The label takes what it needs and the rule takes the rest.
+                // Both are flexible otherwise, so the HStack splits the width
+                // between them and a longer label ("MAXES · ACHIEVED / GOAL")
+                // wraps onto two lines with the rule floating beside the first
+                // — which stopped being hypothetical when the type got bigger.
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
             Rectangle()
                 .fill(Theme.hairline)
                 .frame(height: 1)
@@ -157,7 +164,7 @@ struct FieldCaret: View {
 
     var body: some View {
         Image(systemName: "chevron.down")
-            .font(.system(size: 8, weight: .bold))
+            .font(.system(size: 10, weight: .bold))
             .foregroundStyle(color)
     }
 }
@@ -332,10 +339,18 @@ extension View {
 // MARK: - Screen chrome
 
 extension View {
-    /// Standard screen treatment: themed ground, no default list chrome.
+    /// Standard screen treatment: themed ground, no default list chrome, and a
+    /// keyboard that gets out of the way when the lifter scrolls past it.
+    ///
+    /// A decimal pad has no return key, so `NumberField` puts a DONE above it —
+    /// but dragging the list is the other thing a lifter does with a keyboard
+    /// on screen, and it should mean the same thing. Applied here rather than
+    /// per screen because every scrolling surface in the app already wears this
+    /// modifier, and one that forgot it would be the one that traps you.
     func screenGround() -> some View {
         self
             .scrollContentBackground(.hidden)
+            .scrollDismissesKeyboard(.interactively)
             .background(Theme.void)
     }
 

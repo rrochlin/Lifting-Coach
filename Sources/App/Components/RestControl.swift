@@ -61,10 +61,10 @@ struct RestControl: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 8) {
-                Button(action: onToggleExpanded) {
+                Button { dismissKeyboard(); onToggleExpanded() } label: {
                     HStack(spacing: 8) {
                         Image(systemName: mode.isOver ? "checkmark.circle.fill" : "timer")
-                            .font(.system(size: 12, weight: .medium))
+                            .font(.system(size: 13, weight: .medium))
                         Text(mode.title)
                             .font(Theme.label)
                             .tracking(1.6)
@@ -80,7 +80,7 @@ struct RestControl: View {
 
                 clock
 
-                Button(action: onToggleExpanded) {
+                Button { dismissKeyboard(); onToggleExpanded() } label: {
                     FieldCaret(color: mode.accent.opacity(0.85))
                         .rotationEffect(.degrees(isExpanded ? 180 : 0))
                         .animation(.easeInOut(duration: 0.15), value: isExpanded)
@@ -282,7 +282,7 @@ struct RestEditor: View {
     private func step(_ label: String, by delta: Int) -> some View {
         Button { adjust(by: delta) } label: {
             Text(label)
-                .font(Theme.data(13, weight: .medium))
+                .font(Theme.data(14, weight: .medium))
                 .foregroundStyle(canStep(delta) ? Theme.ink : Theme.inkFaint)
                 .frame(maxWidth: .infinity, minHeight: 32)
                 .background(Theme.panelRaised)
