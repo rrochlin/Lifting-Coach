@@ -627,3 +627,163 @@ struct WorkoutSessionFinishTests {
         #expect(session.exerciseGroups[0][0].exercise.id == squat.id)
     }
 }
+
+@Suite("Supersets")
+struct SupersetTests {
+
+    /// Three exercises, each alone in its own group — what `addExercise`
+    /// produces and what a plan without supersets loads as.
+    private func threeSeparate() -> WorkoutSession {
+        var session = WorkoutSession.adHoc(at: noon)
+        session.addExercise(squat, sets: 1)
+        session.addExercise(bench, sets: 1)
+        session.addExercise(row, sets: 1)
+        return session
+    }
+
+    private func ids(_ session: WorkoutSession) -> [[Int]] {
+        session.exerciseGroups.map { $0.map(\.exercise.id) }
+    }
+
+    @Test("Pairing two exercises puts them in one group")
+    func supersetPairs() {
+        var session = threeSeparate()
+        let benchID = session.exerciseGroups[1][0].id
+        let rowID = session.exerciseGroups[2][0].id
+
+        let paired = session.superset(id: rowID, with: benchID)
+        #expect(paired)
+
+        // Row moved in beside bench; squat is untouched and still alone.
+        #expect(ids(session) == [[squat.id], [bench.id, row.id]])
+    }
+
+    @Test("Pairing forward doesn't leave an empty group behind")
+    func supersetForwardKeepsGroupsDense() {
+        var session = threeSeparate()
+        let squatID = session.exerciseGroups[0][0].id
+        let rowID = session.exerciseGroups[2][0].id
+
+        // Moving the *first* group into the last is the case that empties a
+        // group and shifts every index after it — the one that silently
+        // corrupts the nesting on reload if the indices aren't compacted.
+        let paired = session.superset(id: squatID, with: rowID)
+        #expect(paired)
+
+        #expect(ids(session) == [[bench.id], [row.id, squat.id]])
+        #expect(session.exerciseGroups.allSatisfy { !$0.isEmpty })
+    }
+
+    @Test("Pairing two exercises already in the same group changes nothing")
+    func supersetIsIdempotent() {
+        var session = threeSeparate()
+        let benchID = session.exerciseGroups[1][0].id
+        let rowID = session.exerciseGroups[2][0].id
+        _ = session.superset(id: rowID, with: benchID)
+        let before = ids(session)
+
+        let again = session.superset(id: rowID, with: benchID)
+        #expect(again == false)
+
+        #expect(ids(session) == before)
+    }
+
+    @Test("Pairing an unknown exercise reports failure and mutates nothing")
+    func supersetUnknownIDFails() {
+        var session = threeSeparate()
+        let benchID = session.exerciseGroups[1][0].id
+        let before = ids(session)
+
+        let unknownSource = session.superset(id: UUID(), with: benchID)
+        let unknownTarget = session.superset(id: benchID, with: UUID())
+        #expect(unknownSource == false)
+        #expect(unknownTarget == false)
+
+        #expect(ids(session) == before)
+    }
+
+    @Test("Ungrouping lands the exercise next to the pair it left")
+    func ungroupLandsAdjacent() {
+        var session = threeSeparate()
+        let benchID = session.exerciseGroups[1][0].id
+        let rowID = session.exerciseGroups[2][0].id
+        _ = session.superset(id: rowID, with: benchID)
+
+        let split = session.ungroup(id: rowID)
+        #expect(split)
+
+        // Immediately after the group it left — not appended to the end, which
+        // would read as having been deleted and re-added somewhere else.
+        #expect(ids(session) == [[squat.id], [bench.id], [row.id]])
+    }
+
+    @Test("Ungrouping an exercise that's already alone does nothing")
+    func ungroupAloneIsNoOp() {
+        var session = threeSeparate()
+        let squatID = session.exerciseGroups[0][0].id
+        let before = ids(session)
+
+        let split = session.ungroup(id: squatID)
+        #expect(split == false)
+
+        #expect(ids(session) == before)
+    }
+
+    @Test("A paired exercise keeps its own sets")
+    func supersetPreservesSets() {
+        var session = threeSeparate()
+        let benchID = session.exerciseGroups[1][0].id
+        let rowID = session.exerciseGroups[2][0].id
+        let rowSetID = session.exerciseGroups[2][0].sets![0].id
+        session.completeSet(id: rowSetID, reps: 12, at: noon)
+
+        let paired = session.superset(id: rowID, with: benchID)
+        #expect(paired)
+
+        let moved = session.exerciseGroups[1].last!
+        #expect(moved.exercise.id == row.id)
+        #expect(moved.sets?.first?.reps == 12)
+        #expect(moved.sets?.first?.complete == true)
+    }
+}
+
+@Suite("Drop sets")
+struct DropSetTests {
+
+    @Test("A drop set is appended, typed, and carries reps but not weight")
+    func dropSetShape() {
+        var session = WorkoutSession.adHoc(at: noon)
+        let exerciseID = session.addExercise(bench, sets: 0)
+        let firstID = session.addSet(toExerciseWith: exerciseID)!
+        session.updateSet(id: firstID) {
+            $0.reps = 8
+            $0.weight = Measurement(value: 185, unit: .pounds)
+        }
+
+        let dropID = session.addDropSet(toExerciseWith: exerciseID)!
+
+        let sets = session.exerciseGroups[0][0].sets!
+        #expect(sets.count == 2)
+        #expect(sets.last?.id == dropID)
+        #expect(sets.last?.type == .drop)
+        #expect(sets.last?.reps == 8)
+        // A drop is lighter by definition, so carrying the weight over would
+        // mean clearing it every single time.
+        #expect(sets.last?.weight == nil)
+    }
+
+    @Test("A drop set never records an achieved max")
+    func dropSetDoesNotRecordMax() {
+        var session = WorkoutSession.adHoc(at: noon)
+        let exerciseID = session.addExercise(bench, sets: 0)
+        let dropID = session.addDropSet(toExerciseWith: exerciseID)!
+        session.completeSet(
+            id: dropID, reps: 3, weight: Measurement(value: 405, unit: .pounds), at: noon
+        )
+
+        let set = session.workout.allSets.first { $0.id == dropID }!
+        #expect(
+            AchievedMaxUpdate.evaluate(set: set, for: bench, currentBest: nil, at: noon) == nil
+        )
+    }
+}

@@ -202,6 +202,21 @@ final class TrackerModel {
         mutate { $0.deleteExercise(id: id) }
     }
 
+    /// Ramp-down sets, after what the program prescribed.
+    func addDropSet(toExerciseWith id: UUID) {
+        mutate { $0.addDropSet(toExerciseWith: id) }
+    }
+
+    /// Pairs two exercises into a superset, mid-workout.
+    func superset(id: UUID, with other: UUID) {
+        mutate { $0.superset(id: id, with: other) }
+    }
+
+    /// Pulls an exercise back out of its superset.
+    func ungroup(id: UUID) {
+        mutate { $0.ungroup(id: id) }
+    }
+
     func moveGroup(from source: Int, to destination: Int) {
         mutate { $0.moveGroup(from: source, to: destination) }
     }

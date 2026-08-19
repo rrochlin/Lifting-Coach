@@ -315,6 +315,34 @@ public struct WorkoutSession: Equatable, Sendable {
         return newID
     }
 
+    /// Appends a drop set — same movement, immediately after, lighter.
+    ///
+    /// Copies reps from the set above and deliberately not its weight: a drop
+    /// is by definition lighter than what it drops from, so pre-filling the
+    /// working weight would mean clearing it every time. Same reasoning as
+    /// `addWarmupSet`, in the other direction.
+    ///
+    /// Typed `.drop`, which is load-bearing the same way `.warmup` is:
+    /// `AchievedMaxUpdate` only records a max from a `.working` set, and a
+    /// back-off after a top single is not a maximal effort.
+    @discardableResult
+    public mutating func addDropSet(toExerciseWith exerciseID: UUID) -> UUID? {
+        var newID: UUID?
+        mutateExercise(id: exerciseID) { exercise in
+            let template = exercise.sets?.last
+            let new = WorkoutSet(
+                reps: template?.reps,
+                complete: false,
+                type: .drop,
+                restOverride: template?.restOverride,
+                unit: template?.unit
+            )
+            newID = new.id
+            exercise.sets = (exercise.sets ?? []) + [new]
+        }
+        return newID
+    }
+
     /// Prepends a warmup set to an exercise — the ramp-up that gets you to the
     /// first programmed set.
     ///
@@ -383,6 +411,81 @@ public struct WorkoutSession: Equatable, Sendable {
         groups.removeAll(where: \.isEmpty)
         workout.exercises = groups
         return removed
+    }
+
+    // MARK: - Supersets
+
+    /// Pairs two exercises into one superset group, moving `id` in beside
+    /// `other` and appending it after.
+    ///
+    /// The nesting has always been in the model (`[[WorkoutExercise]]`) and in
+    /// the schema (`groupIndex`/`position`), but nothing could *form* a group —
+    /// a superset could only arrive from a plan. Deciding to pair two lifts is
+    /// something that happens mid-workout, at the rack, and it's the lifter's
+    /// call (Core Tenets §1).
+    ///
+    /// Leaves `workout.exercises` dense. That matters beyond tidiness:
+    /// `WorkoutStore` rebuilds the nesting on read by watching `groupIndex`
+    /// advance, so a skipped index doesn't round-trip — it silently re-nests
+    /// the workout into the wrong shape.
+    ///
+    /// Returns false when either id is unknown or the two already share a
+    /// group, so a no-op can't be mistaken for a change worth persisting.
+    @discardableResult
+    public mutating func superset(id: UUID, with other: UUID) -> Bool {
+        guard var groups = workout.exercises,
+              let source = address(of: id, in: groups),
+              let target = address(of: other, in: groups),
+              source.group != target.group
+        else { return false }
+
+        let moved = groups[source.group].remove(at: source.index)
+        // Emptying the source group shifts every later group down by one —
+        // including the target's, when the target sat after the source.
+        var destination = target.group
+        if groups[source.group].isEmpty {
+            groups.remove(at: source.group)
+            if destination > source.group { destination -= 1 }
+        }
+        groups[destination].append(moved)
+
+        workout.exercises = groups
+        return true
+    }
+
+    /// Pulls an exercise out of its superset into a group of its own.
+    ///
+    /// Lands immediately after the group it left rather than at the end of the
+    /// workout: an exercise that jumps to the bottom of the list when you
+    /// unpair it reads as having been deleted and re-added somewhere else.
+    ///
+    /// Returns false for an unknown id, or one already alone in its group.
+    @discardableResult
+    public mutating func ungroup(id: UUID) -> Bool {
+        guard var groups = workout.exercises,
+              let source = address(of: id, in: groups),
+              groups[source.group].count > 1
+        else { return false }
+
+        let moved = groups[source.group].remove(at: source.index)
+        groups.insert([moved], at: source.group + 1)
+
+        workout.exercises = groups
+        return true
+    }
+
+    /// Where an exercise currently sits.
+    ///
+    /// Private, because everything else addresses exercises by id: an
+    /// `ExerciseAddress` is invalidated by the very next mutation, so it's a
+    /// local intermediate rather than something to hold onto.
+    private func address(of id: UUID, in groups: [[WorkoutExercise]]) -> ExerciseAddress? {
+        for (groupIndex, group) in groups.enumerated() {
+            if let index = group.firstIndex(where: { $0.id == id }) {
+                return ExerciseAddress(group: groupIndex, index: index)
+            }
+        }
+        return nil
     }
 
     /// Reorders superset groups — the drag-to-reorder interaction in

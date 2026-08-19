@@ -263,3 +263,203 @@ struct WorkoutStoreTests {
         #expect(orphans == 0)
     }
 }
+
+@Suite("Superset round trip")
+struct SupersetPersistenceTests {
+
+    /// The nesting is flattened to `groupIndex`/`position` on write and rebuilt
+    /// by watching `groupIndex` advance on read. A group formed mid-workout has
+    /// to survive that round trip — this is the assertion that catches a
+    /// `superset`/`ungroup` implementation leaving a hole in the indices, which
+    /// re-nests the whole workout wrongly on the next launch rather than
+    /// failing outright.
+    @Test("A superset formed mid-workout reloads with its grouping intact")
+    func groupingSurvivesReload() throws {
+        let database = try AppDatabase.inMemory()
+        try ExerciseStore(database).save(ExerciseCatalog.seed)
+        let store = WorkoutStore(database)
+
+        var session = WorkoutSession.adHoc(at: Date())
+        session.addExercise(ExerciseCatalog.seed[0], sets: 1)
+        session.addExercise(ExerciseCatalog.seed[1], sets: 1)
+        session.addExercise(ExerciseCatalog.seed[4], sets: 1)
+
+        // Pair the first into the last — the case that empties a group and
+        // shifts every index after it.
+        let firstID = session.exerciseGroups[0][0].id
+        let lastID = session.exerciseGroups[2][0].id
+        let paired = session.superset(id: firstID, with: lastID)
+        #expect(paired)
+
+        let expected = session.exerciseGroups.map { $0.map(\.exercise.id) }
+        try store.save(session.workout)
+
+        let reloaded = try #require(try store.fetchInProgress())
+        #expect((reloaded.exercises ?? []).map { $0.map(\.exercise.id) } == expected)
+        #expect((reloaded.exercises ?? []).allSatisfy { !$0.isEmpty })
+    }
+
+    @Test("Ungrouping reloads as separate exercises")
+    func ungroupingSurvivesReload() throws {
+        let database = try AppDatabase.inMemory()
+        try ExerciseStore(database).save(ExerciseCatalog.seed)
+        let store = WorkoutStore(database)
+
+        var session = WorkoutSession.adHoc(at: Date())
+        session.addExercise(ExerciseCatalog.seed[0], sets: 1)
+        session.addExercise(ExerciseCatalog.seed[1], sets: 1)
+        let secondID = session.exerciseGroups[1][0].id
+        let firstID = session.exerciseGroups[0][0].id
+        _ = session.superset(id: secondID, with: firstID)
+        let split = session.ungroup(id: secondID)
+        #expect(split)
+
+        try store.save(session.workout)
+
+        let reloaded = try #require(try store.fetchInProgress())
+        #expect((reloaded.exercises ?? []).count == 2)
+        #expect((reloaded.exercises ?? []).allSatisfy { $0.count == 1 })
+    }
+
+    // MARK: Duration, distance, provenance
+
+    /// Time-and-distance work has no reps and no weight, which is a complete
+    /// record rather than an empty one. If either field silently dropped on the
+    /// way to SQLite, a logged bike ride would read back as a set of nothing.
+    @Test("A time-and-distance set round-trips")
+    func roundTripsDurationAndDistance() throws {
+        let (store, _) = try makeStore()
+
+        var workout = Workout(startTime: noon, endTime: later(1800), source: "strong-csv")
+        workout.exercises = [[
+            WorkoutExercise(exercise: squat, sets: [
+                WorkoutSet(
+                    complete: true,
+                    type: .working,
+                    duration: Measurement(value: 720, unit: .seconds),
+                    distance: Measurement(value: 2.4, unit: .miles)
+                )
+            ])
+        ]]
+        try store.save(workout)
+
+        let set = try #require(try store.fetch(id: workout.id)?.allSets.first)
+        #expect(set.reps == nil)
+        #expect(set.weight == nil)
+        #expect(set.duration?.converted(to: .seconds).value == 720)
+        #expect(set.distance?.value == 2.4)
+        // Stored with its own unit rather than normalized: 2.4 miles reads back
+        // as 2.4 miles, not as an approximate number of kilometers.
+        #expect(set.distance?.unit.symbol == UnitLength.miles.symbol)
+    }
+
+    @Test("Provenance round-trips, and a workout logged here has none")
+    func roundTripsSource() throws {
+        let (store, _) = try makeStore()
+
+        let imported = Workout(startTime: noon, endTime: later(60), source: "strong-csv")
+        let logged = Workout(startTime: later(7200), endTime: later(7260))
+        try store.save(imported)
+        try store.save(logged)
+
+        #expect(try store.fetch(id: imported.id)?.source == "strong-csv")
+        #expect(try store.fetch(id: logged.id)?.source == nil)
+    }
+
+    // MARK: Summaries
+
+    /// The load-bearing invariant: the cheap query and the expensive one must
+    /// describe the same workouts. `fetchSummaries` exists purely so History
+    /// stops hydrating thousands of sets to draw a list, and the moment it
+    /// disagrees with `fetch` it is showing something that isn't there.
+    @Test("Summaries agree with the fully hydrated fetch")
+    func summariesAgreeWithHydratedFetch() throws {
+        let (store, _) = try makeStore()
+
+        for (index, exercise) in [squat, bench, row].enumerated() {
+            let start = later(Double(index) * 86_400)
+            var workout = Workout(
+                startTime: start,
+                endTime: start.addingTimeInterval(3600),
+                notes: "Day \(index)"
+            )
+            workout.exercises = [[
+                WorkoutExercise(exercise: exercise, sets: [
+                    WorkoutSet(reps: 5, complete: true, type: .working),
+                    WorkoutSet(reps: 5, complete: true, type: .working),
+                    // Not completed, so it must not be counted.
+                    WorkoutSet(reps: 5, type: .working),
+                ])
+            ]]
+            try store.save(workout)
+        }
+
+        let summaries = try store.fetchSummaries(limit: 10)
+        #expect(summaries.count == 3)
+
+        for summary in summaries {
+            let hydrated = try #require(try store.fetch(id: summary.id))
+            #expect(summary.startTime == hydrated.startTime)
+            #expect(summary.endTime == hydrated.endTime)
+            #expect(summary.notes == hydrated.notes)
+            #expect(summary.source == hydrated.source)
+            #expect(summary.completedSetCount
+                == hydrated.allSets.filter { $0.complete == true }.count)
+            #expect(summary.exerciseNames
+                == (hydrated.exercises ?? []).flatMap { $0 }.map(\.displayName))
+        }
+    }
+
+    /// The plan's own wording is what the lifter sees everywhere else, so a
+    /// summary showing the catalog name instead would make one workout read as
+    /// two different sessions depending on which screen you were on.
+    @Test("Summaries show the variant where there is one")
+    func summariesUseDisplayName() throws {
+        let (store, _) = try makeStore()
+
+        var workout = Workout(startTime: noon, endTime: later(60))
+        workout.exercises = [[
+            WorkoutExercise(exercise: bench, variant: "Bench — paused"),
+            WorkoutExercise(exercise: squat),
+        ]]
+        try store.save(workout)
+
+        let summary = try #require(try store.fetchSummaries(limit: 1).first)
+        #expect(summary.exerciseNames == ["Bench — paused", squat.name])
+    }
+
+    @Test("Summaries are newest first and page backwards")
+    func summariesPage() throws {
+        let (store, _) = try makeStore()
+
+        for index in 0..<5 {
+            let start = later(Double(index) * 86_400)
+            try store.save(
+                Workout(startTime: start, endTime: start.addingTimeInterval(60))
+            )
+        }
+
+        let first = try store.fetchSummaries(limit: 2)
+        #expect(first.count == 2)
+        #expect(first[0].startTime == later(4 * 86_400))
+        #expect(first[1].startTime == later(3 * 86_400))
+
+        let next = try store.fetchSummaries(limit: 2, before: first[1].startTime)
+        #expect(next.map(\.startTime) == [later(2 * 86_400), later(86_400)])
+    }
+
+    /// History is finished workouts. The in-progress one belongs to the
+    /// tracker, and listing it would offer a way to open a session that is
+    /// still being written.
+    @Test("Summaries exclude the in-progress workout")
+    func summariesExcludeInProgress() throws {
+        let (store, _) = try makeStore()
+
+        try store.save(Workout(startTime: noon, endTime: later(3600)))
+        try store.save(Workout(startTime: later(7200)))
+
+        let summaries = try store.fetchSummaries(limit: 10)
+        #expect(summaries.count == 1)
+        #expect(summaries[0].startTime == noon)
+    }
+}
