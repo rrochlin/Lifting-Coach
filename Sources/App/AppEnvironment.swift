@@ -17,6 +17,10 @@ public final class AppEnvironment {
     public let workouts: WorkoutStore
     public let plans: PlanStore
     public let users: UserStore
+    /// Assembles the whole local database into one archive file — the Profile
+    /// screen's export. Built here like every other store: views never
+    /// construct one.
+    public let exporter: DataExporter
     /// Per-lift history, derived from the log. See `ExerciseStatsStore` for why
     /// this is a rebuilt table rather than a live query or a counter.
     public let exerciseStats: ExerciseStatsStore
@@ -35,6 +39,7 @@ public final class AppEnvironment {
         self.workouts = WorkoutStore(database)
         self.plans = PlanStore(database)
         self.users = UserStore(database)
+        self.exporter = DataExporter(database)
         self.exerciseStats = ExerciseStatsStore(database)
         self.backend = backend
     }

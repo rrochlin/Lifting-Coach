@@ -390,6 +390,24 @@ private struct ActiveWorkoutList: View {
     /// resolved, or any exercise being swapped mid-workout.
     @State private var choosingFor: ChoosingTarget?
 
+    /// Whether the list is in reorder mode: every exercise collapsed to a
+    /// single draggable row.
+    ///
+    /// This exists because `.onMove` was quietly broken, and the fix had to be
+    /// structural. `List` maps a drag onto the *element* of a `ForEach`, which
+    /// only works when each element renders exactly one row — and an expanded
+    /// exercise renders a header, a warmup button, every set, a rest line under
+    /// each, and an add-set button. The drag looked right and landed nowhere,
+    /// which is the same class of bug as the planner's "tapping the title adds
+    /// a set": one `ForEach` element, many rows.
+    ///
+    /// Collapsing to one row per group is therefore not decoration — it is what
+    /// makes the reorder work at all. It also happens to be the only legible way
+    /// to do it: dragging a lift past three expanded exercises means dragging it
+    /// past two screens of sets, with no way to see where it will land.
+    @State private var isReordering = false
+    @State private var didOpenLaunchReorder = false
+
     /// The one set whose rest editor is open, if any.
     ///
     /// Owned here rather than inside `RestControl` because the editor is a
@@ -401,12 +419,29 @@ private struct ActiveWorkoutList: View {
 
     var body: some View {
         List {
-            statusSection
-            groupSections
-            actionSection
+            if isReordering {
+                reorderBanner
+                reorderSections
+            } else {
+                statusSection
+                groupSections
+                actionSection
+            }
         }
         .listStyle(.plain)
         .screenGround()
+        // Drag handles, and a list that means to be dragged. Reorder mode is a
+        // mode rather than a gesture you have to discover, which is also what
+        // lets it collapse everything for the duration.
+        .environment(\.editMode, .constant(isReordering ? .active : .inactive))
+        .animation(.easeOut(duration: 0.2), value: isReordering)
+        .onAppear {
+            // `-reorderMode`, latched: `.onAppear` runs again on every return
+            // to this tab, and a mode that re-enters itself reads as a bug.
+            guard !didOpenLaunchReorder, LaunchArguments.opensReorderMode else { return }
+            didOpenLaunchReorder = true
+            isReordering = true
+        }
         // A safe-area inset rather than an overlay: the list runs *under* the
         // tab bar, so a bottom-aligned overlay puts the banner behind it. This
         // sits above the bar and lifts the list instead of covering its last row.
@@ -482,6 +517,54 @@ private struct ActiveWorkoutList: View {
         }
     }
 
+    // MARK: Reorder mode
+
+    /// The way out, and the only thing on screen that isn't a lift.
+    private var reorderBanner: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "arrow.up.arrow.down")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Theme.signal)
+            Text("DRAG TO REORDER")
+                .font(Theme.label)
+                .tracking(1.4)
+                .foregroundStyle(Theme.inkMuted)
+            Spacer(minLength: 8)
+            Button("DONE") { isReordering = false }
+                .font(Theme.label)
+                .tracking(1.2)
+                .foregroundStyle(Theme.signal)
+                .buttonStyle(.plain)
+        }
+        .padding(.vertical, 4)
+        .panelRow()
+        // Nothing to drag here, and letting the banner be dragged would put a
+        // non-exercise into the exercise ordering.
+        .moveDisabled(true)
+    }
+
+    /// One row per group, which is what makes `.onMove` land.
+    ///
+    /// A superset is one row carrying both names — the pair moves together,
+    /// matching `moveGroup`'s granularity, and splitting it across two rows
+    /// would reintroduce the many-rows-per-element bug this mode exists to fix.
+    @ViewBuilder
+    private var reorderSections: some View {
+        let groups = model.session?.exerciseGroups ?? []
+        ForEach(Array(groups.enumerated()), id: \.offset) { groupIndex, group in
+            ReorderRow(
+                group: group,
+                position: groupIndex + 1,
+                isActive: model.session?.activeExercise?.group == groupIndex
+            )
+            .panelRow()
+        }
+        .onMove { offsets, destination in
+            guard let source = offsets.first else { return }
+            model.moveGroup(from: source, to: destination)
+        }
+    }
+
     @ViewBuilder
     private var groupSections: some View {
         let groups = model.session?.exerciseGroups ?? []
@@ -499,13 +582,10 @@ private struct ActiveWorkoutList: View {
                 )
             }
         }
-        // Reorders whole exercise groups (supersets move together). Known
-        // limit: this doesn't reorder the two exercises *within* one superset
-        // pair, matching moveGroup's existing group-level granularity.
-        .onMove { offsets, destination in
-            guard let source = offsets.first else { return }
-            model.moveGroup(from: source, to: destination)
-        }
+        // No `.onMove` here on purpose. It was here, and it was broken: each
+        // element of this `ForEach` renders many rows, so `List` had nothing
+        // stable to map a drag onto and the exercise sprang back. Reordering
+        // lives in `reorderSections`, where one element is one row.
     }
 
     @ViewBuilder
@@ -544,6 +624,13 @@ private struct ActiveWorkoutList: View {
             isSupersetted: (model.session?.exerciseGroups[groupIndex].count ?? 1) > 1,
             supersetCandidates: supersetCandidates(excluding: exercise.id),
             onToggleExpanded: { expandedOverrides[exercise.id] = !expanded },
+            onReorder: {
+                // Rest editors are rows of their own, so one left open would
+                // put a second row under a set and break the set-level move
+                // the same way the exercise-level one was broken.
+                expandedRest = nil
+                isReordering = true
+            },
             onSetUnit: { onSetExerciseUnit(exercise.exercise.id, $0) },
             onSuperset: { model.superset(id: exercise.id, with: $0) },
             onUngroup: { model.ungroup(id: exercise.id) },
@@ -635,10 +722,17 @@ private struct ActiveWorkoutList: View {
                         .panelGroupRow(.middle, accent: restingHere ? Theme.live : accent)
                 }
             }
+            // One element, one row — which is what makes this move land, and
+            // exactly what the exercise-level move couldn't promise. An open
+            // rest editor adds a second row for one set, so dragging is off
+            // rather than broken while one is on screen.
             .onMove { offsets, destination in
                 guard let source = offsets.first else { return }
                 model.moveSet(from: source, to: destination, within: exercise.id)
             }
+            // Applied after `onMove`, which is what keeps the `ForEach` a
+            // `DynamicViewContent` long enough to take it.
+            .moveDisabled(expandedRest != nil)
 
             // The set that started this rest is gone — deleted mid-countdown.
             // The rest is still real, so it falls back to the foot of the
@@ -927,6 +1021,8 @@ private struct ExerciseHeaderRow: View {
     /// Everything else in the workout, as pairing targets.
     let supersetCandidates: [(id: UUID, name: String)]
     let onToggleExpanded: () -> Void
+    /// Enters reorder mode — see `ActiveWorkoutList.isReordering`.
+    let onReorder: () -> Void
     /// Pins this lift to a unit for good, or clears it back to the app default.
     let onSetUnit: (WeightUnit?) -> Void
     let onSuperset: (UUID) -> Void
@@ -1016,6 +1112,7 @@ private struct ExerciseHeaderRow: View {
                     }
                 }
                 Button("Add Drop Set", systemImage: "arrow.down.right", action: onAddDropSet)
+                Button("Reorder Exercises", systemImage: "arrow.up.arrow.down", action: onReorder)
                 Menu("Unit — \(unit.symbol)", systemImage: "scalemass") {
                     Picker("Unit", selection: unitSelection) {
                         ForEach(WeightUnit.allCases, id: \.self) { option in
@@ -1050,6 +1147,58 @@ private struct ExerciseHeaderRow: View {
 }
 
 // MARK: - Set row
+
+/// One exercise group, collapsed to a single draggable row.
+///
+/// Everything a lifter needs to place it and nothing else: where it sits, what
+/// it is, and how much of it is done. A superset shows both names, because the
+/// pair moves as one.
+private struct ReorderRow: View {
+    let group: [WorkoutExercise]
+    let position: Int
+    let isActive: Bool
+
+    var body: some View {
+        Panel(accent: isActive ? Theme.live.opacity(0.55) : Theme.hairline) {
+            HStack(spacing: 10) {
+                Text("\(position)")
+                    .font(Theme.data(14, weight: .medium))
+                    .foregroundStyle(Theme.inkFaint)
+                    .frame(minWidth: 16, alignment: .leading)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(group) { exercise in
+                        Text(exercise.displayName)
+                            .font(Theme.heading)
+                            .foregroundStyle(Theme.ink)
+                            .lineLimit(1)
+                    }
+                }
+
+                Spacer(minLength: 8)
+
+                if group.count > 1 {
+                    Chip(text: "superset", color: Theme.signal)
+                }
+                if isActive {
+                    Chip(text: "live", color: Theme.live)
+                }
+                Text(progress)
+                    .font(Theme.data(14))
+                    .foregroundStyle(Theme.inkMuted)
+                    .fixedSize()
+            }
+        }
+    }
+
+    /// Completed over total across the whole group — a paired lift's progress
+    /// is the pair's.
+    private var progress: String {
+        let sets = group.flatMap { $0.sets ?? [] }
+        let done = sets.filter { $0.complete == true }.count
+        return "\(done)/\(sets.count)"
+    }
+}
 
 private struct SetRow: View {
     let number: Int

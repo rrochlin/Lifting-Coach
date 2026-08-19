@@ -299,6 +299,83 @@ struct SupersetPersistenceTests {
         #expect((reloaded.exercises ?? []).allSatisfy { !$0.isEmpty })
     }
 
+    /// The tracker's reorder mode drives `moveGroup` and then saves. `hydrate`
+    /// rebuilds the nesting by watching `groupIndex` advance, so a reorder that
+    /// left a gap would silently re-nest the workout into the wrong shape on the
+    /// next launch — the same invariant `superset` has to hold.
+    @Test("A reordered workout reloads in the order it was left in")
+    func reorderSurvivesReload() throws {
+        let database = try AppDatabase.inMemory()
+        try ExerciseStore(database).save(ExerciseCatalog.seed)
+        let store = WorkoutStore(database)
+
+        var session = WorkoutSession.adHoc(at: Date())
+        session.addExercise(ExerciseCatalog.seed[0], sets: 1)
+        session.addExercise(ExerciseCatalog.seed[1], sets: 1)
+        session.addExercise(ExerciseCatalog.seed[4], sets: 1)
+
+        // Last to first, which is the drag a lifter actually makes.
+        session.moveGroup(from: 2, to: 0)
+        let expected = session.exerciseGroups.map { $0.map(\.exercise.id) }
+        #expect(expected.first?.first == ExerciseCatalog.seed[4].id)
+
+        try store.save(session.workout)
+
+        let reloaded = try #require(try store.fetchInProgress())
+        #expect((reloaded.exercises ?? []).map { $0.map(\.exercise.id) } == expected)
+        #expect((reloaded.exercises ?? []).allSatisfy { !$0.isEmpty })
+    }
+
+    /// The calendar asks for a month, not a page. Same summary shape either way
+    /// — a divergence between the two would show up as a list and a grid
+    /// disagreeing about the same workout.
+    @Test("Range summaries cover exactly the days asked for, oldest first")
+    func rangeSummaries() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        func day(_ month: Int, _ dayOfMonth: Int) -> Date {
+            calendar.date(from: DateComponents(year: 2026, month: month, day: dayOfMonth))!
+        }
+
+        let database = try AppDatabase.inMemory()
+        try ExerciseStore(database).save(ExerciseCatalog.seed)
+        let store = WorkoutStore(database, calendar: calendar)
+
+        for date in [day(7, 31), day(8, 1), day(8, 15), day(8, 31), day(9, 1)] {
+            var session = WorkoutSession.adHoc(at: date)
+            session.addExercise(ExerciseCatalog.seed[0], sets: 1)
+            var workout = session.workout
+            workout.endTime = date.addingTimeInterval(3600)
+            try store.save(workout)
+        }
+
+        let august = try store.fetchSummaries(from: day(8, 1), to: day(8, 31))
+
+        #expect(august.count == 3)
+        #expect(august.map(\.startTime) == [day(8, 1), day(8, 15), day(8, 31)])
+        #expect(august.allSatisfy { $0.exerciseNames.count == 1 })
+    }
+
+    /// Same invariant the paged version has: an in-progress workout is the
+    /// tracker's, and a calendar dot for it would offer a way into a session
+    /// still being written.
+    @Test("Range summaries exclude the in-progress workout")
+    func rangeSummariesExcludeInProgress() throws {
+        let database = try AppDatabase.inMemory()
+        try ExerciseStore(database).save(ExerciseCatalog.seed)
+        let store = WorkoutStore(database)
+
+        var session = WorkoutSession.adHoc(at: Date())
+        session.addExercise(ExerciseCatalog.seed[0], sets: 1)
+        try store.save(session.workout)
+
+        let summaries = try store.fetchSummaries(
+            from: Date().addingTimeInterval(-86_400),
+            to: Date().addingTimeInterval(86_400)
+        )
+        #expect(summaries.isEmpty)
+    }
+
     @Test("Ungrouping reloads as separate exercises")
     func ungroupingSurvivesReload() throws {
         let database = try AppDatabase.inMemory()

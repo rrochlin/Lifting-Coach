@@ -2,19 +2,20 @@ import SwiftUI
 import LiftingCoachModel
 import LiftingCoachPersistence
 
-/// Every logged workout, newest first, grouped by month.
+/// Logged history, two ways: a month calendar and a reverse-chronological list.
 ///
-/// Still deliberately not the calendar `Features/Workout History.md` specifies —
-/// that's a low-priority screen and the rest of the app is still moving under
-/// it. What changed is that it now has to survive a real log: five years of
-/// imported history is 840 workouts and 14,520 sets, and the previous version
-/// fetched a two-year window through `WorkoutStore.fetch(from:to:)`, which
-/// **hydrates every set of every workout** — thousands of queries to draw a list
-/// of dates and names.
+/// `Features/Workout History.md` specifies the calendar — dots, one month at a
+/// time, a dialog on touch with an edit button — so that's the default. The list
+/// stays because the two answer different questions: the calendar shows the
+/// *shape* of a month (consistency, a missed Thursday, a week off), and the list
+/// is how you walk backwards through five years. Neither is a worse version of
+/// the other, so both are here and the toggle is one tap.
 ///
-/// So it reads `WorkoutSummary` instead, a page at a time, and hydrates exactly
-/// one workout when you open it. Month sections because a flat list of 840 rows
-/// gives you nothing to navigate by.
+/// Both read `WorkoutSummary` rather than hydrating workouts. That's what makes
+/// either survivable against a real log: 840 workouts and 14,520 sets, where the
+/// original version fetched a two-year window through `WorkoutStore.fetch(from:to:)`
+/// and **hydrated every set of every workout** — thousands of queries to draw a
+/// list of dates and names. Exactly one workout is hydrated, when you open it.
 struct WorkoutHistoryView: View {
     @Environment(AppEnvironment.self) private var environment
 
@@ -22,8 +23,15 @@ struct WorkoutHistoryView: View {
     @State private var loadError: String?
     @State private var hasMore = true
     @State private var isLoading = false
-    #if DEBUG
+    @State private var mode: HistoryMode = .calendar
+    /// Not `#if DEBUG` any more: the calendar's day dialog navigates from a
+    /// button inside an overlay, which needs a path to push onto rather than a
+    /// `NavigationLink`.
     @State private var path: [UUID] = []
+    /// Which workout was opened from the calendar, and therefore wants the
+    /// editor rather than the reader.
+    @State private var editingFromCalendar: UUID?
+    #if DEBUG
     /// Latched, so returning from the pushed screen doesn't re-push it. `.task`
     /// re-runs on every tab selection, and without this the detail screen
     /// reopens itself, which is indistinguishable from a bug in the row tap.
@@ -35,14 +43,50 @@ struct WorkoutHistoryView: View {
     private let pageSize = 40
 
     var body: some View {
-        #if DEBUG
-        NavigationStack(path: $path) { content }
-        #else
-        NavigationStack { content }
-        #endif
+        NavigationStack(path: $path) {
+            Group {
+                switch mode {
+                case .calendar:
+                    WorkoutCalendarView { id in
+                        editingFromCalendar = id
+                        path = [id]
+                    }
+                case .list:
+                    listContent
+                }
+            }
+            .navigationTitle("History")
+            .toolbar { modeToggle }
+            .navigationDestination(for: UUID.self) { id in
+                // Editing or deleting a workout invalidates the row that opened
+                // it — a corrected title, a different set count, or a workout
+                // that is no longer there at all. Reloading exactly the pages
+                // already on screen keeps the lifter's scroll position, which
+                // re-paging from the top would throw away.
+                WorkoutDetailView(
+                    workoutID: id,
+                    onChange: reloadLoadedPages,
+                    startsEditing: editingFromCalendar == id
+                )
+            }
+        }
     }
 
-    private var content: some View {
+    /// Calendar or list, and nothing else in the toolbar — the two are the same
+    /// data, so this is a lens, not a filter.
+    @ToolbarContentBuilder
+    private var modeToggle: some ToolbarContent {
+        ToolbarItem(placement: .primaryAction) {
+            Picker("View", selection: $mode) {
+                Image(systemName: "calendar").tag(HistoryMode.calendar)
+                Image(systemName: "list.bullet").tag(HistoryMode.list)
+            }
+            .pickerStyle(.segmented)
+            .fixedSize()
+        }
+    }
+
+    private var listContent: some View {
         List {
             if let loadError {
                 Panel(accent: Theme.alert.opacity(0.5)) {
@@ -66,6 +110,13 @@ struct WorkoutHistoryView: View {
                         NavigationLink(value: summary.id) {
                             WorkoutHistoryRow(summary: summary)
                         }
+                        .simultaneousGesture(TapGesture().onEnded {
+                            // A row opens the reader. Only the calendar's
+                            // dialog, which has its own EDIT, asks for the
+                            // editor — cleared here so a row tapped after one
+                            // doesn't inherit it.
+                            editingFromCalendar = nil
+                        })
                         .buttonStyle(.plain)
                         .panelRow()
                     }
@@ -82,15 +133,6 @@ struct WorkoutHistoryView: View {
         }
         .listStyle(.plain)
         .screenGround()
-        .navigationTitle("History")
-        .navigationDestination(for: UUID.self) { id in
-            // Editing or deleting a workout invalidates the row that opened it
-            // — a corrected title, a different set count, or a workout that is
-            // no longer there at all. Reloading exactly the pages already on
-            // screen keeps the lifter's scroll position, which re-paging from
-            // the top would throw away.
-            WorkoutDetailView(workoutID: id, onChange: reloadLoadedPages)
-        }
         .refreshable { load(more: false) }
         .task {
             // `.task` re-runs on every tab selection; reloading a 40-row
@@ -106,6 +148,9 @@ struct WorkoutHistoryView: View {
     private func openDebugDetailIfRequested() {
         guard !didOpenDebugDetail, let index = LaunchArguments.workoutDetailIndex else { return }
         didOpenDebugDetail = true
+        // This flag names a workout by its position in the list, so it means
+        // the list.
+        mode = .list
         // Page far enough in to reach the requested workout — the interesting
         // ones to look at (a cardio session, a superset) are rarely in the
         // first forty.
@@ -193,6 +238,13 @@ struct WorkoutHistoryView: View {
             hasMore = false
         }
     }
+}
+
+/// Which lens History is showing. `Codable`-free and view-local: it's a
+/// preference for the length of a visit, not something worth persisting.
+enum HistoryMode: Hashable {
+    case calendar
+    case list
 }
 
 private struct WorkoutHistoryRow: View {

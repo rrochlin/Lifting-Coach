@@ -305,56 +305,83 @@ public struct WorkoutStore: Sendable {
             if let before {
                 request = request.filter(Column("startTime") < before)
             }
-            let rows = try request.fetchAll(db)
-            guard !rows.isEmpty else { return [] }
+            return try summaries(for: try request.fetchAll(db), db)
+        }
+    }
 
-            let ids = rows.map(\.id)
-            let placeholders = databaseQuestionMarks(count: ids.count)
+    /// Finished workouts inside a date range, oldest first — what a calendar
+    /// month needs.
+    ///
+    /// Range-scoped rather than paged, because a calendar asks a different
+    /// question than a list does: "everything in August", not "the next twenty".
+    /// Same three bounded queries as `fetchSummaries(limit:before:)`, and the
+    /// same reason for them — drawing a month must not hydrate a set.
+    public func fetchSummaries(from start: Date, to end: Date) throws -> [WorkoutSummary] {
+        let lower = calendar.startOfDay(for: start)
+        let upper = calendar.startOfDay(for: end)
+        return try database.writer.read { db in
+            let rows = try WorkoutRow
+                .filter(Column("endTime") != nil)
+                .filter(Column("day") >= lower && Column("day") <= upper)
+                .order(Column("startTime"))
+                .fetchAll(db)
+            return try summaries(for: rows, db)
+        }
+    }
 
-            var names: [String: [String]] = [:]
-            let nameRows = try Row.fetchAll(
-                db,
-                sql: """
-                    SELECT we.workoutId AS workoutId,
-                           COALESCE(NULLIF(we.variant, ''), e.name) AS name
-                    FROM workoutExercise we
-                    JOIN exercise e ON e.id = we.exerciseId
-                    WHERE we.workoutId IN (\(placeholders))
-                    ORDER BY we.workoutId, we.groupIndex, we.position
-                    """,
-                arguments: StatementArguments(ids)
+    /// Attaches exercise names and completed-set counts to a page of rows.
+    ///
+    /// Shared by both `fetchSummaries` entry points so the two can't drift into
+    /// disagreeing about what a summary contains.
+    private func summaries(for rows: [WorkoutRow], _ db: Database) throws -> [WorkoutSummary] {
+        guard !rows.isEmpty else { return [] }
+
+        let ids = rows.map(\.id)
+        let placeholders = databaseQuestionMarks(count: ids.count)
+
+        var names: [String: [String]] = [:]
+        let nameRows = try Row.fetchAll(
+            db,
+            sql: """
+                SELECT we.workoutId AS workoutId,
+                       COALESCE(NULLIF(we.variant, ''), e.name) AS name
+                FROM workoutExercise we
+                JOIN exercise e ON e.id = we.exerciseId
+                WHERE we.workoutId IN (\(placeholders))
+                ORDER BY we.workoutId, we.groupIndex, we.position
+                """,
+            arguments: StatementArguments(ids)
+        )
+        for row in nameRows {
+            names[row["workoutId"], default: []].append(row["name"])
+        }
+
+        var counts: [String: Int] = [:]
+        let countRows = try Row.fetchAll(
+            db,
+            sql: """
+                SELECT we.workoutId AS workoutId, COUNT(*) AS n
+                FROM workoutSet s
+                JOIN workoutExercise we ON we.id = s.workoutExerciseId
+                WHERE we.workoutId IN (\(placeholders)) AND s.complete = 1
+                GROUP BY we.workoutId
+                """,
+            arguments: StatementArguments(ids)
+        )
+        for row in countRows {
+            counts[row["workoutId"]] = row["n"]
+        }
+
+        return rows.map { row in
+            WorkoutSummary(
+                id: UUID(uuidString: row.id) ?? UUID(),
+                startTime: row.startTime,
+                endTime: row.endTime,
+                notes: row.notes,
+                source: row.source,
+                exerciseNames: names[row.id] ?? [],
+                completedSetCount: counts[row.id] ?? 0
             )
-            for row in nameRows {
-                names[row["workoutId"], default: []].append(row["name"])
-            }
-
-            var counts: [String: Int] = [:]
-            let countRows = try Row.fetchAll(
-                db,
-                sql: """
-                    SELECT we.workoutId AS workoutId, COUNT(*) AS n
-                    FROM workoutSet s
-                    JOIN workoutExercise we ON we.id = s.workoutExerciseId
-                    WHERE we.workoutId IN (\(placeholders)) AND s.complete = 1
-                    GROUP BY we.workoutId
-                    """,
-                arguments: StatementArguments(ids)
-            )
-            for row in countRows {
-                counts[row["workoutId"]] = row["n"]
-            }
-
-            return rows.map { row in
-                WorkoutSummary(
-                    id: UUID(uuidString: row.id) ?? UUID(),
-                    startTime: row.startTime,
-                    endTime: row.endTime,
-                    notes: row.notes,
-                    source: row.source,
-                    exerciseNames: names[row.id] ?? [],
-                    completedSetCount: counts[row.id] ?? 0
-                )
-            }
         }
     }
 

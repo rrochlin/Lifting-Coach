@@ -31,6 +31,11 @@ struct WorkoutDetailView: View {
     /// Told when this workout has been rewritten or removed, so the list that
     /// pushed this screen can stop showing a row that no longer matches the log.
     var onChange: (() -> Void)?
+    /// Opens straight into editing, for callers that already said that's what
+    /// they wanted — the calendar's day dialog has its own EDIT button, and
+    /// landing on a read-only screen with a second EDIT to press would be the
+    /// app making the lifter say it twice.
+    var startsEditing = false
 
     @State private var draft: LoggedWorkoutDraft?
     @State private var isEditing = false
@@ -392,6 +397,7 @@ struct WorkoutDetailView: View {
             }
             draft = LoggedWorkoutDraft(workout)
             loadError = nil
+            if startsEditing { isEditing = true }
             #if DEBUG
             if LaunchArguments.opensWorkoutEditor { isEditing = true }
             #endif
