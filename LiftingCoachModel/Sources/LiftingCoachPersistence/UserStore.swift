@@ -52,8 +52,10 @@ private struct ExerciseUnitRow: Codable, FetchableRecord, PersistableRecord {
 /// Read/write access to the lifter and their tracked metrics.
 ///
 /// Phase 1 is single-user and offline, so there's no sign-in to establish who
-/// this is — `localUser()` creates a placeholder on first launch. Cognito lands
-/// in phase 2 and will replace the placeholder identity, not the storage.
+/// this is — `localUser()` creates a placeholder on first launch. Cognito
+/// replaces that placeholder identity and nothing else: signing in `bind`s the
+/// lifter already in this database to an account, rather than fetching a
+/// different one. The database stays the system of record.
 public struct UserStore: Sendable {
     private let database: AppDatabase
     private let calendar: Calendar
@@ -147,6 +149,57 @@ public struct UserStore: Sendable {
         let user = User(name: "Me", email: "")
         try save(user)
         return user
+    }
+
+    /// The Cognito account this database belongs to, or `nil` if it has never
+    /// been signed in.
+    ///
+    /// Read from the database rather than from a token, so it answers offline
+    /// and after the session has expired — which is when it matters, since the
+    /// question it settles is whose training log is on this phone.
+    public func accountBinding(for userId: UUID) throws -> String? {
+        try database.writer.read { db in
+            try String.fetchOne(
+                db,
+                sql: "SELECT cognitoSub FROM user WHERE id = ?",
+                arguments: [userId.uuidString]
+            )
+        }
+    }
+
+    /// Binds the local lifter to a Cognito account.
+    ///
+    /// Binding the same account twice is a no-op — signing back in on a phone
+    /// that is already yours should be uneventful.
+    ///
+    /// Binding a *different* account is refused. The local database is that
+    /// first account's training log, and adopting it under a second identity
+    /// would upload one person's sessions into another person's snapshot. The
+    /// caller's answer is the destructive one: `SnapshotImporter` replaces the
+    /// whole file, and the binding arrives with the snapshot rather than being
+    /// patched here.
+    ///
+    /// Nothing unbinds. Signing out deliberately leaves the note in place: if
+    /// it were cleared, the next sign-in as somebody else would find an unbound
+    /// database and silently take over the log this refusal exists to protect.
+    public func bind(cognitoSub: String, to userId: UUID) throws {
+        try database.writer.write { db in
+            let existing = try String.fetchOne(
+                db,
+                sql: "SELECT cognitoSub FROM user WHERE id = ?",
+                arguments: [userId.uuidString]
+            )
+            if let existing {
+                guard existing == cognitoSub else {
+                    throw AccountBindingError.boundToAnotherAccount(existing: existing)
+                }
+                return
+            }
+            try db.execute(
+                sql: "UPDATE user SET cognitoSub = ? WHERE id = ?",
+                arguments: [cognitoSub, userId.uuidString]
+            )
+        }
     }
 
     /// Sets the unit weights are read and entered in.
@@ -298,4 +351,13 @@ public struct UserStore: Sendable {
             )
         )
     }
+}
+
+/// Refused because the database on this device already belongs to someone.
+///
+/// Not an error state so much as a fork in the sign-in flow: the resolution
+/// is a restore, which replaces the whole database, and that is a decision
+/// for the lifter rather than something a bind step should take quietly.
+public enum AccountBindingError: Error, Equatable {
+    case boundToAnotherAccount(existing: String)
 }

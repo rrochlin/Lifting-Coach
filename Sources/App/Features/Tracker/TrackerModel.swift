@@ -36,6 +36,14 @@ final class TrackerModel {
     /// `AppEnvironment.currentUser` — TrackerModel doesn't hold a reference to
     /// the environment itself, to keep it independently testable.
     private let onAchievedMaxRecorded: () -> Void
+    /// Called once a workout has stopped being in progress — finished into
+    /// history, or discarded. Named for the local event rather than for what
+    /// the app does with it, same as the closure above; what a workout ending
+    /// is worth uploading is not the tracker's business.
+    ///
+    /// Discarding counts because the tracker writes every mutation to disk as
+    /// it happens, so an abandoned session is real rows until it isn't.
+    private let onWorkoutEnded: () -> Void
 
     init(
         workouts: WorkoutStore,
@@ -43,7 +51,8 @@ final class TrackerModel {
         stats: ExerciseStatsStore,
         userID: UUID,
         notifier: RestNotifier = RestNotifier(),
-        onAchievedMaxRecorded: @escaping () -> Void = {}
+        onAchievedMaxRecorded: @escaping () -> Void = {},
+        onWorkoutEnded: @escaping () -> Void = {}
     ) {
         self.workouts = workouts
         self.users = users
@@ -51,6 +60,7 @@ final class TrackerModel {
         self.userID = userID
         self.notifier = notifier
         self.onAchievedMaxRecorded = onAchievedMaxRecorded
+        self.onWorkoutEnded = onWorkoutEnded
     }
 
     var isActive: Bool { session != nil }
@@ -94,6 +104,7 @@ final class TrackerModel {
         // `finish` has just dropped every incomplete set, which is precisely
         // the kind of thing an incremental counter gets wrong.
         try? stats.rebuild(for: userID)
+        onWorkoutEnded()
     }
 
     /// Abandons the workout without saving it as history.
@@ -103,6 +114,7 @@ final class TrackerModel {
         }
         session = nil
         dismissRest()
+        onWorkoutEnded()
     }
 
     // MARK: Editing

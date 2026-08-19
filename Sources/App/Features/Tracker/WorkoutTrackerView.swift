@@ -43,7 +43,8 @@ struct WorkoutTrackerView: View {
                     stats: environment.exerciseStats,
                     userID: userID,
                     notifier: RestNotifier(isEnabled: !isRestDemo),
-                    onAchievedMaxRecorded: { environment.reloadUser() }
+                    onAchievedMaxRecorded: { environment.reloadUser() },
+                    onWorkoutEnded: { environment.snapshotDidChange(.workoutEnded) }
                 )
                 model.resumeIfNeeded()
                 self.model = model

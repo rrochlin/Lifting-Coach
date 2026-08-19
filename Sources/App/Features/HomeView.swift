@@ -235,6 +235,7 @@ struct HomeView: View {
         do {
             try environment.users.recordBodyWeight(weight, for: user.id)
             environment.reloadUser()
+            environment.snapshotDidChange(.lifterUpdated)
             loadError = nil
         } catch {
             loadError = error.localizedDescription

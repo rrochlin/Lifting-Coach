@@ -41,7 +41,12 @@ struct WorkoutPlannerView: View {
             model?.load()
             return
         }
-        let model = PlannerModel(plans: environment.plans, userID: user.id, user: user)
+        let model = PlannerModel(
+            plans: environment.plans,
+            userID: user.id,
+            user: user,
+            onSaved: { environment.snapshotDidChange(.planSaved) }
+        )
         model.load()
         self.model = model
     }

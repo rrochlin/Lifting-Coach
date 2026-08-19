@@ -29,7 +29,16 @@ public final class AppEnvironment {
     /// it yet — see `Backend/BackendClient.swift`.
     public let backend: any BackendClient
 
-    public init(database: AppDatabase, backend: any BackendClient) {
+    /// Decides when the database is worth uploading. See `SnapshotSync` — the
+    /// short version is that it costs nothing until there's an account, because
+    /// it checks for one before it exports anything.
+    public let snapshotSync: SnapshotSync
+
+    public init(
+        database: AppDatabase,
+        backend: any BackendClient,
+        watermarks: any SnapshotWatermarkStore = UserDefaultsWatermarkStore()
+    ) {
         self.database = database
         self.exercises = ExerciseStore(database)
         self.workouts = WorkoutStore(database)
@@ -37,6 +46,18 @@ public final class AppEnvironment {
         self.users = UserStore(database)
         self.exerciseStats = ExerciseStatsStore(database)
         self.backend = backend
+        self.snapshotSync = SnapshotSync(
+            database: database,
+            watermarks: watermarks,
+            workingDirectory: FileManager.default.temporaryDirectory
+                .appendingPathComponent("LiftingCoach/outbox", isDirectory: true),
+            // The account comes from the live session rather than from the
+            // database binding: a snapshot is filed under the identity that is
+            // authorised to PUT it, and an expired session can't upload however
+            // firmly the `user` row says whose log this is.
+            account: { await backend.currentSession?.subject },
+            upload: { try await backend.uploadSnapshot($0) }
+        )
     }
 
     /// The real app: on-disk SQLite, no backend.
@@ -107,6 +128,7 @@ public final class AppEnvironment {
         guard let user = currentUser, user.preferredUnit != unit else { return }
         try? users.setPreferredUnit(unit, for: user.id)
         reloadUser()
+        snapshotDidChange(.lifterUpdated)
     }
 
     /// The unit a given lift is read and entered in — its own preference, then
@@ -124,12 +146,49 @@ public final class AppEnvironment {
         guard let user = currentUser else { return }
         try? users.setUnit(unit, forExerciseID: exerciseID, for: user.id)
         reloadUser()
+        snapshotDidChange(.lifterUpdated)
     }
 
     /// Re-reads the lifter after their metrics change, so a newly recorded 1RM
     /// is reflected the next time a plan resolves a `%1RM` prescription.
     public func reloadUser() {
         currentUser = try? users.localUser()
+    }
+
+    // MARK: Snapshot upload
+
+    /// Reports that something worth uploading happened, and lets `SnapshotSync`
+    /// decide whether it was.
+    ///
+    /// Fire and forget on purpose: nothing the lifter is doing should wait on an
+    /// upload, and nothing they're doing should fail because one did. The error
+    /// is swallowed here and kept on the actor as `SnapshotSync.lastFailure`,
+    /// which is also the only reason these tasks capture nothing but the actor
+    /// — there is no caller left to hand a failure back to.
+    ///
+    /// A failure needs no handling beyond that: the watermark is untouched, so
+    /// the next trigger retries by the ordinary path rather than by a second
+    /// mechanism written to recover from the first.
+    ///
+    /// Every trigger goes through these two methods rather than reaching for the
+    /// actor directly, so "when do we upload" stays one rule instead of one per
+    /// call site.
+    public func snapshotDidChange(_ trigger: SnapshotSync.Trigger) {
+        let sync = snapshotSync
+        Task {
+            await sync.markChanged()
+            try? await sync.syncIfNeeded(trigger)
+        }
+    }
+
+    /// Checks whether an upload is due without claiming anything changed.
+    ///
+    /// This is what backgrounding calls. It is cheap when nothing has happened
+    /// — no export, no gzip — which is what makes it safe to fire on an event
+    /// the app sees dozens of times a day.
+    public func snapshotSyncIfNeeded(_ trigger: SnapshotSync.Trigger) {
+        let sync = snapshotSync
+        Task { try? await sync.syncIfNeeded(trigger) }
     }
 
     /// Deliberately no longer seeded into the app database.
