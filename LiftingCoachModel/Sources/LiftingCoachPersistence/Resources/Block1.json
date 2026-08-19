@@ -32,7 +32,7 @@
       "name": "Triceps",
       "muscleGroup": "Triceps",
       "suggestions": [
-        "Overhead extension",
+        "Overhead Extension",
         "Pushdown"
       ]
     },
@@ -41,8 +41,8 @@
       "name": "Row",
       "muscleGroup": "Middle Back",
       "suggestions": [
-        "Chest-supported row",
-        "Seal row"
+        "T-Bar Row",
+        "Dumbbell Incline Row"
       ]
     },
     {
@@ -56,8 +56,8 @@
       "name": "Incline press",
       "muscleGroup": "Chest",
       "suggestions": [
-        "Barbell incline press",
-        "Dumbbell incline press"
+        "Incline Bench Press",
+        "Incline Dumbbell Press"
       ]
     },
     {
@@ -65,8 +65,8 @@
       "name": "Upper back",
       "muscleGroup": "Lats",
       "suggestions": [
-        "Lat pulldown",
-        "Cable row"
+        "Lat Pulldown",
+        "Cable Row"
       ]
     },
     {
@@ -74,22 +74,25 @@
       "name": "Rear delts",
       "muscleGroup": "Shoulders",
       "suggestions": [
-        "Face pulls"
+        "Face Pull"
       ]
     },
     {
       "key": "biceps",
       "name": "Biceps",
       "muscleGroup": "Biceps",
-      "suggestions": []
+      "suggestions": [
+        "Barbell Curl",
+        "Hammer Curl"
+      ]
     },
     {
       "key": "core",
       "name": "Core",
       "muscleGroup": "Abdominals",
       "suggestions": [
-        "Ab wheel",
-        "Hanging leg raise"
+        "Ab Rollout",
+        "Hanging Leg Raise"
       ]
     }
   ],

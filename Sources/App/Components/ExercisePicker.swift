@@ -95,15 +95,80 @@ struct ExercisePicker: View {
         #endif
     }
 
+    @ViewBuilder
     private var list: some View {
-        List(filtered, id: \.self) { exercise in
-            NavigationLink(value: exercise) {
-                ExercisePickerRow(exercise: exercise, stats: stats[exercise.id])
+        if filtered.isEmpty, !exercises.isEmpty {
+            emptyState
+        } else {
+            List(filtered, id: \.self) { exercise in
+                NavigationLink(value: exercise) {
+                    ExercisePickerRow(exercise: exercise, stats: stats[exercise.id])
+                }
+                .listRowBackground(Theme.void)
             }
-            .listRowBackground(Theme.void)
+            .listStyle(.plain)
+            .scrollDismissesKeyboard(.interactively)
         }
-        .listStyle(.plain)
-        .scrollDismissesKeyboard(.interactively)
+    }
+
+    /// Nothing matched — said out loud, with the way out on screen.
+    ///
+    /// This was a blank white list. Mid-workout that reads as a broken app, not
+    /// as a search with no hits, and it left the lifter with nothing to tap:
+    /// the search field held a term they hadn't typed (a suggestion chip put it
+    /// there) and the filters were set by the slot. Core Tenets §10 — an empty
+    /// state has to say what it is.
+    private var emptyState: some View {
+        VStack(spacing: 12) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 24))
+                .foregroundStyle(Theme.inkFaint)
+            Text("NO MATCHES")
+                .font(Theme.label)
+                .tracking(1.6)
+                .foregroundStyle(Theme.inkMuted)
+            Text(emptyDescription)
+                .font(Theme.caption)
+                .foregroundStyle(Theme.inkFaint)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if !query.isEmpty || muscleFilter != nil || equipmentFilter != nil {
+                Button {
+                    query = ""
+                    muscleFilter = nil
+                    equipmentFilter = nil
+                } label: {
+                    Text("SHOW EVERYTHING")
+                        .font(Theme.label)
+                        .tracking(1.4)
+                        .foregroundStyle(Theme.signal)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 9)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6)
+                                .strokeBorder(Theme.signal.opacity(0.6), lineWidth: 1)
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 32)
+        .padding(.top, 44)
+        .frame(maxWidth: .infinity)
+        .screenGround()
+    }
+
+    /// Names what actually narrowed the list, so the lifter knows which control
+    /// to reach for rather than guessing.
+    private var emptyDescription: String {
+        var applied: [String] = []
+        if !query.isEmpty { applied.append("“\(query)”") }
+        if let muscleFilter { applied.append(muscleFilter.lowercased()) }
+        if let equipmentFilter { applied.append(equipmentFilter.lowercased()) }
+        guard !applied.isEmpty else { return "The catalog is empty." }
+        return "Nothing in the catalog matches " + applied.joined(separator: " + ") + "."
     }
 
     /// What the program floated for this slot — "overhead extension,"
@@ -123,7 +188,7 @@ struct ExercisePicker: View {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
                         ForEach(suggestions, id: \.self) { suggestion in
-                            Button { query = suggestion } label: {
+                            Button { apply(suggestion) } label: {
                                 Text(suggestion)
                                     .font(Theme.data(13))
                                     .foregroundStyle(Theme.signal)
@@ -140,6 +205,21 @@ struct ExercisePicker: View {
             .padding(.horizontal, 16)
             .padding(.top, 10)
         }
+    }
+
+    /// Tapping a suggestion searches for it — and drops the prefilters, which
+    /// is the whole fix.
+    ///
+    /// The two used to stack, and stacked they contradict each other: the row
+    /// slot prefilters to Middle Back, "Cable Row" matches *Seated Cable Rows*,
+    /// and that lift's primary muscle is filed under a different group — so
+    /// searching the coach's own suggestion returned nothing. The suggestion is
+    /// the more specific instruction of the two, so it wins. The prefilters are
+    /// visible chips and go back on in a tap.
+    private func apply(_ suggestion: String) {
+        query = suggestion
+        muscleFilter = nil
+        equipmentFilter = nil
     }
 
     /// Muscle and equipment chips, pre-set from the slot being filled.

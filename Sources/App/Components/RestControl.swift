@@ -44,6 +44,13 @@ struct RestControl: View {
     /// animates, being a rotation that can't drag layout around with it.
     var isExpanded: Bool = false
     var onToggleExpanded: () -> Void = {}
+    /// What tapping the line's label does, when that isn't "open the editor".
+    ///
+    /// A finished rest wants acknowledging, and acknowledging is one tap — not
+    /// open-a-panel-then-press-DONE, which is what expiry used to force. The
+    /// caret keeps expanding either way, so putting time back on the clock is
+    /// still one gesture away.
+    var onPrimaryTap: (() -> Void)?
     /// Where a typed duration lands.
     var onSet: (Int) -> Void = { _ in }
 
@@ -61,7 +68,7 @@ struct RestControl: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 7) {
             HStack(spacing: 8) {
-                Button { dismissKeyboard(); onToggleExpanded() } label: {
+                Button { dismissKeyboard(); (onPrimaryTap ?? onToggleExpanded)() } label: {
                     HStack(spacing: 8) {
                         Image(systemName: mode.isOver ? "checkmark.circle.fill" : "timer")
                             .font(.system(size: 13, weight: .medium))

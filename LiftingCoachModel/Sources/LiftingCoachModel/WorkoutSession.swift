@@ -31,18 +31,19 @@ public struct WorkoutSession: Equatable, Sendable {
     /// The lifter, if known — supplies `maxLifts` for resolving `%1RM`.
     public var user: User?
     /// Final fallback when neither the set nor the block specifies a rest time.
-    public var appDefaultRestTime: Int
+    /// Per set type — see `RestDefaults`.
+    public var appDefaultRest: RestDefaults
 
     public init(
         workout: Workout,
         block: WorkoutBlock? = nil,
         user: User? = nil,
-        appDefaultRestTime: Int = 120
+        appDefaultRest: RestDefaults = .standard
     ) {
         self.workout = workout
         self.block = block
         self.user = user
-        self.appDefaultRestTime = appDefaultRestTime
+        self.appDefaultRest = appDefaultRest
     }
 
     // MARK: - Starting
@@ -64,7 +65,7 @@ public struct WorkoutSession: Equatable, Sendable {
         block: WorkoutBlock? = nil,
         user: User? = nil,
         at date: Date = Date(),
-        appDefaultRestTime: Int = 120
+        appDefaultRest: RestDefaults = .standard
     ) -> WorkoutSession {
         let groups = (planned.exercises ?? []).map { group in
             group.map { plannedExercise in
@@ -97,7 +98,7 @@ public struct WorkoutSession: Equatable, Sendable {
             workout: Workout(exercises: groups, startTime: date, notes: planned.notes),
             block: block,
             user: user,
-            appDefaultRestTime: appDefaultRestTime
+            appDefaultRest: appDefaultRest
         )
     }
 
@@ -107,13 +108,13 @@ public struct WorkoutSession: Equatable, Sendable {
         at date: Date = Date(),
         block: WorkoutBlock? = nil,
         user: User? = nil,
-        appDefaultRestTime: Int = 120
+        appDefaultRest: RestDefaults = .standard
     ) -> WorkoutSession {
         WorkoutSession(
             workout: Workout(exercises: [], startTime: date),
             block: block,
             user: user,
-            appDefaultRestTime: appDefaultRestTime
+            appDefaultRest: appDefaultRest
         )
     }
 
@@ -179,7 +180,7 @@ public struct WorkoutSession: Equatable, Sendable {
     /// (Core Tenets §1).
     public func restTarget(afterSetWith id: UUID) -> Int {
         guard let set = workout.allSets.first(where: { $0.id == id }) else {
-            return appDefaultRestTime
+            return appDefaultRest[nil]
         }
         if let override = set.restOverride { return override }
         return prescribedRest(afterSetWith: id)
@@ -190,17 +191,21 @@ public struct WorkoutSession: Equatable, Sendable {
     /// view having to re-walk the fallback chain itself.
     public func prescribedRest(afterSetWith id: UUID) -> Int {
         guard let set = workout.allSets.first(where: { $0.id == id }) else {
-            return appDefaultRestTime
+            return appDefaultRest[nil]
         }
+        // The app default is resolved against the set's own type either way, so
+        // an unprescribed warmup falls back to a warmup's rest rather than to
+        // the one number that used to stand for every kind of set.
+        let fallback = appDefaultRest[set.type ?? set.plannedFrom?.type]
         if let planned = set.plannedFrom {
-            return block?.restTime(for: planned, appDefault: appDefaultRestTime)
+            return block?.restTime(for: planned, appDefault: fallback)
                 ?? planned.restTime
-                ?? appDefaultRestTime
+                ?? fallback
         }
         if let type = set.type, let blockDefault = block?.defaultRestTimes?[type] {
             return blockDefault
         }
-        return appDefaultRestTime
+        return fallback
     }
 
     // MARK: - Logging

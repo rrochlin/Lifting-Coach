@@ -2,7 +2,7 @@
 This document will be a thorough review of the current application state and issues that I'm seeing broken down by section
 
 ## Home
-- highlighted workout doesn't have  a quickstart click interaction
+- ~~highlighted workout doesn't have  a quickstart click interaction~~ — the today card starts the workout and switches to the Workout tab. An in-progress session now gets its own card above it, in amber, so a workout left running is visible from the screen the app opens on rather than only from the tab you'd have to think to visit.
 - ~~we should shift the plan timeline back for testing. I'm actually doing that plan now and I'm on the last workout of week 5 actually~~ — the block's header panel on Plan opens Block Settings: start date (with an explicit "move the program with it"), length in weeks, name, rest defaults, delete. The TODAY readout says which week the change lands you in, so you dial the date until it reads week 6.
 - I can log bodyweight, but that doesn't appear to go anywhere. Also I'd like to use a wheel selector prepoulated with the previous recorded weight. we should allow up to 1/10 kg/lb resolution entered.
 
@@ -41,6 +41,39 @@ This document will be a thorough review of the current application state and iss
 ## Backlog
 Not broken — wanted, and bigger than a fix.
 
+- **A warmup block, generated.** Adding warmup sets one at a time and typing
+  each weight is the friction; what's wanted is "here is the ramp to today's
+  top set", built down from it. This needs a *scheme* the app doesn't have —
+  how many steps, what percentages, whether they're of the first working set or
+  of a max, whether bar-only counts as a step, and how it rounds to loadable
+  plates (which is the plate calculator above, so the two land together). It is
+  emphatically not the app deciding your warmup (Core Tenets §1): it proposes a
+  ramp into real, editable sets, the way `SetSuggestion` proposes a number.
+  Until then `Add Warmup Set` prepends one empty set at a time, and an empty
+  warmup field now shows last session's ramp greyed.
+- **Rep-aware weight suggestion.** A suggestion drawn from last session's sets
+  of 8 is a bad proposal for today's triple, and today the fallback carries the
+  weight across unchanged. Doing this properly means relating load to reps —
+  which is the **theoretical-max model that deliberately doesn't exist**
+  (`MaxReference.theoretical` resolves to `nil` on purpose, and `Ideas.md`
+  explicitly distrusts the standard formulas). So this is blocked on that
+  decision, not on the suggestion code. What's *not* blocked and is already
+  done: matching within set type and by ordinal, so a warmup draws from warmups
+  and a fourth working set from the fourth.
+- **Lock-screen and Dynamic Island control.** "Unlocking my phone to check off
+  an active set sucks" — twice, in two months. The real answer is a Live
+  Activity: the running rest timer and the next set on the lock screen, with a
+  check-off control. `ActivityKit`, an app-extension target, and a shared app
+  group for the session state; the timer is the easy half (it renders from
+  `startedAt`/`endsAt`, which is already how `RestTimer` stores itself) and
+  logging a set from the widget is the half that needs real design. Notably
+  this does **not** need the music player integrated — that was the guess in
+  the 19-07 note, and it's wrong; a Live Activity sits on the lock screen
+  whatever is playing.
+- **Separate RPE scales by rep range.** An RPE 8 triple and an RPE 8 set of ten
+  are different instructions, and the app treats the number as one scale. Noted
+  19-07-26 and still unaddressed — probably wants the effort target to carry
+  its rep context rather than a second scale, but that's a design question.
 - **Plate calculator (lb and kg).** Given a target weight and a bar, say what to
   load per side. Needs a real model of what's *available*: bar weight (45/35/15
   lb, 20/15 kg), which plates the gym has and how many, and whether the lifter

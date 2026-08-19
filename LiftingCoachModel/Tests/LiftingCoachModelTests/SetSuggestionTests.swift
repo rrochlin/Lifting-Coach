@@ -138,4 +138,76 @@ struct SetSuggestionTests {
         #expect(suggestion?.weight?.unit == .kilograms)
         #expect(suggestion?.weight?.value == 100)
     }
+
+    // MARK: Carrying the set above down
+
+    @Test("With no history, the weight typed above fills the blanks below")
+    func carriesEnteredWeightDown() {
+        // The reported case: a lift the app has never seen, four blank rows
+        // under the one you just typed 225 into.
+        var typed = empty()
+        typed.weight = Measurement(value: 225, unit: .pounds)
+        typed.reps = 5
+        let current = [typed, empty(), empty()]
+
+        let third = SetSuggestion.forSet(at: 2, in: current, previous: [])
+
+        #expect(third?.weight?.value == 225)
+        #expect(third?.reps == 5)
+    }
+
+    @Test("A weight typed above carries even though the set isn't checked off yet")
+    func carriesBeforeCompletion() {
+        // Waiting for the checkbox would leave the rows blank at exactly the
+        // moment the lifter is looking at them.
+        var typed = empty()
+        typed.weight = Measurement(value: 185, unit: .pounds)
+
+        let suggestion = SetSuggestion.forSet(at: 1, in: [typed, empty()], previous: [])
+
+        #expect(typed.complete != true)
+        #expect(suggestion?.weight?.value == 185)
+    }
+
+    @Test("History still wins over the set above")
+    func historyOutranksTheSetAbove() {
+        // Last session matches by ordinal within type, so it knows the third
+        // working set was a back-off. The set above only speaks when it can't.
+        let previous = [logged(5, 225), logged(5, 235), logged(8, 185)]
+        var typed = empty()
+        typed.weight = Measurement(value: 225, unit: .pounds)
+        let current = [typed, empty(), empty()]
+
+        let third = SetSuggestion.forSet(at: 2, in: current, previous: previous)
+
+        #expect(third?.weight?.value == 185)
+        #expect(third?.reps == 8)
+    }
+
+    @Test("A warmup ramp is not flattened by the set above it")
+    func doesNotFlattenAWarmupRamp() {
+        let previous = [
+            logged(5, 45, type: .warmup), logged(5, 135, type: .warmup),
+            logged(3, 185, type: .warmup),
+        ]
+        var first = empty(.warmup)
+        first.weight = Measurement(value: 45, unit: .pounds)
+        let current = [first, empty(.warmup), empty(.warmup)]
+
+        let second = SetSuggestion.forSet(at: 1, in: current, previous: previous)
+        let third = SetSuggestion.forSet(at: 2, in: current, previous: previous)
+
+        #expect(second?.weight?.value == 135)
+        #expect(third?.weight?.value == 185)
+    }
+
+    @Test("The set above is matched within its own type")
+    func carriesWithinTypeOnly() {
+        // A drop set sitting under a 315 working set is not a 315 drop set.
+        var working = empty()
+        working.weight = Measurement(value: 315, unit: .pounds)
+        let current = [working, empty(.drop)]
+
+        #expect(SetSuggestion.forSet(at: 1, in: current, previous: []) == nil)
+    }
 }

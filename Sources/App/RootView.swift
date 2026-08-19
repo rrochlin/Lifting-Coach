@@ -33,10 +33,15 @@ struct RootView: View {
     private var tabs: some View {
         TabView(selection: $selection) {
             Tab("Home", systemImage: "house.fill", value: RootTab.home) {
-                HomeView(onStartWorkout: { planned in
-                    pendingStart = planned
-                    selection = .workout
-                })
+                HomeView(
+                    onStartWorkout: { planned in
+                        pendingStart = planned
+                        selection = .workout
+                    },
+                    // Resuming hands over nothing: the session is already on
+                    // disk and the tracker picks it up itself.
+                    onResumeWorkout: { selection = .workout }
+                )
             }
             Tab("Workout", systemImage: "figure.strengthtraining.traditional", value: RootTab.workout) {
                 WorkoutTrackerView(pendingStart: $pendingStart)
@@ -145,6 +150,17 @@ enum LaunchArguments {
     /// same family as the rest of these.
     static var opensReorderMode: Bool {
         ProcessInfo.processInfo.arguments.contains("-reorderMode")
+    }
+
+    /// `-rpeDemo` opens the RPE scale on the first set row that draws one.
+    ///
+    /// The scale is a popover behind a tap, and simctl can't tap. It's also a
+    /// control the owner has reported on twice from the gym, so being able to
+    /// look at it from the command line is worth a flag — the first version of
+    /// this check forced *every* `RPEPicker` on screen open at once, and iOS
+    /// presented none of them.
+    static var opensRPEScale: Bool {
+        ProcessInfo.processInfo.arguments.contains("-rpeDemo")
     }
 
     /// `-openCalendarDay 18` opens History's calendar dialog on that day of the

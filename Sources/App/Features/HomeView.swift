@@ -23,7 +23,17 @@ struct HomeView: View {
     /// in-progress workout is never clobbered, and DISCARD is one tap away.
     var onStartWorkout: (PlannedWorkout) -> Void = { _ in }
 
+    /// Switches to the Workout tab without starting anything — the way back
+    /// into a session that's already running.
+    var onResumeWorkout: () -> Void = {}
+
     @State private var plan = WorkoutPlan()
+    /// The workout currently on the clock, if any. Read straight from the
+    /// store rather than from the tracker's model: the Workout tab owns session
+    /// state and Home is not about to become a second owner of it (Core Tenets
+    /// §8). This is a read of what's on disk, which is exactly what the tracker
+    /// would recover from anyway.
+    @State private var inProgress: Workout?
     @State private var todaysPlan: [PlannedWorkout] = []
     @State private var adherence: Adherence?
     @State private var loadError: String?
@@ -43,6 +53,7 @@ struct HomeView: View {
     var body: some View {
         NavigationStack {
             List {
+                inProgressSection
                 todaySection
                 blockSection
                 metricsSection
@@ -62,6 +73,63 @@ struct HomeView: View {
     }
 
     // MARK: Sections
+
+    /// A workout left running, at the top of Home until it's finished.
+    ///
+    /// Without it, a session interrupted by anything — leaving the app, a phone
+    /// that died between sets — is invisible from the screen the app opens on,
+    /// and the only thing Home offers is a card that starts a *new* one. It
+    /// leads the screen because it outranks everything below: what's programmed
+    /// today doesn't matter while you're in the middle of it.
+    @ViewBuilder
+    private var inProgressSection: some View {
+        if let workout = inProgress {
+            SectionLabel(text: "in progress", accent: Theme.live).panelRow()
+
+            Button(action: onResumeWorkout) {
+                Panel(accent: Theme.live.opacity(0.55)) {
+                    HStack(alignment: .center, spacing: 10) {
+                        VStack(alignment: .leading, spacing: 7) {
+                            Text(workout.notes ?? "Workout")
+                                .font(Theme.heading)
+                                .foregroundStyle(Theme.ink)
+                                .multilineTextAlignment(.leading)
+                            Text(loggedSummary(workout))
+                                .font(Theme.caption)
+                                .foregroundStyle(Theme.inkMuted)
+                                .multilineTextAlignment(.leading)
+                                .lineLimit(2)
+                            Text(progressLabel(workout))
+                                .font(Theme.label)
+                                .tracking(1.4)
+                                .foregroundStyle(Theme.live)
+                        }
+                        Spacer(minLength: 6)
+                        // Not a play glyph: nothing is being started here, and
+                        // a card that looks like "start" beside a card that is
+                        // "start" is the ambiguity this is meant to remove.
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(Theme.live)
+                    }
+                }
+                .contentShape(.rect)
+            }
+            .buttonStyle(.plain)
+            .panelRow()
+        }
+    }
+
+    private func loggedSummary(_ workout: Workout) -> String {
+        let names = (workout.exercises ?? []).flatMap { $0 }.map(\.displayName)
+        return names.isEmpty ? "Nothing logged yet" : names.joined(separator: ", ")
+    }
+
+    private func progressLabel(_ workout: Workout) -> String {
+        let sets = workout.allSets
+        let done = sets.filter { $0.complete == true }.count
+        return "\(done) / \(sets.count) SETS LOGGED"
+    }
 
     @ViewBuilder
     private var todaySection: some View {
@@ -250,6 +318,7 @@ struct HomeView: View {
             todaysPlan = try environment.plans.fetchPlanned(on: Date())
             adherence = try currentAdherence()
             bigThree = try bigThreeSlugs.compactMap { try environment.exercises.fetch(sourceSlug: $0) }
+            inProgress = try environment.workouts.fetchInProgress()
             loadError = nil
         } catch {
             loadError = error.localizedDescription

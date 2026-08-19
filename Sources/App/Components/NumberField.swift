@@ -65,8 +65,8 @@ struct NumberField<F: ParseableFormatStyle>: View where F.FormatOutput == String
             )
             #if os(iOS)
             .numericKeyboardBar(
-                isFocused: focused, label: label, step: step,
-                onStep: onStep, onDone: { focused = false }
+                isFocused: focused, label: label, step: step, hasNext: false,
+                onStep: onStep, onNext: {}, onDone: { focused = false }
             )
             #endif
     }
@@ -93,7 +93,7 @@ struct NumberField<F: ParseableFormatStyle>: View where F.FormatOutput == String
 /// not decorative hint text. Where the number came from is said in words on the
 /// annotation line, because "this is a suggestion" is not something a shade of
 /// grey can convey to everyone (WCAG §1.4.1).
-struct SuggestingNumberField: View {
+struct SuggestingNumberField<ID: Hashable>: View {
     /// `nil` means the lifter hasn't entered anything here.
     @Binding var value: Double?
     /// What they did last time, shown greyed when `value` is nil.
@@ -109,17 +109,32 @@ struct SuggestingNumberField: View {
     var step: Double?
     var onStep: (Double) -> Void = { _ in }
 
-    @FocusState private var focused: Bool
+    /// Focus, owned by the screen rather than by this field.
+    ///
+    /// A decimal pad has no return key, so DONE was the only way off it — and
+    /// with each field holding its own private `@FocusState` there was no way
+    /// for one to hand over to the next. Typing a warmup meant DONE, tap, type,
+    /// DONE, tap, type. The screen owns one focus value keyed by field, so the
+    /// bar can carry a NEXT that actually moves.
+    ///
+    /// `id` is this field's key in that space; `next` is where NEXT goes, or
+    /// `nil` when this is the last field and NEXT should just dismiss.
+    var focus: FocusState<ID?>.Binding
+    let id: ID
+    var next: ID?
+
     /// Editing happens in text so the field can be genuinely empty. A numeric
     /// binding has no way to represent "nothing typed yet".
     @State private var text: String = ""
+
+    private var focused: Bool { focus.wrappedValue == id }
 
     var body: some View {
         TextField("", text: $text, prompt: prompt)
             #if os(iOS)
             .keyboardType(.decimalPad)
             #endif
-            .focused($focused)
+            .focused(focus, equals: id)
             .font(font)
             .foregroundStyle(foreground)
             .multilineTextAlignment(.center)
@@ -130,8 +145,13 @@ struct SuggestingNumberField: View {
             )
             // Committing on blur, never per keystroke — the same contract
             // `NumberField` has. A `2` on the way to `225` is not a weight.
-            .onChange(of: focused) { _, isFocused in
-                if !isFocused { commit() }
+            //
+            // Watching the shared value rather than a local flag matters for
+            // NEXT: moving to the following field is a single change of one
+            // `@FocusState`, and this is what makes the field being *left*
+            // write its number on the way out.
+            .onChange(of: focus.wrappedValue) { previous, current in
+                if previous == id, current != id { commit() }
             }
             .onAppear { text = Self.format(value, fractionDigits: fractionDigits) }
             // A step button (or any other writer) changed the value out from
@@ -142,8 +162,10 @@ struct SuggestingNumberField: View {
             }
             #if os(iOS)
             .numericKeyboardBar(
-                isFocused: focused, label: label, step: step,
-                onStep: onStep, onDone: { focused = false }
+                isFocused: focused, label: label, step: step, hasNext: next != nil,
+                onStep: onStep,
+                onNext: { focus.wrappedValue = next },
+                onDone: { focus.wrappedValue = nil }
             )
             #endif
     }
@@ -189,7 +211,9 @@ extension View {
         isFocused: Bool,
         label: String,
         step: Double?,
+        hasNext: Bool,
         onStep: @escaping (Double) -> Void,
+        onNext: @escaping () -> Void,
         onDone: @escaping () -> Void
     ) -> some View {
         #if os(iOS)
@@ -213,6 +237,15 @@ extension View {
                             .fixedSize()
                     }
                     Spacer()
+                    // The return key a decimal pad doesn't have. Weight →
+                    // reps → the next set's weight, without reaching back to
+                    // the screen between every number.
+                    if hasNext {
+                        Button("NEXT", action: onNext)
+                            .font(Theme.label)
+                            .tracking(1.4)
+                            .foregroundStyle(Theme.ink)
+                    }
                     Button("DONE", action: onDone)
                         .font(Theme.label)
                         .tracking(1.4)

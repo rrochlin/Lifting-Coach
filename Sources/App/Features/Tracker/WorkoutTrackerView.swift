@@ -408,6 +408,13 @@ private struct ActiveWorkoutList: View {
     @State private var isReordering = false
     @State private var didOpenLaunchReorder = false
 
+    /// Which number is being typed, across the whole screen.
+    ///
+    /// Owned here rather than per field because NEXT has to *move* focus, and a
+    /// field holding its own private `@FocusState` has no way to hand it on.
+    /// See `SuggestingNumberField.focus`.
+    @FocusState private var focusedField: SetField?
+
     /// The one set whose rest editor is open, if any.
     ///
     /// Owned here rather than inside `RestControl` because the editor is a
@@ -452,12 +459,23 @@ private struct ActiveWorkoutList: View {
         // covers the case where the app isn't on screen at all.
         .onChange(of: model.rest?.hasExpired) { _, expired in
             guard expired == true else { return }
-            // A REST COMPLETE line with no way to acknowledge it is a dead end,
-            // so the editor — and its DONE — opens itself.
-            expandedRest = model.rest?.setID
-            #if os(iOS)
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
-            #endif
+            // Sound and haptic, and *not* a panel. Expiry used to open the rest
+            // editor so there'd be a DONE to press — which turned the end of
+            // every rest period into a two-tap chore for a fact the lifter
+            // already knew, and put a panel on screen they hadn't asked for.
+            // The line says REST COMPLETE and one tap on it clears; checking
+            // off the next set clears it too, which is what actually happens
+            // next.
+            RestChime.play()
+        }
+        // Rest moved to a different set — or ended. An editor left open on the
+        // set it used to belong to is the "rest timer modifier is frequently
+        // open, I don't think I'm trying to open it" report: it was opened by
+        // the *previous* set's expiry and then stranded there when the timer
+        // moved on.
+        .onChange(of: model.rest?.setID) { previous, _ in
+            guard let previous, expandedRest == previous else { return }
+            expandedRest = nil
         }
         .sheet(item: $noteEditorTarget) { target in
             NoteSheet(
@@ -676,9 +694,15 @@ private struct ActiveWorkoutList: View {
 
                 VStack(spacing: 0) {
                     SetRow(
-                        number: index + 1,
+                        // Counted among its own kind, so two warmups don't
+                        // rename the first working set to "03".
+                        number: ordinal(of: set, at: index, in: sets),
                         set: set,
                         suggestion: model.suggestion(forSetAt: index, in: exercise),
+                        focus: $focusedField,
+                        // Weight → reps → the next set's weight. The chain is
+                        // built here because a row can't see the row below it.
+                        nextSetID: index + 1 < sets.count ? sets[index + 1].id : nil,
                         isNextUp: model.session?.nextSet?.id == set.id,
                         // Most specific wins: this set's own unit, else the
                         // exercise's, else the app default.
@@ -756,6 +780,14 @@ private struct ActiveWorkoutList: View {
         }
     }
 
+    /// Where this set sits among the sets of its own type — the same rule
+    /// `SetSuggestion` matches on, so the number on screen and the number the
+    /// suggestion was drawn from agree.
+    private func ordinal(of set: WorkoutSet, at index: Int, in sets: [WorkoutSet]) -> Int {
+        let type = set.type ?? .working
+        return sets[..<index].filter { ($0.type ?? .working) == type }.count + 1
+    }
+
     /// A set's rest — the prescription, or the countdown when it's this set's
     /// rest that's running. One control either way; see `RestControl`.
     @ViewBuilder
@@ -764,6 +796,7 @@ private struct ActiveWorkoutList: View {
             mode: mode(for: set, timer: timer),
             isExpanded: expandedRest == set.id,
             onToggleExpanded: { expandedRest = expandedRest == set.id ? nil : set.id },
+            onPrimaryTap: timer?.hasExpired == true ? { model.dismissRest() } : nil,
             // A typed duration is this set's rest, or — while it's counting —
             // what's left on the clock.
             onSet: { seconds in
@@ -783,6 +816,10 @@ private struct ActiveWorkoutList: View {
             onToggleExpanded: {
                 expandedRest = expandedRest == timer.setID ? nil : timer.setID
             },
+            // A finished rest needs acknowledging, not editing. One tap on the
+            // line clears it; the caret still opens the editor for the lifter
+            // who wants to put time back on the clock.
+            onPrimaryTap: timer.hasExpired ? { model.dismissRest() } : nil,
             onSet: { model.setRestRemaining($0) }
         )
     }
@@ -1064,16 +1101,45 @@ private struct ExerciseHeaderRow: View {
                     if isActive {
                         Chip(text: "active", color: Theme.live)
                     }
-                    // The coach specified a goal, not a movement — a reminder
-                    // to pick your own implementation, and a signal that this
-                    // exercise doesn't track an achieved max.
-                    if exercise.exercise.isOpenChoice {
-                        Chip(text: "your choice", color: Theme.inkMuted)
-                    }
                 }
                 .contentShape(.rect)
             }
             .buttonStyle(.plain)
+
+            // The coach specified a goal, not a movement — and this is the
+            // control that resolves it, not a caption about it.
+            //
+            // It used to be a plain `Chip` *inside* the expand button, so the
+            // one thing on the row that names an unmade decision did nothing
+            // when tapped except fold the exercise shut. Choosing was only
+            // reachable through the `…` menu, which is where it was reported
+            // from the gym floor as "the selector did not open on interaction".
+            // The obvious affordance is now the real one; the menu entry stays
+            // for the swap case.
+            if exercise.exercise.isOpenChoice {
+                Button(action: onChooseExercise) {
+                    HStack(spacing: 4) {
+                        Text("YOUR CHOICE")
+                            .font(Theme.label)
+                            .tracking(1.2)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 9, weight: .semibold))
+                    }
+                    .foregroundStyle(Theme.signal)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 4)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 3)
+                            .strokeBorder(Theme.signal.opacity(0.6), lineWidth: 1)
+                    )
+                    .fixedSize()
+                    .contentShape(.rect)
+                }
+                // A `List` row runs its own tap through every plain button in
+                // it unless each says otherwise; without this, tapping the chip
+                // also toggled the expansion behind it.
+                .buttonStyle(.plain)
+            }
 
             Spacer(minLength: 8)
 
@@ -1148,6 +1214,17 @@ private struct ExerciseHeaderRow: View {
 
 // MARK: - Set row
 
+/// One typeable number, addressed so focus can move between them.
+///
+/// This is what makes NEXT possible: a `@FocusState` has to hold a value the
+/// whole screen agrees on, and `Bool` per field can only ever say "me" or "not
+/// me". Weight and reps are separate cases rather than one case with a flag so
+/// the chain reads as what it is — `.weight(a) → .reps(a) → .weight(b)`.
+enum SetField: Hashable {
+    case weight(UUID)
+    case reps(UUID)
+}
+
 /// One exercise group, collapsed to a single draggable row.
 ///
 /// Everything a lifter needs to place it and nothing else: where it sits, what
@@ -1201,11 +1278,22 @@ private struct ReorderRow: View {
 }
 
 private struct SetRow: View {
+    /// This set's position **among sets of its own kind** — warmup 1, 2, 3 and
+    /// working 1, 2, 3, each counting from one.
+    ///
+    /// Numbering used to run straight down the exercise, which meant adding two
+    /// warmups renamed the first working set to "03". The number a lifter wants
+    /// while working is which set of the prescription they're on, and warmups
+    /// aren't part of it.
     let number: Int
     let set: WorkoutSet
     /// What the lifter did last time, shown greyed in whichever of reps/weight
     /// is still empty. A proposal, never a prescription — see `SetSuggestion`.
     let suggestion: SetSuggestion.Values?
+    /// The screen's focus, so this row's NEXT can reach the row below it.
+    let focus: FocusState<SetField?>.Binding
+    /// The set after this one, or nil at the end of the exercise.
+    let nextSetID: UUID?
     let isNextUp: Bool
     /// The unit this row reads and writes weights in — already resolved by the
     /// caller through `set.unit ?? exerciseUnit ?? preferredUnit`.
@@ -1236,9 +1324,7 @@ private struct SetRow: View {
     }
 
     private var hasAnnotations: Bool {
-        prescription != nil
-            || showsSuggestionTag
-            || (self.set.type.map { $0 != .working } ?? false)
+        prescription != nil || showsSuggestionTag
     }
 
     /// Whether a greyed number is currently standing in for an entry.
@@ -1276,29 +1362,7 @@ private struct SetRow: View {
         HStack(spacing: 6) {
             checkboxButton
 
-            Text(String(format: "%02d", number))
-                .font(Theme.data(13))
-                .foregroundStyle(Theme.inkFaint)
-                // Never let the index be the thing that gets truncated.
-                .fixedSize()
-
-            SuggestingNumberField(
-                value: repsBinding,
-                suggestion: suggestion?.reps.map(Double.init),
-                fractionDigits: 0,
-                label: "reps",
-                isActive: !done,
-                font: Theme.data(15, weight: done ? .regular : .medium),
-                foreground: Theme.ink,
-                step: 1,
-                onStep: { delta in onRepsChange(max(0, (self.set.reps ?? 0) + Int(delta))) }
-            )
-            .layoutPriority(1)
-
-            Text("×")
-                .font(Theme.data(14))
-                .foregroundStyle(Theme.inkFaint)
-                .fixedSize()
+            typeBadge
 
             SuggestingNumberField(
                 value: weightBinding,
@@ -1314,7 +1378,10 @@ private struct SetRow: View {
                 onStep: { delta in
                     let current = self.set.weight?.expressed(in: unit).value ?? 0
                     onWeightChange(Measurement(value: max(0, current + delta), unit: weightUnit))
-                }
+                },
+                focus: focus,
+                id: .weight(self.set.id),
+                next: .reps(self.set.id)
             )
             .layoutPriority(2)
 
@@ -1322,6 +1389,27 @@ private struct SetRow: View {
                 .font(Theme.data(13))
                 .foregroundStyle(Theme.inkFaint)
                 .fixedSize()
+
+            Text("×")
+                .font(Theme.data(14))
+                .foregroundStyle(Theme.inkFaint)
+                .fixedSize()
+
+            SuggestingNumberField(
+                value: repsBinding,
+                suggestion: suggestion?.reps.map(Double.init),
+                fractionDigits: 0,
+                label: "reps",
+                isActive: !done,
+                font: Theme.data(15, weight: done ? .regular : .medium),
+                foreground: Theme.ink,
+                step: 1,
+                onStep: { delta in onRepsChange(max(0, (self.set.reps ?? 0) + Int(delta))) },
+                focus: focus,
+                id: .reps(self.set.id),
+                next: nextSetID.map { .weight($0) }
+            )
+            .layoutPriority(1)
 
             RPEPicker(
                 value: self.set.rpe,
@@ -1333,10 +1421,59 @@ private struct SetRow: View {
         }
     }
 
-    /// One glyph, four capabilities. This was a bare note button; a set had no
-    /// way to change its own unit or its type, which meant a set added as the
-    /// wrong kind had to be deleted and remade. Matches the planner's set row,
-    /// which has had this menu all along.
+    /// The set's index, and its kind, in one tappable badge: `W1`, `2`, `D1`.
+    ///
+    /// This is the row's answer to "no way to toggle or see which sets are
+    /// warmup or working". Seeing it was previously a small uppercase word on
+    /// the *second* line, and only for non-working sets; changing it meant
+    /// finding a `Picker` three levels inside the `…` menu. Both now live on
+    /// the number that was already sitting there doing nothing.
+    ///
+    /// The letter is the channel, not the colour (WCAG §1.4.1) — the tint only
+    /// reinforces it, which matters because the badge is small and the app is
+    /// read at arm's length.
+    private var typeBadge: some View {
+        Menu {
+            Picker("Set Type", selection: typeSelection) {
+                ForEach(SetType.allCases, id: \.self) { type in
+                    Text(type.rawValue.capitalized).tag(type)
+                }
+            }
+        } label: {
+            Text(badgeText)
+                .font(Theme.data(13, weight: setType == .working ? .regular : .medium))
+                .foregroundStyle(badgeInk)
+                .frame(minWidth: 24)
+                // Never let the index be the thing that gets truncated.
+                .fixedSize()
+                .padding(.vertical, 3)
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var setType: SetType { self.set.type ?? .working }
+
+    private var badgeText: String {
+        switch setType {
+        case .warmup: "W\(number)"
+        case .working: String(format: "%02d", number)
+        case .drop: "D\(number)"
+        }
+    }
+
+    private var badgeInk: Color {
+        switch setType {
+        case .warmup: Theme.inkFaint
+        case .working: Theme.inkMuted
+        case .drop: Theme.signal.opacity(0.8)
+        }
+    }
+
+    /// Unit, note, delete. Set type used to be in here too and has moved to the
+    /// badge at the head of the row — a control buried three levels inside a
+    /// `…` menu is one the lifter reported as not existing, and the row already
+    /// had a place where the set's kind belongs.
     private var setMenu: some View {
         Menu {
             Menu("Unit — \(unit.symbol)", systemImage: "scalemass") {
@@ -1349,11 +1486,6 @@ private struct SetRow: View {
                 // Only offered when it would do something.
                 if hasUnitOverride {
                     Button("Use Exercise Default (\(exerciseUnit.symbol))") { onUnitChange(nil) }
-                }
-            }
-            Picker("Set Type", selection: typeSelection) {
-                ForEach(SetType.allCases, id: \.self) { type in
-                    Text(type.rawValue.capitalized).tag(type)
                 }
             }
             Button("Edit Note", systemImage: "note.text", action: onEditNote)
@@ -1403,14 +1535,6 @@ private struct SetRow: View {
             }
 
             Spacer(minLength: 0)
-
-            if let type = self.set.type, type != .working {
-                Text(type.rawValue.uppercased())
-                    .font(Theme.label)
-                    .tracking(1.1)
-                    .foregroundStyle(Theme.inkFaint)
-                    .fixedSize()
-            }
         }
         .padding(.leading, 38)
     }

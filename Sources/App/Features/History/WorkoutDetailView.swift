@@ -44,6 +44,9 @@ struct WorkoutDetailView: View {
     @State private var isConfirmingDiscard = false
     @State private var isConfirmingDelete = false
     @State private var noteTarget: NoteTarget?
+    /// Which number is being typed — see `SetField`. Owned by the screen so the
+    /// keyboard's NEXT can move between fields.
+    @FocusState private var focusedField: SetField?
 
     var body: some View {
         List {
@@ -298,6 +301,8 @@ struct WorkoutDetailView: View {
                 number: index + 1,
                 set: set,
                 unit: unit(for: exercise),
+                focus: $focusedField,
+                nextSetID: index + 1 < sets.count ? sets[index + 1].id : nil,
                 onChange: { change in draft?.updateSet(id: set.id, change) },
                 onEditNote: { noteTarget = .set(set.id) },
                 onDelete: { draft?.deleteSet(id: set.id) }
@@ -568,6 +573,10 @@ private struct LoggedSetRow: View {
     let number: Int
     let set: WorkoutSet
     let unit: WeightUnit
+    /// The screen's focus, so NEXT can reach the row below — see `SetField`.
+    let focus: FocusState<SetField?>.Binding
+    /// The set after this one, or nil at the end of the exercise.
+    let nextSetID: UUID?
     let onChange: ((inout WorkoutSet) -> Void) -> Void
     let onEditNote: () -> Void
     let onDelete: () -> Void
@@ -580,27 +589,13 @@ private struct LoggedSetRow: View {
         .padding(.vertical, 2)
     }
 
+    /// Weight first, then reps — "225 × 5", the order a lifter says it in, and
+    /// the same order the tracker reads in so a set doesn't swap columns
+    /// between logging it and correcting it.
     private var quantities: some View {
         HStack(spacing: 6) {
             Text(String(format: "%02d", number))
                 .font(Theme.data(13))
-                .foregroundStyle(Theme.inkFaint)
-                .fixedSize()
-
-            SuggestingNumberField(
-                value: repsBinding,
-                suggestion: nil,
-                fractionDigits: 0,
-                label: "reps",
-                step: 1,
-                onStep: { delta in
-                    onChange { $0.reps = max(0, ($0.reps ?? 0) + Int(delta)) }
-                }
-            )
-            .layoutPriority(1)
-
-            Text("×")
-                .font(Theme.data(14))
                 .foregroundStyle(Theme.inkFaint)
                 .fixedSize()
 
@@ -613,7 +608,10 @@ private struct LoggedSetRow: View {
                 onStep: { delta in
                     let current = self.set.weight?.expressed(in: unit).value ?? 0
                     onChange { $0.weight = Measurement(value: max(0, current + delta), unit: unit.unit) }
-                }
+                },
+                focus: focus,
+                id: .weight(self.set.id),
+                next: .reps(self.set.id)
             )
             .layoutPriority(2)
 
@@ -621,6 +619,26 @@ private struct LoggedSetRow: View {
                 .font(Theme.data(13))
                 .foregroundStyle(Theme.inkFaint)
                 .fixedSize()
+
+            Text("×")
+                .font(Theme.data(14))
+                .foregroundStyle(Theme.inkFaint)
+                .fixedSize()
+
+            SuggestingNumberField(
+                value: repsBinding,
+                suggestion: nil,
+                fractionDigits: 0,
+                label: "reps",
+                step: 1,
+                onStep: { delta in
+                    onChange { $0.reps = max(0, ($0.reps ?? 0) + Int(delta)) }
+                },
+                focus: focus,
+                id: .reps(self.set.id),
+                next: nextSetID.map { .weight($0) }
+            )
+            .layoutPriority(1)
 
             RPEPicker(
                 value: self.set.rpe,

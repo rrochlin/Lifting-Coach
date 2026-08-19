@@ -36,6 +36,13 @@ struct RPEPicker: View {
 
     @State private var isPresented = false
 
+    #if DEBUG
+    /// One-shot, process-wide: `-rpeDemo` opens the scale on the first picker
+    /// that appears and no others. A popover per set row is a popover iOS
+    /// declines to present at all.
+    nonisolated(unsafe) private static var didOpenLaunchDemo = false
+    #endif
+
     var body: some View {
         // A popover presented over an open keyboard is the worst of both —
         // and the number just typed hasn't committed until focus goes.
@@ -75,6 +82,17 @@ struct RPEPicker: View {
             // which for a nine-button scale is a whole screen of nothing.
             .presentationCompactAdaptation(.popover)
         }
+        #if DEBUG
+        .task {
+            guard LaunchArguments.opensRPEScale, !Self.didOpenLaunchDemo else { return }
+            Self.didOpenLaunchDemo = true
+            // Presented in the same turn as first appearance, the popover
+            // silently never opens — the same lesson `-openExercisePicker`
+            // learned.
+            try? await Task.sleep(for: .milliseconds(600))
+            isPresented = true
+        }
+        #endif
     }
 
     /// An unset RPE reads "RPE", not "—".
@@ -140,6 +158,17 @@ private struct RPEScale: View {
         }
     }
 
+    /// One band of the scale: its word, the whole number, and the half-step.
+    ///
+    /// **The half is the same size, weight and colour as the whole.** It used to
+    /// be smaller, dimmer and narrower — drawn as a secondary option — and the
+    /// report was that picking a .5 "feels weird" and "deprioritizes their
+    /// selection". It was right: 8.5 is not a lesser answer than 8, it's the
+    /// answer when the set was harder than an 8. A control that renders half
+    /// the scale as an afterthought is telling the lifter to round.
+    ///
+    /// The word labels the band rather than the whole number alone, which is
+    /// also more honest — 8.5 is "exertion", a bit more of it.
     private func anchorRow(_ anchor: (value: Float, word: String)) -> some View {
         HStack(spacing: 6) {
             Text(anchor.word)
@@ -150,13 +179,13 @@ private struct RPEScale: View {
 
             Spacer(minLength: 4)
 
-            valueButton(anchor.value, isPrimary: true)
+            valueButton(anchor.value)
             // 10.5 isn't on the scale; the slot stays to keep the whole
             // numbers in one column instead of letting the last row shift.
             if anchor.value < 10 {
-                valueButton(anchor.value + 0.5, isPrimary: false)
+                valueButton(anchor.value + 0.5)
             } else {
-                Color.clear.frame(width: 42, height: 34)
+                Color.clear.frame(width: Self.buttonWidth, height: 34)
             }
         }
     }
@@ -164,11 +193,19 @@ private struct RPEScale: View {
     private var lowRange: some View {
         // 1–5.5: on the scale, essentially never used for lifting. Kept
         // reachable rather than quietly unrepresentable.
+        //
+        // A grid, not a row. Ten buttons across a 264pt popover is 400pt of
+        // content in 236pt of space, so they were being squeezed to whatever
+        // fitted — which is how a value you can pick ends up narrower than the
+        // finger picking it.
         VStack(alignment: .leading, spacing: 4) {
             SectionLabel(text: "lower", accent: Theme.inkFaint)
-            HStack(spacing: 4) {
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: 4), count: 5),
+                spacing: 4
+            ) {
                 ForEach(lowValues, id: \.self) { low in
-                    valueButton(low, isPrimary: false)
+                    valueButton(low, isSmall: true)
                 }
             }
         }
@@ -193,14 +230,20 @@ private struct RPEScale: View {
         .buttonStyle(.plain)
     }
 
-    private func valueButton(_ option: Float, isPrimary: Bool) -> some View {
+    /// Every value in the working range is drawn identically. `isSmall` is only
+    /// for the 1–5.5 disclosure, where nine buttons have to share one row.
+    private static let buttonWidth: CGFloat = 46
+
+    private func valueButton(_ option: Float, isSmall: Bool = false) -> some View {
         let selected = value == option
         return Button { onPick(option) } label: {
             Text(option.rpeDescription)
-                .font(Theme.data(isPrimary ? 17 : 15, weight: selected ? .semibold : .regular))
-                .foregroundStyle(selected ? Theme.void : (isPrimary ? Theme.ink : Theme.inkMuted))
-                // A gym-glove target, not a menu line.
-                .frame(width: isPrimary ? 44 : 42, height: 34)
+                .font(Theme.data(isSmall ? 15 : 17, weight: selected ? .semibold : .regular))
+                .foregroundStyle(selected ? Theme.void : Theme.ink)
+                // A grid cell in the low range (fills its column), a fixed
+                // gym-glove target in the working range.
+                .frame(width: isSmall ? nil : Self.buttonWidth, height: 34)
+                .frame(maxWidth: isSmall ? .infinity : nil)
                 .background(selected ? Theme.signal : Theme.panelRaised)
                 .clipShape(RoundedRectangle(cornerRadius: 5))
                 .overlay(

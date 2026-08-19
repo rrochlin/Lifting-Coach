@@ -288,7 +288,7 @@ struct WorkoutSessionRestTests {
             ])]),
             block: block,
             at: noon,
-            appDefaultRestTime: 90
+            appDefaultRest: RestDefaults(warmup: 90, working: 90, drop: 90)
         )
 
         let sets = session.workout.allSets
@@ -303,6 +303,41 @@ struct WorkoutSessionRestTests {
         #expect(session.restTarget(afterSetWith: added) == 90)
     }
 
+    @Test("An unprescribed warmup rests like a warmup, not like a working set")
+    func appDefaultIsPerSetType() {
+        // Nobody rests two minutes between 45 and 95. A single app-wide number
+        // meant the value under every warmup was one to ignore — and a timer
+        // you learn to ignore is worse than no timer at all.
+        var session = WorkoutSession.start(
+            from: plannedWorkout([(squat, [PlannedSet(reps: 5, type: .working)])]),
+            at: noon,
+            appDefaultRest: RestDefaults(warmup: 45, working: 150, drop: 30)
+        )
+
+        let working = session.workout.allSets[0].id
+        #expect(session.restTarget(afterSetWith: working) == 150)
+
+        let warmup = session.addWarmupSet(toExerciseWith: session.exerciseGroups[0][0].id)!
+        #expect(session.restTarget(afterSetWith: warmup) == 45)
+
+        let drop = session.addDropSet(toExerciseWith: session.exerciseGroups[0][0].id)!
+        #expect(session.restTarget(afterSetWith: drop) == 30)
+    }
+
+    @Test("A block's own per-type default still outranks the app's")
+    func blockDefaultBeatsAppDefaultPerType() {
+        let block = WorkoutBlock(defaultRestTimes: [.warmup: 90])
+        var session = WorkoutSession.start(
+            from: plannedWorkout([(squat, [PlannedSet(reps: 5, type: .working)])]),
+            block: block,
+            at: noon,
+            appDefaultRest: RestDefaults(warmup: 45, working: 150, drop: 30)
+        )
+
+        let warmup = session.addWarmupSet(toExerciseWith: session.exerciseGroups[0][0].id)!
+        #expect(session.restTarget(afterSetWith: warmup) == 90)
+    }
+
     @Test("An unprescribed set of a type the block does define uses the block default")
     func addedSetUsesBlockDefaultForItsType() {
         let block = WorkoutBlock(defaultRestTimes: [.working: 180])
@@ -310,7 +345,7 @@ struct WorkoutSessionRestTests {
             from: plannedWorkout([(squat, [PlannedSet(reps: 5, type: .working)])]),
             block: block,
             at: noon,
-            appDefaultRestTime: 90
+            appDefaultRest: RestDefaults(warmup: 90, working: 90, drop: 90)
         )
 
         let added = session.addSet(toExerciseWith: session.exerciseGroups[0][0].id)!
@@ -324,7 +359,7 @@ struct WorkoutSessionRestTests {
             from: plannedWorkout([(squat, [PlannedSet(reps: 5, type: .working, restTime: 300)])]),
             block: block,
             at: noon,
-            appDefaultRestTime: 90
+            appDefaultRest: RestDefaults(warmup: 90, working: 90, drop: 90)
         )
 
         let setID = session.workout.allSets[0].id
