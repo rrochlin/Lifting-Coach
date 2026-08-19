@@ -69,10 +69,18 @@ final class RestNotifier {
         content.title = "Rest complete"
         content.body = exerciseName.map { "Next set — \($0)" } ?? "Next set"
         content.sound = .default
-        // Not `.timeSensitive`, which would let this break through a Focus: that
-        // level needs the Time Sensitive Notifications capability, and adding an
-        // entitlement is not free on the personal-team signing this app uses.
-        // Worth revisiting if rest alerts get muted in practice.
+        // Breaks through a Focus, and through the lock screen's summary. This is
+        // the rare alert that earns it: rest ending is worthless a minute late,
+        // the lifter is standing at the rack waiting for it, and a gym is
+        // exactly where Do Not Disturb tends to be on. Backed by the Time
+        // Sensitive Notifications entitlement in LiftingCoach.entitlements,
+        // which needs the paid Developer Program — without it iOS silently
+        // demotes this to `.active` rather than failing, so a build signed by a
+        // personal team still works, just quietly.
+        //
+        // Nothing else in the app posts a notification, so there is no risk of
+        // this level spreading to alerts that haven't earned it.
+        content.interruptionLevel = .timeSensitive
 
         center.add(
             UNNotificationRequest(

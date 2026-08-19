@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Lets the rest-complete alert break through a Focus and the lock screen.
+	     A rest timer is the one notification in this app that is worthless a
+	     minute late: the lifter is standing at the rack waiting for it, with the
+	     phone face-down, and a gym is exactly where Do Not Disturb tends to be
+	     on. Requires the paid Developer Program — this entitlement is the reason
+	     the alert shipped at the default level until now. -->
+	<key>com.apple.developer.usernotifications.time-sensitive</key>
+	<true/>
+</dict>
+</plist>

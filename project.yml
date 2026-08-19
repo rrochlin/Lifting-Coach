@@ -34,11 +34,16 @@ targets:
         # Automatic signing, no DEVELOPMENT_TEAM pinned: Xcode fills this in from
         # whichever Apple ID/team is signed in locally (Xcode > Settings >
         # Accounts) the first time you select a real device as the run
-        # destination. A free personal team is enough to run on your own iPhone —
-        # no paid Developer Program needed. Every simctl/CI build in this repo so
-        # far has used CODE_SIGNING_ALLOWED=NO to bypass this entirely; that flag
-        # stops working (correctly) once you build for a physical device.
+        # destination, and a command-line build passes DEVELOPMENT_TEAM=... on
+        # the invocation. Every simctl build in this repo uses
+        # CODE_SIGNING_ALLOWED=NO to bypass signing entirely; that flag stops
+        # working (correctly) the moment you build for a physical device or for
+        # distribution.
         CODE_SIGN_STYLE: Automatic
+        # Time Sensitive Notifications. The only entitlement this app has, and
+        # the only notification it posts is the rest-timer alert — see
+        # RestNotifier for why that one earns breaking through a Focus.
+        CODE_SIGN_ENTITLEMENTS: Sources/App/Resources/LiftingCoach.entitlements
     info:
       path: Sources/App/Resources/Info.plist
       properties:
