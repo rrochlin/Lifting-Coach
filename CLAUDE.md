@@ -5,6 +5,8 @@ Guidance for Claude Code when working in this repository.
 ## What this is
 Lifting-Coach (working title "Workout App" in the design docs) — a personal iOS SwiftUI app for tracking powerlifting workouts, with a longer-term AI coach that helps author and adapt training plans. Built by and for the repo owner's own training.
 
+**Read `notes/Workout App/Core Tenets.md` before designing anything.** It holds the principles that decide arguments, with reasoning attached. The ones most often violated by well-meaning changes: the app never adjusts a prescription on the lifter's behalf (§1); load and effort are independent axes, both first-class (§2); RPE is exertion, NOT reps-in-reserve — RIR appears nowhere in the app (§3); achieved/goal/theoretical maxes are distinct and never silently substituted (§6).
+
 ## Repo layout
 - `notes/` — a synced snapshot of the design/planning vault (Obsidian). **Read these before making architectural decisions**, especially:
   - `notes/Workout App/Concepts.md` — the Swift data model (`Workout`, `Exercise`/`WorkoutExercise`, `PlannedWorkout`/`PlannedExercise`/`PlannedSet`, `WorkoutSet`, `WorkoutBlock`, `WorkoutPlan`, `User`). Source of truth for how the domain is modeled — implement against it, don't silently redesign it.
@@ -14,18 +16,355 @@ Lifting-Coach (working title "Workout App" in the design docs) — a personal iO
   - `notes/Workout App/Features/*.md` — one doc per screen/feature, requirements-level detail.
   - `notes/FitnessAppNetworkDiagram.drawio` — a draw.io sketch of the phase 2 AWS backend (API Gateway → Lambda → DynamoDB tables: `users`, `workouts`, `conversations`, `plans`, `ws-connections`). **Not yet reconciled with `Backend/Overview.md`'s prose** — the table names here are more concrete than anything written in the doc. Cross-check before treating either as final.
 - `sync-notes.sh` — copies the Obsidian vault (`~/Notes/Home/Projects/Workout App/`) into `notes/` here. **The source path is hardcoded to `/home/rob/...`** — if the vault lives elsewhere on the machine this is run from (e.g. a macOS `/Users/...` path), update the script first or `notes/` will silently go stale instead of erroring.
-- No application code yet as of this commit — phase 1 SwiftUI/Xcode work hasn't started.
+- `LiftingCoachModel/`, `Sources/App/`, `project.yml` — the phase 1 app. See "Project scaffold" below.
+- `scripts/` — a Python project (uv) that translates external training logs into the app's language. Root-level and deliberately away from the SwiftUI code: it's the seed of the Lambda-side layout. See "Importing external history" below.
 
 ## Current state (as of this handoff)
 `Concepts.md`'s data model is fleshed out and internally consistent: planned-vs-logged sets are properly split (`PlannedSet`/`WorkoutSet`, `PlannedExercise`/`WorkoutExercise`), and "current block" is derived from `startDate` rather than gated by `endDate`, so it doesn't disappear from view when a block runs long (slipped schedule, unlogged deload week).
 
-Next step: turn the model into an actual Xcode project — a SwiftUI app target, plus a local Swift package for the model layer (keeps `swift test` usable independent of Xcode, keeps the model portable). SwiftUI/Xcode work requires macOS; there's no Linux equivalent for previews or the simulator.
+The phase 1 project is scaffolded, the **Tracker → Planner loop is closed**, the app **runs verified on the iOS 26.3 simulator** with a dark-first HUD theme (`Sources/App/Theme/Theme.swift` — panels, readouts, one cyan accent, amber only for the live moment), and **the owner's real 12-week program is loaded as the sample block** on first launch (`ProgramLoader` + the bundled `Block1.json`, hand-translated from `notes/Block1 Program 6day v19.xlsx`).
+
+The model went through a design pass driven by that import (see Core Tenets): `LoadPrescription` is `.absolute | .percentOf(_, of: MaxReference)`; `EffortTarget` is a separate axis living on `PlannedExercise` with per-set override; maxes are split into achieved (event history) / goal (setting) / theoretical (derived, unimplemented). Session start materializes resolved effort into each set's `plannedFrom` snapshot.
+
+Built: `WorkoutSession` + `WorkoutStore` + tracker UI; `PlanStore` + `UserStore` + planner UI; homepage metrics; theme; catalog import + program loading; the `scripts/` import pipeline; History editing. **253 Swift tests + 53 Python tests.**
+
+Achieved maxes now auto-record from logged sets (`AchievedMaxUpdate`, wired into `TrackerModel.completeSet`) — a heavier working-set weight than the current best becomes the new best, no manual entry. Bodyweight is logged explicitly via a sheet on Home (it's a distinct action, not derived) — though that sheet is still a plain `Form` with a text field, not the wheel selector `Feedback.md` asks for (it does at least open on the lifter's own unit now). Home's today card **starts the workout** and switches to the Workout tab (`HomeView.onStartWorkout` → `RootView.pendingStart` → the tracker). It used to only navigate; see the paragraph on it below for why that flipped, and for the guard that stops it clobbering a session already in progress. The Workout tab stays the only owner of session state. Home also has an honest "Health" placeholder (HealthKit not connected). Workout History is **both** the calendar `Features/Workout History.md` specifies (default) and the reverse-chronological paged list, switched from a toolbar toggle — see the History paragraph below.
+
+**⚠️ Nothing in this codebase matches exercise names to exercises. Don't add it back.** A program says which exercise it means — either by naming a catalog entry outright, or by declaring the slot open and letting the lifter fill it. See Concepts.md's "Programs name exercises, they don't describe them" for the full reasoning; the short version is that a plan is *authored*, so whether a slot means one specific lift or the lifter's choice was never unknown, and inferring it later re-derives something that was always available to record. A keyword matcher (`CatalogMatcher`) used to do this and was deleted along with `Exercise.matchedSlug` and `CatalogImporter`'s reconcile pass.
+
+**The bundled program is a hand translation, and that's the pattern for any future import.** `Resources/Block1.json` is the owner's spreadsheet rendered into the app's own language: exercises named by catalog slug, open slots declared with their muscle group and suggested movements, loads as `absolute` / `percentOfGoal`, effort as RPE. The judgment calls happened once, by a person ("is 'Incline press (BB or DB)' one lift or the lifter's choice?" — the latter), and are recorded in the file rather than recomputed. `ProgramLoader` transcribes it and **throws on a slug the catalog doesn't have** rather than skipping the exercise, because a plan that looks complete while quietly missing a day's work is the worse failure.
+
+**The exercise catalog is real** — a vendored, public-domain snapshot of `yuhonas/free-exercise-db` (~870 exercises), imported by `CatalogImporter` on first launch. This is ongoing infrastructure, not a dev-only tool.
+- Images were **not** vendored (~90-100MB, nothing displays them yet) — see `FreeExerciseDB.LICENSE.txt` for the reasoning and how to get them later if needed.
+- **`Exercise.isOpenChoice` is authored, never inferred.** "Triceps," "Core," "Cardio" — a coach naming a goal and leaving the movement up to the lifter is normal programming. It's load-bearing, not cosmetic: `AchievedMaxUpdate` refuses to record a max for one, since a heavier weight this week than last doesn't mean progress on the same lift. An inferred flag would let a correctly-programmed lift with an odd name silently stop tracking maxes — which is exactly what the old name-matching heuristic risked.
+- **`Exercise.suggestions`** carries what the program floated for an open slot ("Overhead extension," "Pushdown"). The tracker's picker shows them as shortcuts into search under a "programmed as" rail. Suggestions, **not** a whitelist — the app never refuses a choice (Core Tenets §1).
+
+**The iPhone 13 is a dev device and its data is expendable** — the owner's explicit call. That relaxes a constraint this file used to state in the strongest terms: `eraseDatabaseOnSchemaChange` (DEBUG-only) wiping the phone was treated as a disaster, so `v2_exerciseCatalog` through `v7_exerciseSuggestions` are all strictly additive. It isn't a disaster any more, and `v8_dropMatchedSlug` is deliberately non-additive. `v9_userPreferredUnit` is back to additive (a column with a default).
+
+Still prefer appending over editing: an erase throws away whatever you were mid-way through testing, and the flag stops being a safety net the day phase 2 puts this on a phone that matters. **Additive is the habit, not the rule** — a schema change worth making is worth making.
+
+Wiping the phone is `xcrun devicectl device uninstall app --device <id> com.rrochlin.LiftingCoach` (see "Deploying to the phone" below), which is also the only way to make it re-bootstrap the sample block: `AppEnvironment` loads a program only when the plan has no blocks at all.
+
+**The Workout Planner is reworked** to close the `notes/Feedback.md` Plan items. Two files now: `WorkoutPlannerView.swift` (block overview) and `PlannedWorkoutEditor.swift` (day authoring).
+- The block overview shows each day's **actual prescription** — reps, resolved weight, RPE — rather than a set count you had to tap through. Days group into collapsible **weeks** (`WorkoutBlock.programmedWeeks`), with the current week open by default; a flat list of a 12-week block's ~70 days is unreadable.
+- The day editor is **draft-based** (`PlannedWorkoutDraft` in the model package): edits accumulate and land on an explicit **Save**, with a confirm on the way out. This is the deliberate opposite of the tracker, which saves after every mutation so an OS kill mid-workout is recoverable — planning is authoring, and a half-typed percentage shouldn't become the plan. `hasUnsavedChanges` compares structurally, so typing a value and typing it back doesn't warn.
+- Load and effort are now authorable: a mode menu (lb / kg / % of goal / % of achieved) beside the number field, exercise-level RPE with per-set override, rest written per exercise. `.theoretical` is deliberately absent from the mode menu — it resolves to `nil` by design, so offering it would let someone author a prescription that can never produce a weight.
+- The "tapping the title adds a set" bug was structural: every button in an exercise shared one `List` row. Each set is its own row now, which also puts swipe-to-delete on the set rather than the whole exercise.
+
+**A block's settings are editable after it starts, and moving one moves its whole program.** `BlockSettingsSheet` (`Features/Planner/`) opens from the block's header panel on Plan — the same `square.and.pencil` a programmed day wears, so a panel with that glyph edits what's in it. Name, start date, length in weeks, per-`SetType` rest defaults, and delete. Before this a block was only configurable at creation, which meant the owner's real program — five weeks in on paper, week 1 in the app — could not be corrected at all.
+- **Changing the start date offers to move the program with it, and the lifter chooses.** Rescheduling (every day shifts, the program keeps its shape) and restating a start recorded wrong (the days stay, the week they fall in changes) are different edits, and neither is inferable from the gesture. The toggle is on screen, the shift is named as a day count before it lands, and `Concepts.md`'s "Moving a block, and why the app asks first" has the reasoning.
+- **`WorkoutBlock.rescheduled(to:calendar:)` is where a program moves**, in the model package and tested — not in view code. It shifts each program key, each `PlannedWorkout.date`, and `endDate` by the same number of *calendar days*, so a block moved across a DST boundary still lands on the start of a day. `scheduleAnchor` falls back to the earliest programmed day, matching `programmedWeeks`, so an unscheduled block is movable too.
+- **`PlanStore.updateSettings` is deliberately narrow.** `save(_:userId:)` replaces a block by deleting it and reinserting the whole graph; that's right for writing a program and wrong for moving one. This writes the block row, the rest defaults, and one `UPDATE plannedWorkout SET date` per day — it never touches `plannedExercise` or `plannedSet`, so it cannot lose a prescription however it fails. Planned-workout ids survive, so nothing downstream sees a move as a delete plus a fresh day.
+- **The TODAY readout is the point of the screen.** It reads "week 6 / 12 · day 38" for the date currently in the picker, so the lifter dials the date until the app agrees with the week they know they're on, rather than computing an offset by hand.
+- The block's `journal` is still not editable anywhere: it round-trips through persistence and nothing displays it, so a field would write text that can never be read back. `RestMenu` moved to `Components/` in this round (shared by the day editor and the block editor) and gained an optional label.
+- Reachable from the command line with `-openBlockSettings` beside `-initialTab plan` — same stopgap family as the rest, latched the same way.
+
+**`PlannedExercise.variant` / `WorkoutExercise.variant`** (migration `v5_exerciseVariant`) — the plan's own wording for a lift, e.g. "Bench press — heavy (paused, comp grip)". Needed once the program resolved onto canonical catalog entries: Monday prescribes heavy paused bench *and* its back-off sets, both correctly the same `Exercise`, which without this rendered as one exercise listed twice. `displayName` is `variant ?? exercise.name`. It is prescription, never identity — nothing keys off it. See Concepts.md's "Variant vs. exercise".
+
+**Units are a reading preference (`User.preferredUnit`, migration `v9_userPreferredUnit`).** lb or kg, switched on Profile, applied by converting on the way to the screen.
+- **Switching rewrites nothing.** Every logged set keeps the unit it was entered in; `UserStore.setPreferredUnit` touches one column. Converting the tables would round every historical row and make a display choice destructive. The Profile copy says this out loud, because a lifter who thinks the button rewrites their log won't press it.
+- **`Measurement.expressed(in:)` rounds a conversion to a tenth and leaves an unconverted weight exactly alone.** The second decimal of a converted weight is noise — it wrapped Home's max readout onto two lines and, in the tracker (where the same value is *edited*), got written back on the first commit. A tenth is more than ten times finer than the smallest plate.
+- **The planner is deliberately asymmetric.** An authored absolute load keeps the unit it was written in — `LoadModeMenu` is where lb/kg is chosen for a *prescription*, and the plan means what it says. A derived weight (72% of a 495 lb goal) reads in the lifter's unit like everything else; that split lives in `PlannerModel.resolvedWeight`.
+- `WeightUnit` is two cases, not all of `UnitMass`, and its raw values are the symbols weights are already stored under.
+
+**Every quantity a lifter can change is drawn as a field** — `editableField(isActive:)` plus `FieldCaret` in `Theme.swift`. Reps, weight, RPE, rest, the planner's load mode, and the running rest clock all wear one outlined, thumb-height box, and anything that opens a picker carries a caret. Before this they were quiet filled rectangles with no edge, which made an editable RPE look exactly like the annotation text beside it — the complaint was "the rest timer and RPE sections don't look clearly editable," and it was correct. `Theme.fieldEdge` is brighter than `hairline` on purpose: structural rules can be felt rather than seen, an "you can change this" outline can't. An unset RPE now reads "RPE" rather than "—", which is how Strong and Hevy label an empty field.
+
+**Every number is typed through `NumberField` (`Sources/App/Components/`), and it brings its own keyboard bar.** A decimal pad has no return key — there is literally no key on it that ends editing — so a field tapped mid-workout stayed open with the keyboard covering the bottom third of the screen and no way off it. The rest timer's own entry was the only place that had thought to put a DONE above the keys; that confirmation belongs to *numeric entry*, not to whichever control needed it first.
+- The bar carries **DONE**, which is also what commits: `TextField(value:format:)` writes its binding when editing ends, never per keystroke, so a half-typed `2` on the way to `225` is never a real weight.
+- It carries **± steps** where the caller offers one — 2.5 lb or 1 kg on a weight, 1 on reps, 2.5 points on an authored percentage. Adding a plate per side shouldn't mean retyping three digits.
+- **Only the focused field contributes the bar** (`if focused` inside the `@ToolbarContentBuilder`). Every set row holds two of these; without the guard each one adds its own keyboard toolbar and they stack.
+- **Touching something else is also a way out.** Buttons inside a `List` don't take focus, so the controls a lifter reaches for next say it themselves: `dismissKeyboard()` from the set checkbox, the RPE chip, and the rest line. Resigning focus is what commits, so nothing typed is lost on the way. Dragging the list does it too — `screenGround()` carries `.scrollDismissesKeyboard(.interactively)`, applied there rather than per screen so the one screen that forgot it can't be the one that traps you.
+- The plate calculator that rounds out Strong's version of this panel is **backlog**, written down in `notes/Feedback.md` — it needs a real model of bar weights and available plates per unit, not a rounding function.
+
+**The type scale has a floor, and it was raised.** The smallest sizes were 8–12pt, which read as HUD annotation on a desk and as nothing at arm's length over a bar. Everything at or under 12 went up ~2 (`Theme.label` 10→12, `Theme.caption` 12→14, `Theme.data(10|11|12)` → 12|13|14), 13 went to 14, and 15+ was already fine. `SectionLabel` gained `.lineLimit(1).fixedSize()` in the same pass: its text and its trailing rule are both flexible, so the `HStack` splits the width between them and a longer label ("MAXES · ACHIEVED / GOAL") wrapped onto two lines with the rule floating beside the first.
+
+**A PR announces itself at the foot of the screen** — `.safeAreaInset(edge: .bottom)` on the tracker list, not a row in it. It used to be the first row, which is the one place it was guaranteed not to be seen: the set that earned it is somewhere further down and that's where the lifter is looking. An *overlay* is wrong too — the list runs under the tab bar, so a bottom-aligned overlay puts the banner behind it. The inset sits above the bar and lifts the list rather than covering its last row. It stays until acknowledged; a max is worth a deliberate tap.
+
+**"Add Warmup Set" prepends** (`WorkoutSession.addWarmupSet`), above the prescription rather than after it — a program says what to work up *to*, and how you get there is the lifter's call on the day. The set is typed `.warmup`, which is load-bearing: `AchievedMaxUpdate` ignores it, correctly, since the last heavy ramp-up single isn't a maximal effort. It's **empty**, unlike `addSet`, which copies the set above it — a warmup is by definition lighter than what follows, so pre-filling the working weight would mean clearing it every time. The button is named for what it makes because nothing in the tracker can change a set's type afterward (backlog).
+
+**Reordering exercises is a mode, and that's the fix, not the decoration.** `.onMove` was on the tracker's exercise `ForEach` and did nothing: the drag animated and the exercise sprang back. `List` maps a drag onto a `ForEach` *element*, which only works when an element renders exactly one row — and an expanded exercise renders a header, a warmup button, every set, a rest line under each, and an add-set button. Same class of bug as the planner's "tapping the title adds a set": one element, many rows.
+- **Reorder mode collapses every group to a single row** (`ReorderRow`), which is what makes the move land *and* what makes it legible — dragging a lift past three expanded exercises means dragging it past two screens of sets with no sight of where it will end up. Entered from any exercise's `…` menu, left by DONE in the banner. `\.editMode` is bound `.active` only for the duration.
+- A superset is **one row carrying both names**: the pair moves together, matching `moveGroup`'s granularity, and splitting it would put the many-rows-per-element bug straight back.
+- **Sets still reorder inline**, because there a `ForEach` element really is one row — except when a rest editor is open, which adds a second. `.moveDisabled(expandedRest != nil)` turns dragging off rather than letting it be broken, and entering reorder mode closes any open editor first.
+- The model was never wrong: `WorkoutSession.moveGroup`/`moveSet` were already tested. What was missing is a persistence test that a reorder survives a reload — `hydrate` rebuilds nesting by watching `groupIndex` advance, so a gap would re-nest the workout into the wrong shape on next launch.
+
+**Data export is real, and it's an archive rather than a report.** Profile's data section was an honest "NOT STARTED"; it now writes the whole local database to one JSON file and hands it to the share sheet. `DataExport` (model package) is the shape, `DataExporter` (persistence) assembles it, `AppEnvironment.exporter` owns the instance.
+- **It round-trips.** The archive is the domain model encoded, not a flattened summary, so nothing is dropped for being redundant — `plannedFrom` snapshots, `source` tags, per-set units and the plan's prescriptions are all in it. A test decodes a written file back and checks the values. Nothing *imports* one yet (phase 2), but a backup that couldn't be read back wouldn't be a backup.
+- **`formatVersion` is the only compatibility promise**, and `counts` is written into the file so it states what it contains without being parsed — from the same computation the screen reports, so the two can't disagree.
+- **It runs off the main actor.** A full export hydrates every set of every workout; against 840 workouts that's thousands of queries, and on the main actor it's a frozen screen. `ShareSheet` (`Components/`) is a `UIActivityViewController` rather than `ShareLink` because the file doesn't exist until the button is pressed.
+- **Import is still not going here**, and the screen says so in as many words rather than leaving an empty half-section. See the `scripts/` paragraph and `Roadmap.md`.
+
+**History is a calendar and a list, and neither is the worse version of the other.** `Features/Workout History.md` specifies the calendar — dots, one month at a time, a dialog on touch with an edit button — so that's the default; the list is one toolbar tap away.
+- They answer different questions. The calendar shows the *shape* of a month: consistency, a missed Thursday, a week off. The list is how you walk backwards through five years. A list cannot show shape and a grid cannot be scrolled through 840 entries.
+- **Dots carry no detail, per the doc, and it's right** — a 7-column grid on a phone has room for a number and a mark. Volume is the one exception (a day with three sessions gets three dots, capped at three) because that's a fact about the month's shape too.
+- **`WorkoutStore.fetchSummaries(from:to:)`** is range-scoped rather than paged: a month is a bounded question. It shares the name/count enrichment with the paged version so the grid and the list can't disagree about the same workout.
+- **The day dialog's EDIT goes straight to the editor** (`WorkoutDetailView.startsEditing`). Landing on a read-only screen with a second EDIT on it would be the app making the lifter say it twice — the same reasoning as Home's today card starting the workout.
+- The dialog is an overlay, not a sheet, matching `themedConfirm`: it's about the day behind it, and a sheet covering the month loses the context the tap was made in.
+
+**Swipe-to-delete is tinted `Theme.alert` explicitly.** `role: .destructive` isn't enough: the app tints itself cyan, a swipe action inherits that, and "Delete" ended up the same colour as every safe, affirmative control in the app.
+
+**Units resolve in a three-level chain, and switching any level rewrites nothing.** `WorkoutSet.unit` (migration `v11_setUnitOverride`) → `User.exerciseUnits[id]` (`v10_exerciseUnitPreference`) → `User.preferredUnit`. Same shape as the rest chain, and for the same reason: every level is authored by the lifter, so the most specific one wins outright (Core Tenets §1).
+- **The per-lift preference is sticky**, which is the whole point — the dumbbell rack is marked in kg and still will be next Tuesday. It lives in its own table keyed by user + exercise (the `goalMax` shape), *not* on the catalog `exercise` row: the catalog is shared vendored reference data whose rows are identity claims, and a re-import would have to either clobber a personal preference or specially preserve it.
+- **The per-set override is a separate column from `weightUnit` beside it.** That one records what the logged weight *is*; this one is a display and entry preference. It can't be inferred from `weight?.unit` either, because an empty set has no weight and still needs to know what it's being typed in.
+- Toggling a set from lb to kg shows 100 lb as 45.4 kg — a conversion, the same iron. It never reinterprets it as 100 kg; that would be a correction, and this is a reading choice. Set from the exercise's `…` menu (sticky, and the menu says so) and the set row's `…` menu.
+
+**Supersets can be formed and dissolved mid-workout.** `WorkoutSession.superset(id:with:)` / `ungroup(id:)`, reached from the exercise `…` menu ("Superset With ▸ …" / "Remove From Superset"). The nesting was always in the model and the schema; nothing could *make* one, so a superset could only arrive from a plan — and deciding to pair two lifts happens at the rack.
+- **Both must leave `workout.exercises` dense.** `WorkoutStore.hydrate` rebuilds the nesting by watching `groupIndex` advance, so a skipped index doesn't fail — it silently re-nests the workout into the wrong shape on the next launch. `superset` compacts when a move empties the source group, and there's a persistence round-trip test for exactly that case.
+- `ungroup` lands the exercise immediately after the group it left, not at the end of the workout, which would read as having been deleted and re-added.
+- **A group's members share an accent** rather than only carrying a caption. Two exercises with "SUPERSET" written above them doesn't say they're paired; it says there's a caption. Live still wins — whichever lift is being worked is the more urgent fact.
+- Known gap, in `notes/Feedback.md`: nothing reorders the two lifts *within* a pair.
+
+**Set type is editable in the tracker, and drop sets have a button.** `SetRow`'s note button became a `…` menu — Unit, Set Type, Edit Note, Delete Set — matching the planner's set row, which has had one all along. That closes the old backlog item: a set added as the wrong kind had to be deleted and remade. `WorkoutSession.addDropSet` appends a `.drop` copying reps but **not** weight (a drop is lighter by definition, so carrying the weight over means clearing it every time — `addWarmupSet`'s reasoning, mirrored).
+
+**`ExerciseStatsStore` is a derived table, rebuilt, never incremented.** `exerciseStats` (migration `v12_exerciseStats`) holds per-lift session count, set count, last performed, and heaviest working set. **`rebuild(for:)` is the only writer** — one `INSERT … SELECT` over the log — and runs on workout finish, workout delete, and app bootstrap.
+- **That distinction is the entire safety argument.** A counter adjusted at write time has to be adjusted correctly by every path that touches the log (finishing, which deletes incomplete sets; discarding; deleting a set; editing history; importing) and lies permanently if one is missed. A recomputed table can only be *stale* — it cannot disagree with the log, and dropping it is always a valid repair. `ExerciseStatsStoreTests` asserts rebuild is idempotent **and agrees with the equivalent live query**; keep that test as write paths get added.
+- Not stored for latency: the live query measures **2.9 ms** against real scale (840 workouts, 3.5k exercise rows, 16k sets — see `notes/Workout App/workout_history/`), and an index on `exerciseId` made it *slower*. It's stored because a CSV import lands a whole career in one transaction, and because the roadmap's fatigue and theoretical-max models are more aggregates wanting one home rather than a dozen ad-hoc read-time queries.
+- Only **completed** workouts count (`endTime IS NOT NULL`). That's correct for a count and *necessary* for suggestions — otherwise the session you're in proposes the set you're looking at.
+- Heaviest is **working sets only**; a ramp-up single and a back-off aren't attempts at a limit. Compared in kilograms across units, reported in the unit it was logged in.
+
+**One exercise picker, and picking is a two-step.** `Components/ExercisePicker.swift` replaces two near-duplicates (the tracker's themed one, and a stripped unthemed clone in the planner that had drifted a redesign behind).
+- A row used to commit on a single tap. It now pushes `ExerciseDetailView` — tags, your history, the catalog `instructions` that were imported and displayed nowhere — and commits on an explicit **Use This Exercise**.
+- **Ordered by `sessionCount` desc, then name.** Alphabetical over ~870 entries buries the twenty a person trains. Usage order applies inside a search too.
+- Prefilters from the slot: an open choice filters to the coach's muscle group, a *swap* filters to the outgoing lift's muscle group and equipment. Every prefilter is a **visible chip that clears in one tap**, plus a Clear button — a hidden filter would be the app deciding what you may pick.
+- **Suggestion chips stay search shortcuts, not filters.** A suggestion is the program's prose, not a catalog field, so filtering by one would make it behave like the whitelist `Concepts.md` says it isn't.
+
+**An empty set field shows last session's number, greyed.** `SuggestingNumberField` binds `Double?` so a set can be genuinely empty; it used to bind a non-optional and rendered `0` — a weight nobody lifted, sitting in the field as if it were data. `SetSuggestion` (model package, pure, tested) matches **within set type by ordinal**, falling back to the last set of that type: a warmup draws from warmups, not from the top single.
+- **It only fills what was never prescribed.** `WorkoutSession.start(from:)` still writes prescribed reps and resolved weight as real values, so this never overrides a coach — it fills ad-hoc lifts, added sets, warmups, drops, and percentages that couldn't resolve.
+- **Checking off an untouched set commits the suggestion** (`toggle(_:suggestion:)` passes it to `completeSet`, which already took overrides). Honest because the number was on screen in a field first; the checkbox is the confirmation.
+- **Not styled by colour alone.** The placeholder is `inkMuted` — AA as *text*, because it's committable — and a `LAST` tag on the annotation line is the second channel (WCAG §1.4.1), which also answers where the number came from.
+
+**The palette is held to WCAG 2.1, measured.** `Tools/check-contrast.py` parses `Theme.swift`'s literals and fails on a regression; run it when adding a colour. Floors: **4.5:1 all text**, **7:1 lift data** (reps/weight/RPE, read at arm's length over a bar), **3:1 meaningful UI boundaries**, decorative rules exempt.
+- Three tokens were under the floor before anyone measured. `inkFaint` 3.00 → 4.60, `fieldEdge` **2.02 → 3.10** (the one colour whose documented job was being visible in a gym), `signalDim` 4.03 → 4.60. `hairline` stays at 1.23 — it's a decorative rule and raising it would add noise to every panel.
+- Completed set values moved off `inkMuted` (5.47) to `ink`; done-ness is carried by **font weight**, which `SetRow` already varied. State should never be colour alone.
+
+**Home's today card starts the workout.** It used to only switch tabs, on the reasoning that starting writes a real in-progress workout and a stray tap shouldn't. Reversed on the owner's call: the card is the one thing on Home you deliberately reach for, and landing on a screen that asks you to tap the same workout again is the app making you say it twice.
+- The Workout tab is **still the only owner of session state**. Home hands a `PlannedWorkout` to `RootView.pendingStart`; the tracker consumes it (`consumePendingStart`) and clears it, so returning to the tab later can't restart the same day.
+- **An in-progress workout wins.** A pending request is dropped rather than replacing a live session — starting from a plan would throw away logged sets (Core Tenets §8).
+
+**Rest is per set, and tunable.** `WorkoutSet.restOverride` (migration `v6_setRestOverride`) is the lifter's own rest for one set; `WorkoutSession.restTarget(afterSetWith:)` resolves override → `plannedFrom.restTime` → block default → app default, and `prescribedRest(afterSetWith:)` is the same chain without the override, so "back to prescribed" has an answer.
+- **A separate field from `plannedFrom.restTime` on purpose.** The snapshot is what the program asked for; writing a lifter's 3:30 into it would make it read back later as prescription. Also separate from the legacy `restTime` column beside it, which holds *measured* rest — mixing chosen durations into it would make old rows uninterpretable.
+- Edited through `RestControl` — see below. It's shared: the tracker writes `restOverride`, the planner writes `PlannedSet.restTime` per set. The planner's exercise-level `RestMenu` still writes every set at once, which is the common case, and is the one rest control that *isn't* `RestControl` (different scope — every set at once — but worth revisiting).
+- **Tuning a set does not touch a rest period already counting down** — the timer is *this* rest, the set's value is the next one. The timer's own ±30 is how you change what's on the clock.
+
+**The RPE selector is `RPEPicker`, not a menu.** The old `Menu` over all nineteen values from 1 to 10 was complete and unusable: a scrolling list of bare numbers with no indication what any meant. The replacement is the scale as a scale — one row per whole number with its half-step beside it, each row labeled with the owner's own anchor word (10 failure, 9 all-out, 8 exertion, 7 some effort, 6 easy), and a header that says "how hard the set was — not reps left." **That labeling is load-bearing, not decoration** (Core Tenets §3): a control spelling out "8 — exertion" can't be misread as RIR the way a bare number list invites. 1–5.5 is valid and reachable behind a disclosure, but doesn't get half the control for a range a lifting log never uses. Used by both the tracker and the planner (exercise-level and per-set).
+
+**Rest is prescribed, never measured.** `WorkoutSession.completeSet` used to record `restTime` as the gap between two completion timestamps; it doesn't any more, on the owner's call. That number is rest *plus* reaching for the phone — biased long every single time, so it looked like data while being systematically wrong. `WorkoutSet.restTime` stays as a legacy column (real rows on the phone carry values) but nothing writes it; the tracker's per-set control reads the prescription in `plannedFrom` unless `restOverride` says otherwise. See Concepts.md's "Rest is prescribed, not measured" before adding any rest analytics.
+
+**There is exactly one rest control — `RestControl` (`Sources/App/Components/`) — and one line of it under every set.** `.prescription` is the rest that follows that set; `.running` is that same line counting down. **Colour is what separates them, not layout**: inactive is quiet ink with a small clock and no track, active is amber with a big clock and a track draining under it, complete is cyan.
+- This replaced **three** surfaces that could all be on screen at once (see `notes/feedback/timer_issue.jpeg`): a chip on every set row, the popover that chip opened, and a countdown block carrying its own copy of the same buttons. `RestPicker` is deleted; nothing opens a popover for rest any more. If you're adding a fourth way to edit rest, don't.
+- **`RestControl` is the line and never expands. `RestEditor` is a separate view, and the parent owns whether it's on screen.** The screens hold `expandedRest: UUID?` (one open editor at a time) and place the editor as a **row of its own** under the set's row. This is the third attempt at the same bug and the only one that worked: while the line and the editor shared a `List` row, opening the editor changed that row's height, the row's contents were laid out for the open state inside a frame that was still growing, and the clock and the steppers drifted toward each other and visibly crossed. A slide from the top edge, a scale from the top anchor, `geometryGroup()`, and no animation at all were all tried inside the component; none of them helped, because the resize wasn't the component's to fix. As sibling rows, nothing already on screen changes size — there is nothing to interpolate and nothing to cross. **Don't move the editor back inside the line.**
+- **Two ways to set a rest, and only two.** Tap the line and the editor opens: ±30/±15 and the one action that applies. Tap the number and type it — digits fill from the right the way a stopwatch takes them (`230` is 2:30), so a number pad is enough and there's no colon to hunt for. Typing commits on blur, never per keystroke: a running timer would otherwise see `2` on the way to `2:30` and expire. **The preset row is gone** (1:00 … 5:00) — a third way to say what the steppers and the keyboard already say.
+- The number sits in a fixed-size box whether it's being read or written, so starting to type doesn't resize the row either.
+- **Collapsed until asked.** All that shows is `REST ——— 2:00`; a running rest just runs. Expiry opens the editor — a REST COMPLETE line with no way to acknowledge it is a dead end — from the screen's `onChange(of: model.rest?.hasExpired)`, alongside the haptic.
+- **A running clock shows nothing but the clock.** Rest proceeds unmolested: while it counts down there are no steppers, just the time and the track draining under it — two thin rows. Tapping opens the editor and tapping again puts it away. Everything is still inline; it's simply not all on screen at once, and there's no longer a presentation hanging off a view that rebuilds every second.
+- **Expiry opens itself**, and that's *derived* from `hasExpired` rather than latched into the expand flag — a rest of zero seconds is already over before the view exists, so nothing would observe the change and REST COMPLETE would sit there with no way to acknowledge it.
+- **One row, not three**: the action ("SKIP" / "DONE" / "RESET 2:00") rides on the stepper row, and the presets that used to sit beneath are gone. Inline under a set, every row costs screen the lifter would rather spend on the next set.
+- **Efficiency is load-bearing here.** The `TimelineView` wraps *only* the clock and its track — not the dozen buttons around them — and the whole timeline is dropped once `RestTimer.hasExpired` latches, because redrawing 0:00 once a second until someone dismisses it is a phone warming up to say nothing. Static state reads `hasExpired` rather than the current second for the same reason.
+
+The rest of the machinery: `RestTimer` (model package, pure) + `TrackerModel`'s orchestration.
+- It renders **directly under the set that started it** (`RestTimer.setID`), nested inside that set's row rather than as a row of its own — so it survives a reorder welded to its set, and the set's swipe-to-delete still targets the set. Rest is per set and tunable per set; a countdown at the top of the screen or at the foot of the exercise leaves the lifter working out which set it belongs to, which on a back-off ladder is a real question. If the triggering set is deleted mid-countdown the timer falls back to the foot of the exercise rather than vanishing.
+- It **stops at zero**. `Text(timerInterval:countsDown:)` counts straight past into negative time, which turns a rest timer into a stopwatch measuring lateness; the control renders from the clock instead, and flips to a cyan REST COMPLETE state.
+- It's **adjustable and skippable**, because rest is a prescription the lifter may depart from (Core Tenets §1). Shortening below the elapsed time lands on zero, never negative.
+- **A typed duration sets the clock directly** (`RestTimer.setRemaining` / `TrackerModel.setRestRemaining`), while ± goes through `RestTimer.adjust`, which clamps against elapsed time and moves the bar's denominator with it. `startedAt` stays put either way, so the track still measures this rest from when it actually began.
+- `RestTimer` stores the *window* (`startedAt`/`endsAt`), not a tick count, so a phone that slept through the rest period shows the truth on return with nothing to catch up. Not persisted — a rest period spanning a relaunch is over.
+- **Expiry notifies**: `RestNotifier` schedules one local notification (fixed identifier, so re-scheduling replaces rather than stacks) and cancels it on skip/finish/discard. Authorization is requested at the first rest period, not at launch. `installForegroundPresentation()` in `LiftingCoachApp.init` is what lets the banner show while the app is frontmost — the default is to suppress it, which is backwards for a phone sitting face-down on a bench with the tracker open. Not `.timeSensitive`: that needs an entitlement this signing setup doesn't have.
+
+**The tracker's toolbar is FINISH / DISCARD, and both ask first.** There were three things up there — a progress count, an `EditButton`, and DISCARD — plus a second "Finish Workout" button at the foot of the list. Finishing moved up beside discarding, because they're the two ways a workout ends and they belong together; the footer button went with it, since a second way to do the one thing is the thing this app keeps deleting. DISCARD now opens a `themedConfirm` naming how many logged sets it will delete, which finishing already did.
+- **The `EditButton` is gone**, and with it the permanent `\.editMode` binding. Reordering exercises is its own mode now — see the reorder paragraph below.
+- FINISH is disabled until at least one set is logged; a workout with nothing in it wants DISCARD.
+
+**Five years of real training history is importable, and none of it is an app feature.** `scripts/` is a uv-managed Python project that translates an external log into rows the app only ever reads. **Do not add import UI** — the owner's call; the only import surface this app will ever have is file upload inside the phase-2 coach chat, and the real path is cloud storage plus an importer Lambda.
+- **Three stages, and only the middle one thinks.** `extract` (deterministic, source-specific, catalog-blind) → **resolve** (a person or an agent, once, committed to the repo as `scripts/data/strong_exercise_map.json`) → `load` (strict, transactional, aborts on any unmapped name). That's `ProgramLoader`'s discipline generalized: the judgment happens once and is *recorded*, never recomputed.
+- **The measurement that justifies it**: matching Strong's 149 exercise names against the vendored catalog by string similarity resolves **31**. The top candidate for "Squat (Barbell)" is *Front Barbell Squat To A Bench*. `report` prints candidates and deliberately **proposes nothing** — the moment it picks the top one, this is `CatalogMatcher` again.
+- The mapping states `slug` / `create` / `openChoice` per name, plus an optional `variant`. `openChoice` is load-bearing: "Triceps Extension" over 352 sets at 50–160 lb is not one lift, and the flag is what stops `AchievedMaxUpdate` recording a meaningless max. **Three names are open choices and that's a judgment worth revisiting** if the owner knows which movement they actually meant — it's a one-line edit and a reload.
+- **The loader never creates the schema.** It requires a database the app has already migrated and refuses one predating `v13`. `workout.day` is the **local** start of day stored as UTC, and the staging file carries the extract's timezone so a load run elsewhere can't shift every workout a day.
+- **Re-running replaces, matched on `workout.source` / `achievedMax.source`.** Workouts logged in the app carry no source and are never touched. Verified: a second run replaced 840 and created 0 new catalog rows.
+- **The achieved-max rule is duplicated** in `scripts/src/liftimport/maxes.py` from `AchievedMaxUpdate.swift`. Stated rather than hidden: `scripts/tests/test_maxes.py` pins the four guards as a table, and each file names the other. Phase 2's Lambda is where it gets one home.
+- Measured end to end: 840 workouts / 3,523 exercise blocks / 14,520 sets / 442 max events in **0.29 s**. Relaunch afterwards — `AppEnvironment.bootstrap` rebuilds `exerciseStats`, which is what the picker's ordering and the set suggestions read.
+- **The CSV is gitignored, the mapping is committed.** 1.4 MB of personal health data has no reason to be in version control; the 149-row translation does, because it's the part that took judgment.
+
+**History had to survive 840 workouts, and gained a way in.** It used to fetch a two-year window through `WorkoutStore.fetch(from:to:)`, which **hydrates every set of every workout** — thousands of queries to draw a list of dates and names.
+- `WorkoutStore.fetchSummaries(limit:before:)` returns a lightweight `WorkoutSummary` in **three bounded queries per page**: the rows, then names and counts for exactly those ids. Names are a separate query rather than `group_concat` because ordering inside that aggregate needs a newer SQLite than the deployment target promises, and performed order is the point. A test asserts summaries agree with the hydrated fetch — the same invariant `ExerciseStatsStoreTests` uses.
+- The screen pages as you scroll, groups into month sections, shows time of day (`Feedback.md` asked), and tags imported rows. A row's subtitle is what was actually in the workout, because most of the imported log is called "Afternoon Workout" — Strong's autogenerated name, true and useless. Showing contents beneath the title answers it without anything having to judge which titles are meaningless.
+- **`WorkoutDetailView` reads a workout, and now corrects one.** Rows did nothing when tapped before, which was survivable with three workouts and useless with five years. See the History-editing section below for the edit half.
+- `SetSummaryLine.describe` is the app's **one** renderer for a logged set, shared with the exercise-history screen, and it's where a cardio set reads as `20:00 · 2.4 mi` instead of blanks.
+- `-openWorkoutDetail N` (DEBUG, needs `-initialTab history`) pushes the nth most recent workout, paging to reach it. Same stopgap family as `-initialTab`, and latched the same way `-openExercisePicker` had to be. `-editWorkout` beside it opens that screen straight into edit mode, which is otherwise behind a toolbar tap.
+
+**Logged history is editable, and it edits like the planner, not the tracker.** `LoggedWorkoutDraft` (model package) is the third editing model in the app, and it's a copy of `PlannedWorkoutDraft`'s shape on purpose: the tracker saves after every mutation because a session the OS kills mid-workout has to be recoverable, and there is nothing to recover when you're correcting a set logged in March. Edits accumulate and land on an explicit SAVE, with a confirm on the way out. `notes/Feedback.md`'s History items — fix a mislogged set, correct start/stop times — are what this closes.
+- **Correcting reaches what was lifted, and nothing else.** `source` and each set's `plannedFrom` snapshot are untouchable: the first is a fact about where a row came from (and the importer matches on it to replace its own rows on a reload), the second is what was *asked for*, so letting an edit reach into it would make adherence lie. Swapping which exercise a block *is* is also deliberately absent — a real want, but it needs the picker and a decision about the maxes it invalidates, so it's left out rather than half-built.
+- **`WorkoutStore.update` exists because `save` takes `blockId` as a parameter.** `Workout` has no such field, so `hydrate` can't return one, so an edit that round-trips through `fetch` and back through `save` writes `blockId = NULL` and quietly detaches the workout from its block. Nothing writes `blockId` today — the tracker saves without one and adherence joins by date — so this is not a live bug; it's the one line that stops editing history from becoming one the day something does.
+- **A contradiction is reported, not resolved.** `LoggedWorkoutDraft.problems` blocks the save on a workout that ends before it starts, and says so in a banner. Dragging the other end of the range to make the edit legal would silently change a number nobody touched (Core Tenets §1).
+- **An added set lands complete, with no `timeComplete`.** Complete because an unfinished set in a finished workout records nothing; no timestamp because there isn't one, and inventing one is fabricating data — the same rule the CSV importer follows. It copies the previous set's weight, unlike `addWarmupSet`/`addDropSet`, which drop it: those two are lighter by definition, this one is a set the lifter already did and simply didn't log.
+- **Duration and distance are shown but not editable.** 75 sets of the imported history are a walk or a plank, and a row that rendered them as blank fields would read as data the screen had thrown away. Entering them is its own round — nothing in the app records a cardio set yet, the tracker included.
+- **`exerciseStats` is rebuilt on save and on delete; achieved maxes are not replayed.** The first is derived and rebuilding is its only write path. The second is append-only event history, and turning it into a derived table is a decision, not a detail — see the next-steps list.
+- **Saving or deleting tells the list.** `WorkoutHistoryView` caches its pages, so a corrected title or a deleted workout would otherwise leave a row on screen that no longer matches the log. `onChange` re-fetches exactly the pages already displayed, which keeps the lifter's scroll position where re-paging from the top would throw it away.
+- **`NoteSheet` (`Sources/App/Components/`) replaced two near-duplicates** — the tracker's and the planner's, identical but for their section labels — rather than becoming a third. Same reasoning as `ExercisePicker`: a duplicated control doesn't stay duplicated, it drifts.
+- The History screens live in `Sources/App/Features/History/` now, beside `Planner/` and `Tracker/`.
+
+Next, in rough order:
+- **`notes/Feedback.md` has a `## Backlog` section** for wanted-but-bigger-than-a-fix items (plate calculator, the bodyweight wheel, editing logged history). Put new ones there rather than in this file's prose.
+- **Achieved maxes are not replayed after an edit.** Correcting a 500 lb squat down to 405 leaves the max event recorded at the time, because `achievedMax` is append-only event history rather than a derived table (Core Tenets §6). Rebuilding it from the log is a real decision — it would make the event log derived, which is a different thing than it is today — and `scripts/src/liftimport/maxes.py` already knows how to replay one. Written down in `notes/Feedback.md` rather than settled quietly in the History editor.
+- **Superset authoring in the planner.** The tracker can now form and dissolve them live; the planner still can't author one. Note the real program uses none.
+- **Adherence denominator**: home counts all 698 sets of the 12-week block; should probably scope to elapsed days.
+- **Set completion timestamps already exist** — `WorkoutSet.timeComplete`, written by `WorkoutSession.completeSet`, millisecond precision, verified on the phone. They're the anchor for correlating a workout against a heart rate series later. What's deliberately *absent* is a recorded set **start**: a set is an instant, not an interval, so work-vs-rest can only be inferred from consecutive completions. See Concepts.md's "Set completion is stamped"; decide the start question when HealthKit correlation is actually being built.
+- **Real HealthKit integration** — scope (which metrics, a new page vs. Home, entitlements) is an open decision, not started. The Home placeholder just names what's missing.
+- **UI test target** — simctl can't tap, so sheets, popovers, and the achieved-max banner are only verifiable by hand. (Stopgap that worked for the `RPEPicker` popover: temporarily default `isPresented` to `true` behind a one-shot latch, build, screenshot, revert. It caught two real wrapping bugs — a "2:00" readout split across two lines and a wrapped section title — that a green build showed nothing of.) (`-openPlanDay N`, `-restDemo <seconds>`, `-openExercisePicker [name]` and `-openWorkoutDetail N` are the same kind of stopgap as `-initialTab`. The planner's Save/discard flow and `RestControl`'s own buttons still aren't exercisable.) Worth prioritizing: the completeSet → banner → Home-refresh path has never actually been exercised end-to-end, only its pieces individually.
+- **The rest-complete notification is unverified.** Scheduling, cancelling, and the foreground-presentation delegate are all written and the permission prompt is confirmed to appear, but nothing here can tap "Allow", so no alert has ever actually been *seen* firing. First thing to check by hand on the phone.
+- **Three imported names are open choices** — "Triceps Extension", "Chest Fly", "Stretching". That was a judgment made from the data (each spans a 50–160 lb range over five years under one Strong entry, with no equipment recorded), and the owner may simply know which movement each was. Correcting one is an edit to `scripts/data/strong_exercise_map.json` and a reload; leaving it means those lifts never record an achieved max, which is the safe direction.
+- **Exercise catalog search stays substring-only.** Fine for now over ~900 entries; if the picker needs to get smarter that's real search work (embeddings/LLM), not a keyword table. Note this is about *searching* the catalog, which is a live user action — it is not a reason to reintroduce name-matching into program loading.
 
 Open items intentionally left unresolved (in the docs, not silently in the model):
-- Exercise catalog/assets are TBD — see `Concepts.md`'s TODO section (Strong/Heavy asset sourcing as an internal-use placeholder, swap before any public release).
-- Whether `Exercise`/`WorkoutSet` need non-strength fields (cardio incline/duration/etc.) — currently barbell/strength-shaped only. May be fine for a phase 1 MVP scoped to the owner's own training (bench/squat/deadlift), but not decided as permanent scope.
+- ~~Whether `WorkoutSet` needs non-strength fields.~~ **Settled** by `v13_setDurationDistance`: it has `duration` and `distance`, because 75 sets of the imported history are a walk, a bike, a swim, a plank. `PlannedSet` deliberately did **not** get them — nothing prescribes cardio yet, and a field the planner can't author is dead prescription state. Nothing in the tracker enters one either; that's its own round.
+- **The theoretical-max estimation model doesn't exist.** `MaxReference.theoretical` deliberately resolves to `nil` — estimating a max from logged work needs the rep-range-aware model `Ideas.md` calls for (standard formulas are explicitly distrusted there). Decide that model before the app starts predicting strength anywhere.
 - `Backend/Overview.md`'s two Open Questions (S3/CloudFront for a possible web planner UI; Lambda implementation language) — both phase 2, not blocking.
 - The `FitnessAppNetworkDiagram.drawio` vs. `Backend/Overview.md` table-naming mismatch noted above.
+
+## Project scaffold
+- `LiftingCoachModel/` — local Swift package, the portable core. Two targets:
+  - `LiftingCoachModel` — pure domain types mirroring `Concepts.md`, no I/O, no dependencies. Derived logic lives here: `WorkoutPlan.currentBlock`/`nextBlock`, `WorkoutBlock.progress`/`restTime`/`programmedWeeks`, `User.resolvedWeight`, `PlannedExercise.setGroups`. The three editing models are here too, and the split between them is the thing to understand before touching any of those screens: `WorkoutSession` (tracker, saves every mutation) versus `PlannedWorkoutDraft` (planner) and `LoggedWorkoutDraft` (History, correcting a past workout), which both accumulate and save on demand.
+  - `LiftingCoachPersistence` — GRDB/SQLite. `AppDatabase` opens and migrates; `Migrations.swift` holds the schema, currently through `v13_setDurationDistance` — **additive by habit past `v1_core`** (see the dev-device paragraph above; `v8` is the one deliberate exception). Five stores: `ExerciseStore` (catalog), `WorkoutStore` (logged), `PlanStore` (blocks + programs), `UserStore` (lifter + maxes + bodyweight + unit prefs), `ExerciseStatsStore` (per-lift history, derived). Plus `CatalogImporter` (the vendored exercise database) and `ProgramLoader` (a block written in the app's language — see `Resources/Block1.json`).
+  - `swift test` runs both suites with no Xcode involved — that's the point of keeping this a package. **Run it before `xcodebuild`; it's faster and catches most breakage.**
+- `scripts/` — the import pipeline. `cd scripts && uv sync && uv run pytest`. Standard library only, so there is nothing to install beyond pytest. Not part of the Xcode target, so it needs no `xcodegen generate`. Read `scripts/README.md` before touching it; the three-stage contract there is the whole design.
+- `Sources/App/` — the SwiftUI iOS app. `AppEnvironment` is the composition root (views never build their own store or client). `Components/` holds controls shared by more than one screen (`RPEPicker`, `RestControl`, `NumberField`/`SuggestingNumberField`, `ExercisePicker`, `NoteSheet`); `Theme/Theme.swift` holds the visual primitives (`Panel`, `Chip`, `SectionLabel`, the grouped-row modifiers). `Backend/BackendClient.swift` is the phase 2 seam, implemented for now by `UnavailableBackend`, which throws on every call rather than quietly returning empty data.
+- `project.yml` + XcodeGen — `LiftingCoach.xcodeproj` is **generated and gitignored**. Edit `project.yml` and run `xcodegen generate`; never hand-edit the pbxproj, and don't commit it.
+
+### Decisions made at scaffold time (not in the notes)
+- **GRDB** for SQLite — real SQLite as `Backend/Overview.md` specifies, testable outside Xcode. SwiftData was rejected: it owns its own store format and would force `Concepts.md`'s structs into classes.
+- **iOS 18** deployment target, **portrait iPhone only** for phase 1.
+- Weights persist as value + unit symbol rather than normalizing to kg, so a set logged in pounds is still a pounds row on disk. What a lifter *reads* is `User.preferredUnit` — see the units paragraph above; storage fidelity and display preference are separate concerns and this decision is about the first one.
+- Superset nesting (`[[WorkoutExercise]]`) flattens in SQLite to `groupIndex` + `position`; rebuilding the arrays is the store's job.
+- `workoutSet.plannedFrom` is a **JSON snapshot of the prescription, not a foreign key**. `Concepts.md` embeds `PlannedSet` by value and that's right for storage too: logged history is self-contained, so `Design.md`'s "never destroy historical data" holds by shape rather than by a delete rule, and a workout can be logged from a plan that was never saved. Tradeoff: prescribed values aren't queryable in SQL — fine while adherence is computed per workout in memory, revisit if plan-wide analytics need to filter on them. Regression tested.
+- The tracker saves after **every** mutation, not on finish, so `fetchInProgress()` can recover a session the OS killed mid-workout.
+- Tests that assert calendar-day behavior pin their `Calendar` to UTC — `Calendar.current` makes "same day" depend on the machine's timezone, which is the thing under test.
+- **`LoadPrescription` persists two different ways on purpose.** In `plannedSet` it's discriminator + value across three columns, so the planner can eventually query it ("every set above 85%"). In `workoutSet.plannedFrom` it's inside the JSON snapshot, because there it's history, not a queryable plan. Don't "unify" these without deciding which need each one serves.
+- Blocks load with `program` populated and `workouts` left `nil`; `PlanStore.attachingLoggedWorkouts` joins them. Opening the planner shouldn't pull in every workout ever logged.
+- Phase 1 has no sign-in, so `UserStore.localUser()` creates a placeholder lifter on first launch. Phase 2's Cognito replaces the *identity*, not the storage.
+- `SetType` has no `failure` case: per `Mid lift thoughts.md`, failure is RPE 10 plus forced partials or a weight drop, and Strong's sticky failure status was a real annoyance.
+- `Exercise.sourceSlug` is an identity claim — this row *is* that vendored-catalog entry — and is uniquely indexed so two rows can't both claim to be one. A program's own wording for a lift lives in `PlannedExercise.variant`, never in a second slug field. (There *was* a `matchedSlug` alongside it, holding what a name matcher guessed; it and the matcher are gone. The SQLite column survives unused because dropping one means rebuilding the table and a real device has to migrate forward.)
+
+### Building
+**The iOS build works.** It compiles and links cleanly (`** BUILD SUCCEEDED **`, universal simulator binary). Two quirks to know:
+
+1. **Derived data must go outside the repo** — the agent sandbox denies writes to `./build/`.
+2. **Use `-target`, not `-scheme`** — scheme-based builds fail destination resolution because no *runnable* simulator matches (see below).
+
+```sh
+DD=/tmp/lifting-coach-build   # anywhere outside the repo
+xcodebuild -project LiftingCoach.xcodeproj -target LiftingCoach \
+  -sdk iphonesimulator -configuration Debug CODE_SIGNING_ALLOWED=NO \
+  SYMROOT="$DD/Products" OBJROOT="$DD/Intermediates" SHARED_PRECOMPS_DIR="$DD/PCH" build
+```
+
+Regenerate the project first if `project.yml` changed: `xcodegen generate`.
+
+`swift test` in `LiftingCoachModel/` covers all the real logic and is the fast inner loop — run it before `xcodebuild`.
+
+### Running it
+An iOS 26.3 simulator runtime is installed, and **all five tabs have been verified on screen**. Full loop:
+
+```sh
+D=$(xcrun simctl list devices available | grep -m1 'iPhone 17 Pro' | grep -o '[0-9A-F-]\{36\}')
+xcodegen generate                       # only if project.yml or files changed
+# ...build as above...
+xcrun simctl boot "$D"                  # no-op if already booted
+xcrun simctl install "$D" "$DD/Products/Debug-iphonesimulator/LiftingCoach.app"
+xcrun simctl launch "$D" com.rrochlin.LiftingCoach -initialTab plan
+xcrun simctl io "$D" screenshot /tmp/shot.png
+```
+
+**Note "iPhone 17 Pro" is a device model, not an OS version** — it runs iOS 26.3. The stale iOS 17.0 runtime is also installed but nothing here can run on it (deployment target is 18).
+
+`-initialTab home|workout|plan|history|profile` picks the starting tab. It exists because simctl can install, launch, and screenshot but **cannot tap** — without it, only Home is reachable from the command line. Three more of the same kind, all `#if DEBUG`:
+- `-openPlanDay N` opens the planner's day editor.
+- `-restDemo <seconds>` starts a throwaway workout with two exercises, completes **every set of the first** through the real `completeSet` path, and leaves the rest timer running that long (`-restDemo 0` lands on the expired state). Finishing an exercise is deliberate: it hands "active" to the next lift, which is the state that used to fold the finished exercise shut with a live countdown inside it.
+- `-openBlockSettings` opens the planner's block settings sheet (needs `-initialTab plan`).
+- `-reorderMode` puts the tracker into reorder mode (pair with `-restDemo`, which makes a workout to reorder).
+- `-openCalendarDay 18` opens History's calendar day dialog (needs `-initialTab history`).
+- `-openExercisePicker` opens the exercise picker; `-openExercisePicker "Bench"` pushes straight through to that exercise's detail screen. **Needs `-initialTab workout` beside it** — the flag is read in the tracker's `.task`, which only runs when that tab is on screen. It's **latched to one presentation**, and that matters: `.task` re-runs on every tab selection, so without the latch the picker reopened every time you came back from Home, which is indistinguishable from a bug in the Home card. It also presents after a short sleep; set in the same turn as first appearance, the sheet silently never opens. States behind a *second* tap — sheets, the timer's own ± buttons, the planner's Save/discard — still need a UI test target, which doesn't exist yet.
+
+`-restDemo` writes a real in-progress workout, and it no-ops if one already exists, so clear it between runs:
+```sh
+sqlite3 "$DB" "delete from workoutSet; delete from workoutExercise; delete from workout;"
+```
+It also disables `RestNotifier` — the permission prompt would otherwise cover the thing being screenshotted, and nothing on the command line can dismiss it.
+
+Seeding real history is what makes the picker's ordering, the detail screen and the greyed suggestions render as anything but empty states — all three are invisible on a fresh install. A few finished workouts (`endTime` set) across a handful of exercises is enough; `AppEnvironment.bootstrap` rebuilds `exerciseStats` on the next launch, so no stats have to be written by hand.
+
+**Seeding data to see populated views:** write directly to the app's SQLite.
+```sh
+DB="$(xcrun simctl get_app_container "$D" com.rrochlin.LiftingCoach data)/Library/Application Support/LiftingCoach/db.sqlite"
+```
+The container UUID **changes on reinstall**, so re-resolve it every time. GRDB stores dates as `'YYYY-MM-DD HH:MM:SS.SSS'` in **UTC**, while the app normalizes days with the *local* calendar — so a local start-of-day is e.g. `07:00:00.000` at UTC-7. Get this wrong and rows silently don't match "today". `workoutSet.plannedFrom` is Swift-encoded JSON; generate it with the real encoder rather than hand-writing it (`LoadPrescription` encodes as `{"rpe":{"_0":8}}`).
+
+Lesson worth keeping: running the app immediately found two bugs that compiled fine — weights rounding 157.5 lb to 158 lb, and logged RPE never displaying. **Screenshot new views; don't trust a green build.**
+
+### Deploying to the phone
+The iPhone 13 is usually connected. Two gotchas, both of which cost time before being written down:
+
+1. **`devicectl` and `xcodebuild` use different device identifiers for the same phone.** `xcrun devicectl list devices` prints one (`2F0D37A5-…`); `xcodebuild`'s destination wants the hardware UDID (`00008110-…`), which it will list for you on a failed destination match.
+2. **`project.yml` pins no `DEVELOPMENT_TEAM`** (deliberately — Xcode fills it from whoever's signed in). A command-line build therefore fails with "requires a development team" until you pass it. The team is the `OU` of the signing certificate: `security find-identity -v -p codesigning`, then `security find-certificate -c "<that name>" -p | openssl x509 -noout -subject`.
+
+```sh
+DEV=2F0D37A5-1A73-5D88-9E6A-61DFC7603A0A          # devicectl identifier
+UDID=00008110-000C71260121401E                     # xcodebuild destination
+DD=/tmp/lifting-coach-device
+xcodebuild -project LiftingCoach.xcodeproj -scheme LiftingCoach \
+  -destination "id=$UDID" -configuration Debug \
+  DEVELOPMENT_TEAM=33G44VZ97Z -allowProvisioningUpdates \
+  SYMROOT="$DD/Products" OBJROOT="$DD/Intermediates" SHARED_PRECOMPS_DIR="$DD/PCH" build
+
+xcrun devicectl device uninstall app --device "$DEV" com.rrochlin.LiftingCoach   # wipes its data
+xcrun devicectl device install app --device "$DEV" "$DD/Products/Debug-iphoneos/LiftingCoach.app"
+xcrun devicectl device process launch --device "$DEV" com.rrochlin.LiftingCoach
+```
+
+**The launch will fail after a fresh uninstall** with "profile has not been explicitly trusted by the user" — uninstalling the last app from a developer identity removes the trust with it. Re-trusting is a tap on the phone (Settings → General → VPN & Device Management → the developer profile → Trust) and **nothing here can do it**; hand that step to the owner.
+
+### Shipping to TestFlight
+**The Developer Program membership is active** (team `33G44VZ97Z`, the same id the
+free personal team used). Two things changed the day it landed: provisioning
+profiles last a year instead of seven days, so the phone stops needing a re-trust
+after every uninstall — and the **Time Sensitive Notifications entitlement
+provisions**, which is what `Sources/App/Resources/LiftingCoach.entitlements`
+declares and the rest alert relies on. A build signed by a free team still
+installs; iOS just silently demotes the alert to `.active`.
+
+`Tools/testflight.sh` archives, exports and uploads:
+
+```sh
+Tools/testflight.sh            # archive + export, stops before upload
+Tools/testflight.sh --upload   # and send it
+```
+
+- **The build number is `git rev-list --count HEAD`**, passed as
+  `CURRENT_PROJECT_VERSION` on the xcodebuild invocation. App Store Connect
+  rejects a build number it has already seen for a version, and a number derived
+  from history can't be forgotten, reused, or left un-bumped. The marketing
+  version is `MARKETING_VERSION` in `project.yml` — the only place it lives, since
+  `Info.plist` now reads both from build settings.
+- **Uploading needs an App Store Connect API key**: the `.p8` at
+  `~/.appstoreconnect/private_keys/AuthKey_<KEYID>.p8`, plus `ASC_KEY_ID` and
+  `ASC_ISSUER_ID` in the environment. A key rather than an app-specific password
+  so no secret is ever typed on a command line or pasted into a chat.
+- **The app has to be registered in App Store Connect first**, against
+  `com.rrochlin.LiftingCoach`. Without a record the upload fails with "No
+  suitable application records were found." The *App Store* name has to be
+  globally unique, unlike the home-screen name (`CFBundleDisplayName`), which
+  doesn't.
+- **Internal testers are App Store Connect users** — up to 100, no Beta App
+  Review, available minutes after processing. External testing is the one that
+  needs review. Installing on a second phone means signing into TestFlight there
+  with an Apple ID that's an internal tester, which on a **managed/corporate
+  phone may be blocked by MDM** — that's a policy question, not a build one.
+
+Three things were blockers and are now fixed, worth knowing if any of them
+regresses: the app **had no icon** (`Tools/make-app-icon.swift` renders one from
+`Theme.swift`'s own palette literals; App Store Connect rejects a build without a
+1024×1024 opaque marketing icon), `ITSAppUsesNonExemptEncryption` is declared so
+uploads don't stop to ask, and `PrivacyInfo.xcprivacy` states the honest answers
+for a local-only app — **all three need revisiting when the phase 2 backend
+lands**, because a training log leaving the phone changes the encryption answer
+and every line of the privacy manifest.
 
 ## Working conventions from this project
 - The notes docs are living working files, not archives — once a design conversation converges on a direction, implement it directly in the relevant `.md` (or, going forward, the actual Swift code). Don't leave agreed decisions sitting only in chat.

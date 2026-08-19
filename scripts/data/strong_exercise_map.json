@@ -1,0 +1,708 @@
+{
+  "source": "strong-csv",
+  "note": "Reviewed by hand, once. Every row is a decision about what one of Strong's exercise names actually is; nothing at load time reads a name and guesses. See src/liftimport/mapping.py for the three outcomes and why they differ. Two names map to one slug wherever the lifts share a max (seated and standing overhead press, a Pendlay row and a bent-over row); the source's own wording is kept as a variant so a session still reads as what was actually done.",
+  "entries": [
+    {
+      "name": "Squat (Barbell)",
+      "slug": "Barbell_Squat"
+    },
+    {
+      "name": "Bench Press (Barbell)",
+      "slug": "Barbell_Bench_Press_-_Medium_Grip"
+    },
+    {
+      "name": "Deadlift (Barbell)",
+      "slug": "Barbell_Deadlift"
+    },
+    {
+      "name": "Overhead Press (Barbell)",
+      "slug": "Barbell_Shoulder_Press"
+    },
+    {
+      "name": "Front Squat (Barbell)",
+      "slug": "Front_Barbell_Squat"
+    },
+    {
+      "name": "Incline Bench Press (Barbell)",
+      "slug": "Barbell_Incline_Bench_Press_-_Medium_Grip"
+    },
+    {
+      "name": "Bench Press - Close Grip (Barbell)",
+      "slug": "Close-Grip_Barbell_Bench_Press"
+    },
+    {
+      "name": "Decline Bench Press (Barbell)",
+      "slug": "Decline_Barbell_Bench_Press"
+    },
+    {
+      "name": "Floor Press (Barbell)",
+      "slug": "Floor_Press"
+    },
+    {
+      "name": "Romanian Deadlift (Barbell)",
+      "slug": "Romanian_Deadlift"
+    },
+    {
+      "name": "Deficit Deadlift (Barbell)",
+      "slug": "Deficit_Deadlift"
+    },
+    {
+      "name": "Stiff Leg Deadlift (Barbell)",
+      "slug": "Stiff-Legged_Barbell_Deadlift"
+    },
+    {
+      "name": "Sumo Deadlift (Barbell)",
+      "slug": "Sumo_Deadlift"
+    },
+    {
+      "name": "Rack Pull (Barbell)",
+      "slug": "Rack_Pulls"
+    },
+    {
+      "name": "Trap Bar Deadlift",
+      "slug": "Trap_Bar_Deadlift"
+    },
+    {
+      "name": "Box Squat (Barbell)",
+      "slug": "Box_Squat"
+    },
+    {
+      "name": "Overhead Squat (Barbell)",
+      "slug": "Overhead_Squat"
+    },
+    {
+      "name": "Good Morning (Barbell)",
+      "slug": "Good_Morning"
+    },
+    {
+      "name": "Hip Thrust (Barbell)",
+      "slug": "Barbell_Hip_Thrust"
+    },
+    {
+      "name": "Hack Squat (Barbell)",
+      "slug": "Barbell_Hack_Squat"
+    },
+    {
+      "name": "Hack Squat Deadlift",
+      "slug": "Barbell_Hack_Squat",
+      "variant": "Hack squat deadlift"
+    },
+    {
+      "name": "Power Clean",
+      "slug": "Power_Clean"
+    },
+    {
+      "name": "Hang Clean (Barbell)",
+      "slug": "Hang_Clean"
+    },
+    {
+      "name": "Push Press",
+      "slug": "Push_Press"
+    },
+    {
+      "name": "Split Jerk (Barbell)",
+      "slug": "Split_Jerk"
+    },
+    {
+      "name": "Seated Overhead Press (Barbell)",
+      "slug": "Barbell_Shoulder_Press",
+      "variant": "Seated overhead press (barbell)"
+    },
+    {
+      "name": "Overhead Press (Dumbbell)",
+      "slug": "Dumbbell_Shoulder_Press"
+    },
+    {
+      "name": "Seated Overhead Press (Dumbbell)",
+      "slug": "Dumbbell_Shoulder_Press",
+      "variant": "Seated overhead press (dumbbell)"
+    },
+    {
+      "name": "Overhead Press (Smith Machine)",
+      "slug": "Smith_Machine_Overhead_Shoulder_Press"
+    },
+    {
+      "name": "Arnold Press (Dumbbell)",
+      "slug": "Arnold_Dumbbell_Press"
+    },
+    {
+      "name": "Shoulder Press (Machine)",
+      "slug": "Machine_Shoulder_Military_Press"
+    },
+    {
+      "name": "Shoulder Press (Plate Loaded)",
+      "slug": "Leverage_Shoulder_Press"
+    },
+    {
+      "name": "Bench Press (Dumbbell)",
+      "slug": "Dumbbell_Bench_Press"
+    },
+    {
+      "name": "Bench Press (Smith Machine)",
+      "slug": "Smith_Machine_Bench_Press"
+    },
+    {
+      "name": "Incline Bench Press (Dumbbell)",
+      "slug": "Incline_Dumbbell_Press"
+    },
+    {
+      "name": "Incline Bench Press (Smith Machine)",
+      "slug": "Smith_Machine_Incline_Bench_Press"
+    },
+    {
+      "name": "Chest Press (Machine)",
+      "slug": "Leverage_Chest_Press"
+    },
+    {
+      "name": "Iso-Lateral Chest Press (Machine)",
+      "slug": "Leverage_Chest_Press",
+      "variant": "Iso-lateral chest press"
+    },
+    {
+      "name": "Incline Chest Press (Machine)",
+      "slug": "Leverage_Incline_Chest_Press"
+    },
+    {
+      "name": "Push Up",
+      "slug": "Pushups"
+    },
+    {
+      "name": "Chest Dip",
+      "slug": "Dips_-_Chest_Version"
+    },
+    {
+      "name": "Triceps Dip",
+      "slug": "Dips_-_Triceps_Version"
+    },
+    {
+      "name": "California Press",
+      "create": {
+        "name": "California Press",
+        "muscleGroup": "Triceps",
+        "equipment": "barbell"
+      }
+    },
+    {
+      "name": "Pull Up",
+      "slug": "Pullups"
+    },
+    {
+      "name": "Wide Pull Up",
+      "slug": "Pullups",
+      "variant": "Wide-grip pull up"
+    },
+    {
+      "name": "Chin Up",
+      "slug": "Chin-Up"
+    },
+    {
+      "name": "Pull Up (Assisted)",
+      "slug": "Band_Assisted_Pull-Up",
+      "variant": "Assisted pull up"
+    },
+    {
+      "name": "Chin Up (Assisted)",
+      "slug": "Band_Assisted_Pull-Up",
+      "variant": "Assisted chin up"
+    },
+    {
+      "name": "Muscle Up",
+      "slug": "Muscle_Up"
+    },
+    {
+      "name": "Lat Pulldown (Cable)",
+      "slug": "Wide-Grip_Lat_Pulldown"
+    },
+    {
+      "name": "Lat Pulldown (Single Arm)",
+      "slug": "One_Arm_Lat_Pulldown"
+    },
+    {
+      "name": "Lat Pulldown - Underhand (Cable)",
+      "slug": "Underhand_Cable_Pulldowns"
+    },
+    {
+      "name": "Lat Pulldown (Machine)",
+      "create": {
+        "name": "Lat Pulldown (Machine)",
+        "muscleGroup": "Lats",
+        "equipment": "machine"
+      }
+    },
+    {
+      "name": "Bent Over Row (Barbell)",
+      "slug": "Bent_Over_Barbell_Row"
+    },
+    {
+      "name": "Pendlay Row (Barbell)",
+      "slug": "Bent_Over_Barbell_Row",
+      "variant": "Pendlay row"
+    },
+    {
+      "name": "Bent Over Row - Underhand (Barbell)",
+      "slug": "Reverse_Grip_Bent-Over_Rows"
+    },
+    {
+      "name": "Bent Over Row (Dumbbell)",
+      "slug": "Bent_Over_Two-Dumbbell_Row"
+    },
+    {
+      "name": "Bent Over One Arm Row (Dumbbell)",
+      "slug": "One-Arm_Dumbbell_Row"
+    },
+    {
+      "name": "Incline Row (Dumbbell)",
+      "slug": "Dumbbell_Incline_Row"
+    },
+    {
+      "name": "T Bar Row",
+      "slug": "T-Bar_Row_with_Handle"
+    },
+    {
+      "name": "Seated Row (Cable)",
+      "slug": "Seated_Cable_Rows"
+    },
+    {
+      "name": "Iso-Lateral Row (Machine)",
+      "slug": "Leverage_Iso_Row"
+    },
+    {
+      "name": "Seated Row (Machine)",
+      "create": {
+        "name": "Seated Row (Machine)",
+        "muscleGroup": "Middle back",
+        "equipment": "machine"
+      }
+    },
+    {
+      "name": "Face Pull (Cable)",
+      "slug": "Face_Pull"
+    },
+    {
+      "name": "Band Pull Apart",
+      "slug": "Band_Pull_Apart"
+    },
+    {
+      "name": "Shrug (Barbell)",
+      "slug": "Barbell_Shrug"
+    },
+    {
+      "name": "Shrug (Dumbbell)",
+      "slug": "Dumbbell_Shrug"
+    },
+    {
+      "name": "Upright Row (Barbell)",
+      "slug": "Upright_Barbell_Row"
+    },
+    {
+      "name": "Upright Row (Cable)",
+      "slug": "Upright_Cable_Row"
+    },
+    {
+      "name": "Pullover (Dumbbell)",
+      "slug": "Straight-Arm_Dumbbell_Pullover"
+    },
+    {
+      "name": "Pullover (Machine)",
+      "create": {
+        "name": "Pullover (Machine)",
+        "muscleGroup": "Lats",
+        "equipment": "machine"
+      }
+    },
+    {
+      "name": "Back Extension",
+      "slug": "Hyperextensions_Back_Extensions"
+    },
+    {
+      "name": "Reverse Hyper",
+      "slug": "Reverse_Hyperextension"
+    },
+    {
+      "name": "Lateral Raise (Dumbbell)",
+      "slug": "Side_Lateral_Raise"
+    },
+    {
+      "name": "Lateral Raise (Cable)",
+      "slug": "Standing_Low-Pulley_Deltoid_Raise"
+    },
+    {
+      "name": "Lateral Raise (Machine)",
+      "create": {
+        "name": "Lateral Raise (Machine)",
+        "muscleGroup": "Shoulders",
+        "equipment": "machine"
+      }
+    },
+    {
+      "name": "Front Raise (Dumbbell)",
+      "slug": "Front_Dumbbell_Raise"
+    },
+    {
+      "name": "Front Raise (Barbell)",
+      "create": {
+        "name": "Front Raise (Barbell)",
+        "muscleGroup": "Shoulders",
+        "equipment": "barbell"
+      }
+    },
+    {
+      "name": "Reverse Fly (Dumbbell)",
+      "slug": "Reverse_Flyes"
+    },
+    {
+      "name": "Reverse Fly (Cable)",
+      "slug": "Cable_Rear_Delt_Fly"
+    },
+    {
+      "name": "Reverse Fly (Machine)",
+      "slug": "Reverse_Machine_Flyes"
+    },
+    {
+      "name": "Chest Fly (Dumbbell)",
+      "slug": "Dumbbell_Flyes"
+    },
+    {
+      "name": "Chest Fly (cable)",
+      "slug": "Cable_Crossover"
+    },
+    {
+      "name": "Cable Fly",
+      "slug": "Cable_Crossover",
+      "variant": "Cable fly"
+    },
+    {
+      "name": "Pec Deck (Machine)",
+      "slug": "Butterfly"
+    },
+    {
+      "name": "Bicep Curl (Barbell)",
+      "slug": "Barbell_Curl"
+    },
+    {
+      "name": "Bicep Curl (Dumbbell)",
+      "slug": "Dumbbell_Bicep_Curl"
+    },
+    {
+      "name": "Bicep Curl (Cable)",
+      "slug": "Standing_Biceps_Cable_Curl"
+    },
+    {
+      "name": "Bicep Curl (Machine)",
+      "slug": "Machine_Bicep_Curl"
+    },
+    {
+      "name": "Incline Curl (Dumbbell)",
+      "slug": "Incline_Dumbbell_Curl"
+    },
+    {
+      "name": "Hammer Curl (Dumbbell)",
+      "slug": "Hammer_Curls"
+    },
+    {
+      "name": "Concentration Curl (Dumbbell)",
+      "slug": "Concentration_Curls"
+    },
+    {
+      "name": "Spyder Curls",
+      "slug": "Spider_Curl"
+    },
+    {
+      "name": "Preacher Curl (Barbell)",
+      "slug": "Preacher_Curl"
+    },
+    {
+      "name": "Preacher Curl (Dumbbell)",
+      "slug": "Two-Arm_Dumbbell_Preacher_Curl"
+    },
+    {
+      "name": "Preacher Curl (Machine)",
+      "slug": "Machine_Preacher_Curls"
+    },
+    {
+      "name": "Skullcrusher (Barbell)",
+      "slug": "EZ-Bar_Skullcrusher",
+      "variant": "Skullcrusher (barbell)"
+    },
+    {
+      "name": "French Press (dumbbell)",
+      "slug": "Standing_Dumbbell_Triceps_Extension",
+      "variant": "French press"
+    },
+    {
+      "name": "Triceps Extension (Cable)",
+      "slug": "Cable_Rope_Overhead_Triceps_Extension"
+    },
+    {
+      "name": "Triceps Pushdown (Cable - Straight Bar)",
+      "slug": "Triceps_Pushdown"
+    },
+    {
+      "name": "Cable Kickback",
+      "create": {
+        "name": "Cable Kickback",
+        "muscleGroup": "Triceps",
+        "equipment": "cable"
+      }
+    },
+    {
+      "name": "Tricep Alex Thing",
+      "create": {
+        "name": "Tricep Alex Thing",
+        "muscleGroup": "Triceps"
+      }
+    },
+    {
+      "name": "Leg Press",
+      "slug": "Leg_Press"
+    },
+    {
+      "name": "Leg Extension (Machine)",
+      "slug": "Leg_Extensions"
+    },
+    {
+      "name": "Lying Leg Curl (Machine)",
+      "slug": "Lying_Leg_Curls"
+    },
+    {
+      "name": "Seated Leg Curl (Machine)",
+      "slug": "Seated_Leg_Curl"
+    },
+    {
+      "name": "Nordic Leg Curl",
+      "slug": "Natural_Glute_Ham_Raise",
+      "variant": "Nordic leg curl"
+    },
+    {
+      "name": "Sliding Leg Curl",
+      "create": {
+        "name": "Sliding Leg Curl",
+        "muscleGroup": "Hamstrings",
+        "equipment": "body only"
+      }
+    },
+    {
+      "name": "Hack Squat",
+      "slug": "Hack_Squat"
+    },
+    {
+      "name": "Belt Squat",
+      "create": {
+        "name": "Belt Squat",
+        "muscleGroup": "Quadriceps",
+        "equipment": "machine"
+      }
+    },
+    {
+      "name": "Split Squat",
+      "slug": "Split_Squats"
+    },
+    {
+      "name": "Bulgarian Split Squat",
+      "create": {
+        "name": "Bulgarian Split Squat",
+        "muscleGroup": "Quadriceps",
+        "equipment": "dumbbell"
+      }
+    },
+    {
+      "name": "Bulgarian Split Squat (Smith Machine)",
+      "slug": "Smith_Single-Leg_Split_Squat"
+    },
+    {
+      "name": "Lunge (Barbell)",
+      "slug": "Barbell_Lunge"
+    },
+    {
+      "name": "Lunge (Dumbbell)",
+      "slug": "Dumbbell_Lunges"
+    },
+    {
+      "name": "Dumbbell Step Up",
+      "slug": "Dumbbell_Step_Ups"
+    },
+    {
+      "name": "Step-up",
+      "create": {
+        "name": "Step-up",
+        "muscleGroup": "Quadriceps",
+        "equipment": "body only"
+      }
+    },
+    {
+      "name": "Romanian Deadlift (Dumbbell)",
+      "slug": "Stiff-Legged_Dumbbell_Deadlift",
+      "variant": "Romanian deadlift (dumbbell)"
+    },
+    {
+      "name": "Stiff Leg Deadlift (Dumbbell)",
+      "slug": "Stiff-Legged_Dumbbell_Deadlift"
+    },
+    {
+      "name": "Straight Leg Deadlift (Band)",
+      "create": {
+        "name": "Straight Leg Deadlift (Band)",
+        "muscleGroup": "Hamstrings",
+        "equipment": "bands"
+      }
+    },
+    {
+      "name": "Cable Pull Through",
+      "slug": "Pull_Through"
+    },
+    {
+      "name": "Hip Abductor (Machine)",
+      "slug": "Thigh_Abductor"
+    },
+    {
+      "name": "Hip Adductor (Machine)",
+      "slug": "Thigh_Adductor"
+    },
+    {
+      "name": "Standing Calf Raise (Machine)",
+      "slug": "Standing_Calf_Raises"
+    },
+    {
+      "name": "Standing Calf Raise (Barbell)",
+      "slug": "Standing_Barbell_Calf_Raise"
+    },
+    {
+      "name": "Standing Calf Raise (Dumbbell)",
+      "slug": "Standing_Dumbbell_Calf_Raise"
+    },
+    {
+      "name": "Seated Calf Raise (Plate Loaded)",
+      "slug": "Seated_Calf_Raise"
+    },
+    {
+      "name": "Calf Press on Leg Press",
+      "slug": "Calf_Press_On_The_Leg_Press_Machine"
+    },
+    {
+      "name": "Hanging Leg Raise",
+      "slug": "Hanging_Leg_Raise"
+    },
+    {
+      "name": "Toes To Bar",
+      "slug": "Hanging_Leg_Raise",
+      "variant": "Toes to bar"
+    },
+    {
+      "name": "Flat Leg Raise",
+      "slug": "Flat_Bench_Lying_Leg_Raise"
+    },
+    {
+      "name": "Cable Crunch",
+      "slug": "Cable_Crunch"
+    },
+    {
+      "name": "Bicycle Crunch",
+      "slug": "Air_Bike",
+      "variant": "Bicycle crunch"
+    },
+    {
+      "name": "Sit Up",
+      "slug": "Sit-Up"
+    },
+    {
+      "name": "Ab Wheel",
+      "slug": "Ab_Roller"
+    },
+    {
+      "name": "Plank",
+      "slug": "Plank"
+    },
+    {
+      "name": "Side Bend (Dumbbell)",
+      "slug": "Dumbbell_Side_Bend"
+    },
+    {
+      "name": "Mountain Climber",
+      "slug": "Mountain_Climbers"
+    },
+    {
+      "name": "Russian Twist",
+      "create": {
+        "name": "Russian Twist",
+        "muscleGroup": "Abdominals",
+        "equipment": "body only"
+      }
+    },
+    {
+      "name": "V Up",
+      "create": {
+        "name": "V Up",
+        "muscleGroup": "Abdominals",
+        "equipment": "body only"
+      }
+    },
+    {
+      "name": "Walking",
+      "slug": "Walking_Treadmill",
+      "variant": "Walking"
+    },
+    {
+      "name": "Running (Treadmill)",
+      "slug": "Running_Treadmill"
+    },
+    {
+      "name": "Running",
+      "slug": "Running_Treadmill",
+      "variant": "Running"
+    },
+    {
+      "name": "Bike",
+      "slug": "Bicycling_Stationary"
+    },
+    {
+      "name": "Rowing (Machine)",
+      "slug": "Rowing_Stationary"
+    },
+    {
+      "name": "Swimming",
+      "create": {
+        "name": "Swimming",
+        "muscleGroup": "Cardio"
+      }
+    },
+    {
+      "name": "Weighted Sprints",
+      "create": {
+        "name": "Weighted Sprints",
+        "muscleGroup": "Cardio"
+      }
+    },
+    {
+      "name": "Triceps Extension",
+      "openChoice": {
+        "name": "Triceps extension",
+        "muscleGroup": "Triceps",
+        "suggestions": [
+          "Overhead extension",
+          "Pushdown",
+          "Skullcrusher"
+        ]
+      }
+    },
+    {
+      "name": "Chest Fly",
+      "openChoice": {
+        "name": "Chest fly",
+        "muscleGroup": "Chest",
+        "suggestions": [
+          "Cable crossover",
+          "Pec deck",
+          "Dumbbell fly"
+        ]
+      }
+    },
+    {
+      "name": "Stretching",
+      "openChoice": {
+        "name": "Stretching",
+        "muscleGroup": "Full body",
+        "suggestions": []
+      }
+    }
+  ]
+}

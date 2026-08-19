@@ -1,0 +1,7119 @@
+{
+  "name": "Block 1 — Deadlift-Led Strength, Bench Rebuild (6-day)",
+  "weeks": 12,
+  "goalMaxes": [
+    {
+      "weight": 495,
+      "unit": "lb",
+      "exercises": [
+        "Barbell_Squat"
+      ]
+    },
+    {
+      "weight": 365,
+      "unit": "lb",
+      "exercises": [
+        "Barbell_Bench_Press_-_Medium_Grip"
+      ]
+    },
+    {
+      "weight": 555,
+      "unit": "lb",
+      "exercises": [
+        "Barbell_Deadlift",
+        "Deficit_Deadlift"
+      ],
+      "note": "The sheet's Deadlift percentages all multiply this one number, including the variations' — so every lift listed here carries it as its goal."
+    }
+  ],
+  "openChoiceExercises": [
+    {
+      "key": "triceps",
+      "name": "Triceps",
+      "muscleGroup": "Triceps",
+      "suggestions": [
+        "Overhead extension",
+        "Pushdown"
+      ]
+    },
+    {
+      "key": "row",
+      "name": "Row",
+      "muscleGroup": "Middle Back",
+      "suggestions": [
+        "Chest-supported row",
+        "Seal row"
+      ]
+    },
+    {
+      "key": "cardio",
+      "name": "Cardio",
+      "muscleGroup": "Cardio",
+      "suggestions": []
+    },
+    {
+      "key": "incline-press",
+      "name": "Incline press",
+      "muscleGroup": "Chest",
+      "suggestions": [
+        "Barbell incline press",
+        "Dumbbell incline press"
+      ]
+    },
+    {
+      "key": "vertical-horizontal-pull",
+      "name": "Upper back",
+      "muscleGroup": "Lats",
+      "suggestions": [
+        "Lat pulldown",
+        "Cable row"
+      ]
+    },
+    {
+      "key": "rear-delts",
+      "name": "Rear delts",
+      "muscleGroup": "Shoulders",
+      "suggestions": [
+        "Face pulls"
+      ]
+    },
+    {
+      "key": "biceps",
+      "name": "Biceps",
+      "muscleGroup": "Biceps",
+      "suggestions": []
+    },
+    {
+      "key": "core",
+      "name": "Core",
+      "muscleGroup": "Abdominals",
+      "suggestions": [
+        "Ab wheel",
+        "Hanging leg raise"
+      ]
+    }
+  ],
+  "days": [
+    {
+      "week": 1,
+      "dayOfWeek": 1,
+      "label": "Week 1 Mon - Bench+Squat",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Bench_Press_-_Medium_Grip",
+            "variant": "Bench press — heavy (paused, comp grip)",
+            "rpe": 7.0,
+            "notes": "Top set",
+            "sets": [
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.725
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.725
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.725
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Barbell_Bench_Press_-_Medium_Grip",
+            "variant": "Bench — back-off (paused)",
+            "rpe": 8.0,
+            "notes": "RPE 8 cap",
+            "sets": [
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Barbell_Squat",
+            "variant": "Squat — volume (comp stance)",
+            "rpe": 7.0,
+            "notes": "comp stance; hip prep",
+            "sets": [
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.72
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.72
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.72
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.72
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "triceps",
+            "variant": "Triceps (overhead ext / pushdown)",
+            "rpe": 9.5,
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 1,
+      "dayOfWeek": 2,
+      "label": "Week 1 Tue - Deadlift",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Deadlift",
+            "variant": "Deadlift — heavy (straight bar)",
+            "rpe": 7.0,
+            "notes": "top set",
+            "sets": [
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Deficit_Deadlift",
+            "variant": "Deficit DL (1.5\")",
+            "rpe": 7.0,
+            "notes": "off-floor strength",
+            "sets": [
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.65
+                }
+              },
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.65
+                }
+              },
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.65
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Romanian_Deadlift",
+            "variant": "RDL",
+            "rpe": 8.0,
+            "notes": "posterior chain",
+            "sets": [
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "row",
+            "variant": "Chest-supported row (or seal row)",
+            "rpe": 8.0,
+            "notes": "upper back; keeps bar tight off floor",
+            "sets": [
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 1,
+      "dayOfWeek": 3,
+      "label": "Week 1 Wed - Walk (recovery)",
+      "exercises": [
+        [
+          {
+            "openChoice": "cardio",
+            "variant": "Walk with wife (recovery)",
+            "notes": "keep it — mid-week disc offload",
+            "sets": []
+          }
+        ]
+      ]
+    },
+    {
+      "week": 1,
+      "dayOfWeek": 4,
+      "label": "Week 1 Thu - Press day (all volume)",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Bench_Press_-_Medium_Grip",
+            "variant": "Bench volume — Spoto press (1\" off chest)",
+            "rpe": 6.0,
+            "notes": "W1 logged: 240x5 sub-RPE6 (app floor hid true value) - too light",
+            "sets": [
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 240,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 240,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 240,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 240,
+                  "unit": "lb"
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Standing_Military_Press",
+            "variant": "Overhead press (standing, to chest)",
+            "rpe": 8.0,
+            "notes": "done FRESH now - 2nd on Thu, incline moved to Sat",
+            "sets": [
+              {
+                "reps": 8,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 150,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 8,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 150,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 8,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 150,
+                  "unit": "lb"
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Close-Grip_Barbell_Bench_Press",
+            "variant": "Close-grip bench (straight bar, shoulder-width)",
+            "rpe": 7.0,
+            "notes": "close-grip (straight bar, shoulder-width). Lockout/triceps. Calibrate wk1 to RPE",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 285,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 285,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 285,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 285,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 285,
+                  "unit": "lb"
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "incline-press",
+            "variant": "Incline press (BB or DB)",
+            "rpe": 7.0,
+            "notes": "compound press, 3+ RIR - do NOT approach failure on light day",
+            "sets": [
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "vertical-horizontal-pull",
+            "rpe": 9.0,
+            "notes": "back + shoulder health",
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          },
+          {
+            "openChoice": "rear-delts",
+            "rpe": 9.0,
+            "notes": "back + shoulder health",
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 1,
+      "dayOfWeek": 5,
+      "label": "Week 1 Fri - Speed/hack",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Deadlift",
+            "variant": "Deadlift — speed from floor (straight bar)",
+            "rpe": 7.0,
+            "notes": "explosive; 60-90s rest",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Barbell_Squat",
+            "variant": "Squat — paused (2s, comp stance)",
+            "rpe": 7.0,
+            "notes": "PAUSED squat (2s) - real 2nd exposure now",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.68
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.68
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.68
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Hack_Squat",
+            "variant": "Hack squat (quad / leg drive off floor)",
+            "rpe": 8.0,
+            "notes": "feet low & close = quad-dominant; full depth, controlled eccentric",
+            "sets": [
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 1,
+      "dayOfWeek": 7,
+      "label": "Week 1 Sun - Back/arms/core",
+      "exercises": [
+        [
+          {
+            "exercise": "Weighted_Pull_Ups",
+            "variant": "Pull-ups (weighted if easy)",
+            "rpe": 9.0,
+            "notes": "upper back",
+            "sets": [
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "triceps",
+            "rpe": 9.5,
+            "notes": "arms / pressing support",
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          },
+          {
+            "openChoice": "biceps",
+            "rpe": 9.5,
+            "notes": "arms / pressing support",
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "core",
+            "variant": "Core (ab wheel / hanging leg raise)",
+            "rpe": 9.0,
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 2,
+      "dayOfWeek": 1,
+      "label": "Week 2 Mon - Bench+Squat",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Bench_Press_-_Medium_Grip",
+            "variant": "Bench press — heavy (paused, comp grip)",
+            "rpe": 7.5,
+            "notes": "Top set",
+            "sets": [
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Barbell_Bench_Press_-_Medium_Grip",
+            "variant": "Bench — back-off (paused)",
+            "rpe": 8.0,
+            "notes": "RPE 8 cap",
+            "sets": [
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Barbell_Squat",
+            "variant": "Squat — volume (comp stance)",
+            "rpe": 7.5,
+            "notes": "comp stance",
+            "sets": [
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "triceps",
+            "variant": "Triceps (overhead ext / pushdown)",
+            "rpe": 9.5,
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 2,
+      "dayOfWeek": 2,
+      "label": "Week 2 Tue - Deadlift",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Deadlift",
+            "variant": "Deadlift — heavy (straight bar)",
+            "rpe": 7.5,
+            "notes": "top set",
+            "sets": [
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.725
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.725
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.725
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.725
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Barbell_Deadlift",
+            "variant": "Paused DL (below knee)",
+            "rpe": 7.5,
+            "notes": "off-floor strength",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Romanian_Deadlift",
+            "variant": "RDL",
+            "rpe": 8.0,
+            "notes": "posterior chain",
+            "sets": [
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "row",
+            "variant": "Chest-supported row (or seal row)",
+            "rpe": 8.0,
+            "notes": "upper back; keeps bar tight off floor",
+            "sets": [
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 2,
+      "dayOfWeek": 3,
+      "label": "Week 2 Wed - Walk (recovery)",
+      "exercises": [
+        [
+          {
+            "openChoice": "cardio",
+            "variant": "Walk with wife (recovery)",
+            "notes": "keep it — mid-week disc offload",
+            "sets": []
+          }
+        ]
+      ]
+    },
+    {
+      "week": 2,
+      "dayOfWeek": 4,
+      "label": "Week 2 Thu - Press day (all volume)",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Bench_Press_-_Medium_Grip",
+            "variant": "Bench volume — Spoto press (1\" off chest)",
+            "rpe": 8.0,
+            "notes": "Logged: 260x5x3 @ RPE6, 295x5 @ RPE9 (fatigued). 280 = your RPE 8 / 7RM anchor.",
+            "sets": [
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 280,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 280,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 280,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 280,
+                  "unit": "lb"
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Standing_Military_Press",
+            "variant": "Overhead press (standing, to chest)",
+            "rpe": 8.5,
+            "notes": "5 when all sets hit reps @ target",
+            "sets": [
+              {
+                "reps": 8,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 155,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 8,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 155,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 8,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 155,
+                  "unit": "lb"
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Close-Grip_Barbell_Bench_Press",
+            "variant": "Close-grip bench (straight bar, shoulder-width)",
+            "rpe": 7.5,
+            "notes": "10 when all triples hit @ target RPE",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 295,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 295,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 295,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 295,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 295,
+                  "unit": "lb"
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "incline-press",
+            "variant": "Incline press (BB or DB)",
+            "rpe": 7.0,
+            "notes": "compound press, 3+ RIR - do NOT approach failure on light day",
+            "sets": [
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "vertical-horizontal-pull",
+            "rpe": 9.0,
+            "notes": "back + shoulder health",
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          },
+          {
+            "openChoice": "rear-delts",
+            "rpe": 9.0,
+            "notes": "back + shoulder health",
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 2,
+      "dayOfWeek": 5,
+      "label": "Week 2 Fri - Speed/hack",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Deadlift",
+            "variant": "Deadlift — speed from floor (straight bar)",
+            "rpe": 7.0,
+            "notes": "explosive; 60-90s rest",
+            "sets": [
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.725
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.725
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.725
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.725
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.725
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.725
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Barbell_Squat",
+            "variant": "Squat — paused (2s, comp stance)",
+            "rpe": 7.0,
+            "notes": "paused/speed",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Hack_Squat",
+            "variant": "Hack squat (quad / leg drive off floor)",
+            "rpe": 8.0,
+            "notes": "feet low & close = quad-dominant; full depth, controlled eccentric",
+            "sets": [
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 2,
+      "dayOfWeek": 7,
+      "label": "Week 2 Sun - Back/arms/core",
+      "exercises": [
+        [
+          {
+            "exercise": "Weighted_Pull_Ups",
+            "variant": "Pull-ups (weighted if easy)",
+            "rpe": 9.0,
+            "notes": "upper back",
+            "sets": [
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "triceps",
+            "rpe": 9.5,
+            "notes": "arms / pressing support",
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          },
+          {
+            "openChoice": "biceps",
+            "rpe": 9.5,
+            "notes": "arms / pressing support",
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "core",
+            "variant": "Core (ab wheel / hanging leg raise)",
+            "rpe": 9.0,
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 3,
+      "dayOfWeek": 1,
+      "label": "Week 3 Mon - Bench+Squat",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Bench_Press_-_Medium_Grip",
+            "variant": "Bench press — heavy (paused, comp grip)",
+            "rpe": 8.0,
+            "notes": "Top set",
+            "sets": [
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.775
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.775
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.775
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.775
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Barbell_Bench_Press_-_Medium_Grip",
+            "variant": "Bench — back-off (paused)",
+            "rpe": 8.0,
+            "notes": "RPE 8 cap",
+            "sets": [
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Barbell_Squat",
+            "variant": "Squat — volume (comp stance)",
+            "rpe": 8.0,
+            "notes": "top of meso",
+            "sets": [
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.775
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.775
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.775
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.775
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.775
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "triceps",
+            "variant": "Triceps (overhead ext / pushdown)",
+            "rpe": 9.5,
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 3,
+      "dayOfWeek": 2,
+      "label": "Week 3 Tue - Deadlift",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Deadlift",
+            "variant": "Deadlift — heavy (straight bar)",
+            "rpe": 8.0,
+            "notes": "top set",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.775
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.775
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.775
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.775
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.775
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Deficit_Deadlift",
+            "variant": "Deficit DL (1.5\")",
+            "rpe": 8.0,
+            "notes": "off-floor strength",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.675
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.675
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.675
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Romanian_Deadlift",
+            "variant": "RDL",
+            "rpe": 8.0,
+            "notes": "posterior chain",
+            "sets": [
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "row",
+            "variant": "Chest-supported row (or seal row)",
+            "rpe": 8.0,
+            "notes": "upper back; keeps bar tight off floor",
+            "sets": [
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 3,
+      "dayOfWeek": 3,
+      "label": "Week 3 Wed - Walk (recovery)",
+      "exercises": [
+        [
+          {
+            "openChoice": "cardio",
+            "variant": "Walk with wife (recovery)",
+            "notes": "keep it — mid-week disc offload",
+            "sets": []
+          }
+        ]
+      ]
+    },
+    {
+      "week": 3,
+      "dayOfWeek": 4,
+      "label": "Week 3 Thu - Press day (all volume)",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Bench_Press_-_Medium_Grip",
+            "variant": "Bench volume — Spoto press (1\" off chest)",
+            "rpe": 8.5,
+            "notes": "top of meso",
+            "sets": [
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 290,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 290,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 290,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 290,
+                  "unit": "lb"
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Standing_Military_Press",
+            "variant": "Overhead press (standing, to chest)",
+            "rpe": 8.5,
+            "notes": "top of meso",
+            "sets": [
+              {
+                "reps": 8,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 160,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 8,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 160,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 8,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 160,
+                  "unit": "lb"
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Close-Grip_Barbell_Bench_Press",
+            "variant": "Close-grip bench (straight bar, shoulder-width)",
+            "rpe": 8.0,
+            "notes": "top of meso",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 305,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 305,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 305,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 305,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 305,
+                  "unit": "lb"
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "incline-press",
+            "variant": "Incline press (BB or DB)",
+            "rpe": 7.0,
+            "notes": "compound press, 3+ RIR - do NOT approach failure on light day",
+            "sets": [
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "vertical-horizontal-pull",
+            "rpe": 9.0,
+            "notes": "back + shoulder health",
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          },
+          {
+            "openChoice": "rear-delts",
+            "rpe": 9.0,
+            "notes": "back + shoulder health",
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 3,
+      "dayOfWeek": 5,
+      "label": "Week 3 Fri - Speed/hack",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Deadlift",
+            "variant": "Deadlift — speed from floor (straight bar)",
+            "rpe": 7.0,
+            "notes": "explosive; 60-90s rest",
+            "sets": [
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Barbell_Squat",
+            "variant": "Squat — paused (2s, comp stance)",
+            "rpe": 7.5,
+            "notes": "paused/speed",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.71
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.71
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.71
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.71
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Hack_Squat",
+            "variant": "Hack squat (quad / leg drive off floor)",
+            "rpe": 8.0,
+            "notes": "feet low & close = quad-dominant; full depth, controlled eccentric",
+            "sets": [
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 3,
+      "dayOfWeek": 7,
+      "label": "Week 3 Sun - Back/arms/core",
+      "exercises": [
+        [
+          {
+            "exercise": "Weighted_Pull_Ups",
+            "variant": "Pull-ups (weighted if easy)",
+            "rpe": 9.0,
+            "notes": "upper back",
+            "sets": [
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "triceps",
+            "rpe": 9.5,
+            "notes": "arms / pressing support",
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          },
+          {
+            "openChoice": "biceps",
+            "rpe": 9.5,
+            "notes": "arms / pressing support",
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "core",
+            "variant": "Core (ab wheel / hanging leg raise)",
+            "rpe": 9.0,
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 4,
+      "dayOfWeek": 1,
+      "label": "Week 4 Mon - Bench+Squat",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Bench_Press_-_Medium_Grip",
+            "variant": "Bench press — heavy (paused, comp grip)",
+            "rpe": 5.0,
+            "notes": "Top set",
+            "sets": [
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.65
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.65
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.65
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Barbell_Squat",
+            "variant": "Squat — volume (comp stance)",
+            "rpe": 5.0,
+            "notes": "deload",
+            "sets": [
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.6
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.6
+                }
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 4,
+      "dayOfWeek": 2,
+      "label": "Week 4 Tue - Deadlift",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Deadlift",
+            "variant": "Deadlift — heavy (straight bar)",
+            "rpe": 5.0,
+            "notes": "top set",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.6
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.6
+                }
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 4,
+      "dayOfWeek": 3,
+      "label": "Week 4 Wed - Walk (recovery)",
+      "exercises": [
+        [
+          {
+            "openChoice": "cardio",
+            "variant": "Walk with wife (recovery)",
+            "notes": "keep it — mid-week disc offload",
+            "sets": []
+          }
+        ]
+      ]
+    },
+    {
+      "week": 4,
+      "dayOfWeek": 4,
+      "label": "Week 4 Thu - Press day (all volume)",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Bench_Press_-_Medium_Grip",
+            "variant": "Bench volume — light paused bench",
+            "rpe": 6.0,
+            "notes": "deload",
+            "sets": [
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 200,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 200,
+                  "unit": "lb"
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Close-Grip_Barbell_Bench_Press",
+            "variant": "Close-grip bench (straight bar, shoulder-width)",
+            "rpe": 6.0,
+            "notes": "deload",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 225,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 225,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 225,
+                  "unit": "lb"
+                }
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 4,
+      "dayOfWeek": 5,
+      "label": "Week 4 Fri - Speed/hack",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Deadlift",
+            "variant": "Deadlift — speed from floor (straight bar)",
+            "rpe": 5.0,
+            "notes": "explosive; 60-90s rest",
+            "sets": [
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.6
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.6
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.6
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.6
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Barbell_Squat",
+            "variant": "Squat — paused (2s, comp stance)",
+            "rpe": 5.0,
+            "notes": "deload",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.55
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.55
+                }
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 5,
+      "dayOfWeek": 1,
+      "label": "Week 5 Mon - Bench+Squat",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Bench_Press_-_Medium_Grip",
+            "variant": "Bench press — heavy (paused, comp grip)",
+            "rpe": 7.5,
+            "notes": "Top set",
+            "sets": [
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.775
+                }
+              },
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.775
+                }
+              },
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.775
+                }
+              },
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.775
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Barbell_Bench_Press_-_Medium_Grip",
+            "variant": "Bench — back-off (paused)",
+            "rpe": 8.0,
+            "notes": "RPE 8 cap",
+            "sets": [
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              },
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              },
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Barbell_Squat",
+            "variant": "Squat — volume (comp stance)",
+            "rpe": 7.0,
+            "notes": "new rep bracket",
+            "sets": [
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              },
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              },
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              },
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "triceps",
+            "variant": "Triceps (overhead ext / pushdown)",
+            "rpe": 9.5,
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 5,
+      "dayOfWeek": 2,
+      "label": "Week 5 Tue - Deadlift",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Deadlift",
+            "variant": "Deadlift — heavy (straight bar)",
+            "rpe": 7.5,
+            "notes": "top set",
+            "sets": [
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              },
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              },
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              },
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Barbell_Deadlift",
+            "variant": "Paused DL (below knee)",
+            "rpe": 7.5,
+            "notes": "off-floor strength",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Romanian_Deadlift",
+            "variant": "RDL",
+            "rpe": 8.0,
+            "notes": "posterior chain",
+            "sets": [
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "row",
+            "variant": "Chest-supported row (or seal row)",
+            "rpe": 8.0,
+            "notes": "upper back; keeps bar tight off floor",
+            "sets": [
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 5,
+      "dayOfWeek": 3,
+      "label": "Week 5 Wed - Walk (recovery)",
+      "exercises": [
+        [
+          {
+            "openChoice": "cardio",
+            "variant": "Walk with wife (recovery)",
+            "notes": "keep it — mid-week disc offload",
+            "sets": []
+          }
+        ]
+      ]
+    },
+    {
+      "week": 5,
+      "dayOfWeek": 4,
+      "label": "Week 5 Thu - Press day (all volume)",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Bench_Press_-_Medium_Grip",
+            "variant": "Bench volume — Larsen press (no leg drive)",
+            "rpe": 7.5,
+            "notes": "LARSEN = flat bench with FEET UP / unsupported (on bench or straight out), no leg drive, normal comp grip and full ROM. It is NOT the JM press (skull-crusher negative into a close-grip press) - that is a triceps/lockout tool and belongs with close-grip work, not here. Feet-up costs most lifters 5-15% vs comp bench, so expect ~310-325 max. Wk5 is a calibration week: load to last-set RPE.",
+            "sets": [
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 255,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 255,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 255,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 255,
+                  "unit": "lb"
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Standing_Military_Press",
+            "variant": "Overhead press (standing, to chest)",
+            "rpe": 8.0,
+            "notes": "new rep bracket",
+            "sets": [
+              {
+                "reps": 6,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 160,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 6,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 160,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 6,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 160,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 6,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 160,
+                  "unit": "lb"
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Close-Grip_Barbell_Bench_Press",
+            "variant": "Close-grip bench (straight bar, shoulder-width)",
+            "rpe": 7.0,
+            "notes": "lockout strength press",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 295,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 295,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 295,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 295,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 295,
+                  "unit": "lb"
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "incline-press",
+            "variant": "Incline press (BB or DB)",
+            "rpe": 7.0,
+            "notes": "compound press, 3+ RIR - do NOT approach failure on light day",
+            "sets": [
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "vertical-horizontal-pull",
+            "rpe": 9.0,
+            "notes": "back + shoulder health",
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          },
+          {
+            "openChoice": "rear-delts",
+            "rpe": 9.0,
+            "notes": "back + shoulder health",
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 5,
+      "dayOfWeek": 5,
+      "label": "Week 5 Fri - Speed/hack",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Deadlift",
+            "variant": "Deadlift — speed from floor (straight bar)",
+            "rpe": 7.0,
+            "notes": "explosive; 60-90s rest",
+            "sets": [
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.725
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.725
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.725
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.725
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.725
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.725
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Barbell_Squat",
+            "variant": "Squat — paused (2s, comp stance)",
+            "rpe": 7.0,
+            "notes": "paused",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Hack_Squat",
+            "variant": "Hack squat (quad / leg drive off floor)",
+            "rpe": 8.0,
+            "notes": "feet low & close = quad-dominant; full depth, controlled eccentric",
+            "sets": [
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 5,
+      "dayOfWeek": 7,
+      "label": "Week 5 Sun - Back/arms/core",
+      "exercises": [
+        [
+          {
+            "exercise": "Weighted_Pull_Ups",
+            "variant": "Pull-ups (weighted if easy)",
+            "rpe": 9.0,
+            "notes": "upper back",
+            "sets": [
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "triceps",
+            "rpe": 9.5,
+            "notes": "arms / pressing support",
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          },
+          {
+            "openChoice": "biceps",
+            "rpe": 9.5,
+            "notes": "arms / pressing support",
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "core",
+            "variant": "Core (ab wheel / hanging leg raise)",
+            "rpe": 9.0,
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 6,
+      "dayOfWeek": 1,
+      "label": "Week 6 Mon - Bench+Squat",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Bench_Press_-_Medium_Grip",
+            "variant": "Bench press — heavy (paused, comp grip)",
+            "rpe": 8.0,
+            "notes": "Top set",
+            "sets": [
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.8
+                }
+              },
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.8
+                }
+              },
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.8
+                }
+              },
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.8
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Barbell_Bench_Press_-_Medium_Grip",
+            "variant": "Bench — back-off (paused)",
+            "rpe": 8.0,
+            "notes": "RPE 8 cap",
+            "sets": [
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              },
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              },
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Barbell_Squat",
+            "variant": "Squat — volume (comp stance)",
+            "rpe": 7.5,
+            "notes": "comp stance",
+            "sets": [
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.785
+                }
+              },
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.785
+                }
+              },
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.785
+                }
+              },
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.785
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "triceps",
+            "variant": "Triceps (overhead ext / pushdown)",
+            "rpe": 9.5,
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 6,
+      "dayOfWeek": 2,
+      "label": "Week 6 Tue - Deadlift",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Deadlift",
+            "variant": "Deadlift — heavy (straight bar)",
+            "rpe": 8.0,
+            "notes": "top set",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.8
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.8
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.8
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.8
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.8
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Deficit_Deadlift",
+            "variant": "Deficit DL (1.5\")",
+            "rpe": 8.0,
+            "notes": "off-floor strength",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Romanian_Deadlift",
+            "variant": "RDL",
+            "rpe": 8.0,
+            "notes": "posterior chain",
+            "sets": [
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "row",
+            "variant": "Chest-supported row (or seal row)",
+            "rpe": 8.0,
+            "notes": "upper back; keeps bar tight off floor",
+            "sets": [
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 6,
+      "dayOfWeek": 3,
+      "label": "Week 6 Wed - Walk (recovery)",
+      "exercises": [
+        [
+          {
+            "openChoice": "cardio",
+            "variant": "Walk with wife (recovery)",
+            "notes": "keep it — mid-week disc offload",
+            "sets": []
+          }
+        ]
+      ]
+    },
+    {
+      "week": 6,
+      "dayOfWeek": 4,
+      "label": "Week 6 Thu - Press day (all volume)",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Bench_Press_-_Medium_Grip",
+            "variant": "Bench volume — Larsen press (no leg drive)",
+            "rpe": 8.0,
+            "notes": "Feet-up Larsen (see wk5 note). Progress off wk5 calibration.",
+            "sets": [
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 265,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 265,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 265,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 265,
+                  "unit": "lb"
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Standing_Military_Press",
+            "variant": "Overhead press (standing, to chest)",
+            "rpe": 8.5,
+            "sets": [
+              {
+                "reps": 6,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 165,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 6,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 165,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 6,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 165,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 6,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 165,
+                  "unit": "lb"
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Close-Grip_Barbell_Bench_Press",
+            "variant": "Close-grip bench (straight bar, shoulder-width)",
+            "rpe": 7.5,
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 305,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 305,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 305,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 305,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 305,
+                  "unit": "lb"
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "incline-press",
+            "variant": "Incline press (BB or DB)",
+            "rpe": 7.0,
+            "notes": "compound press, 3+ RIR - do NOT approach failure on light day",
+            "sets": [
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "vertical-horizontal-pull",
+            "rpe": 9.0,
+            "notes": "back + shoulder health",
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          },
+          {
+            "openChoice": "rear-delts",
+            "rpe": 9.0,
+            "notes": "back + shoulder health",
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 6,
+      "dayOfWeek": 5,
+      "label": "Week 6 Fri - Speed/hack",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Deadlift",
+            "variant": "Deadlift — speed from floor (straight bar)",
+            "rpe": 7.0,
+            "notes": "explosive; 60-90s rest",
+            "sets": [
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Barbell_Squat",
+            "variant": "Squat — paused (2s, comp stance)",
+            "rpe": 7.0,
+            "notes": "paused/speed",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.72
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.72
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.72
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Hack_Squat",
+            "variant": "Hack squat (quad / leg drive off floor)",
+            "rpe": 8.0,
+            "notes": "feet low & close = quad-dominant; full depth, controlled eccentric",
+            "sets": [
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 6,
+      "dayOfWeek": 7,
+      "label": "Week 6 Sun - Back/arms/core",
+      "exercises": [
+        [
+          {
+            "exercise": "Weighted_Pull_Ups",
+            "variant": "Pull-ups (weighted if easy)",
+            "rpe": 9.0,
+            "notes": "upper back",
+            "sets": [
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "triceps",
+            "rpe": 9.5,
+            "notes": "arms / pressing support",
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          },
+          {
+            "openChoice": "biceps",
+            "rpe": 9.5,
+            "notes": "arms / pressing support",
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "core",
+            "variant": "Core (ab wheel / hanging leg raise)",
+            "rpe": 9.0,
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 7,
+      "dayOfWeek": 1,
+      "label": "Week 7 Mon - Bench+Squat",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Bench_Press_-_Medium_Grip",
+            "variant": "Bench press — heavy (paused, comp grip)",
+            "rpe": 8.5,
+            "notes": "Top set",
+            "sets": [
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.825
+                }
+              },
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.825
+                }
+              },
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.825
+                }
+              },
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.825
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Barbell_Bench_Press_-_Medium_Grip",
+            "variant": "Bench — back-off (paused)",
+            "rpe": 8.0,
+            "notes": "RPE 8 cap",
+            "sets": [
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.725
+                }
+              },
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.725
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Barbell_Squat",
+            "variant": "Squat — volume (comp stance)",
+            "rpe": 8.0,
+            "notes": "top of meso",
+            "sets": [
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.81
+                }
+              },
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.81
+                }
+              },
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.81
+                }
+              },
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.81
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "triceps",
+            "variant": "Triceps (overhead ext / pushdown)",
+            "rpe": 9.5,
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 7,
+      "dayOfWeek": 2,
+      "label": "Week 7 Tue - Deadlift",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Deadlift",
+            "variant": "Deadlift — heavy (straight bar)",
+            "rpe": 8.5,
+            "notes": "top set",
+            "sets": [
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.85
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.85
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.85
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.85
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Barbell_Deadlift",
+            "variant": "Paused DL (below knee)",
+            "rpe": 8.0,
+            "notes": "off-floor strength",
+            "sets": [
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Romanian_Deadlift",
+            "variant": "RDL",
+            "rpe": 8.0,
+            "notes": "posterior chain",
+            "sets": [
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "row",
+            "variant": "Chest-supported row (or seal row)",
+            "rpe": 8.0,
+            "notes": "upper back; keeps bar tight off floor",
+            "sets": [
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 7,
+      "dayOfWeek": 3,
+      "label": "Week 7 Wed - Walk (recovery)",
+      "exercises": [
+        [
+          {
+            "openChoice": "cardio",
+            "variant": "Walk with wife (recovery)",
+            "notes": "keep it — mid-week disc offload",
+            "sets": []
+          }
+        ]
+      ]
+    },
+    {
+      "week": 7,
+      "dayOfWeek": 4,
+      "label": "Week 7 Thu - Press day (all volume)",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Bench_Press_-_Medium_Grip",
+            "variant": "Bench volume — Larsen press (no leg drive)",
+            "rpe": 8.5,
+            "notes": "Feet-up Larsen (see wk5 note). Progress off wk5 calibration.",
+            "sets": [
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 270,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 270,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 270,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 4,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 270,
+                  "unit": "lb"
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Standing_Military_Press",
+            "variant": "Overhead press (standing, to chest)",
+            "rpe": 8.5,
+            "notes": "top of meso",
+            "sets": [
+              {
+                "reps": 6,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 170,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 6,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 170,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 6,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 170,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 6,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 170,
+                  "unit": "lb"
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Close-Grip_Barbell_Bench_Press",
+            "variant": "Close-grip bench (straight bar, shoulder-width)",
+            "rpe": 8.0,
+            "notes": "top of meso",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 315,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 315,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 315,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 315,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 315,
+                  "unit": "lb"
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "incline-press",
+            "variant": "Incline press (BB or DB)",
+            "rpe": 7.0,
+            "notes": "compound press, 3+ RIR - do NOT approach failure on light day",
+            "sets": [
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "vertical-horizontal-pull",
+            "rpe": 9.0,
+            "notes": "back + shoulder health",
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          },
+          {
+            "openChoice": "rear-delts",
+            "rpe": 9.0,
+            "notes": "back + shoulder health",
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 7,
+      "dayOfWeek": 5,
+      "label": "Week 7 Fri - Speed/hack",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Deadlift",
+            "variant": "Deadlift — speed from floor (straight bar)",
+            "rpe": 7.0,
+            "notes": "explosive; 60-90s rest",
+            "sets": [
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.775
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.775
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.775
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.775
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.775
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Barbell_Squat",
+            "variant": "Squat — paused (2s, comp stance)",
+            "rpe": 7.5,
+            "notes": "paused/speed",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.73
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.73
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.73
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.73
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Hack_Squat",
+            "variant": "Hack squat (quad / leg drive off floor)",
+            "rpe": 8.0,
+            "notes": "feet low & close = quad-dominant; full depth, controlled eccentric",
+            "sets": [
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 7,
+      "dayOfWeek": 7,
+      "label": "Week 7 Sun - Back/arms/core",
+      "exercises": [
+        [
+          {
+            "exercise": "Weighted_Pull_Ups",
+            "variant": "Pull-ups (weighted if easy)",
+            "rpe": 9.0,
+            "notes": "upper back",
+            "sets": [
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "triceps",
+            "rpe": 9.5,
+            "notes": "arms / pressing support",
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          },
+          {
+            "openChoice": "biceps",
+            "rpe": 9.5,
+            "notes": "arms / pressing support",
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "core",
+            "variant": "Core (ab wheel / hanging leg raise)",
+            "rpe": 9.0,
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 8,
+      "dayOfWeek": 1,
+      "label": "Week 8 Mon - Bench+Squat",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Bench_Press_-_Medium_Grip",
+            "variant": "Bench press — heavy (paused, comp grip)",
+            "rpe": 5.0,
+            "notes": "Top set",
+            "sets": [
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.675
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.675
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.675
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Barbell_Squat",
+            "variant": "Squat — volume (comp stance)",
+            "rpe": 5.0,
+            "notes": "deload",
+            "sets": [
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.6
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.6
+                }
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 8,
+      "dayOfWeek": 2,
+      "label": "Week 8 Tue - Deadlift",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Deadlift",
+            "variant": "Deadlift — heavy (straight bar)",
+            "rpe": 5.0,
+            "notes": "top set",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.625
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.625
+                }
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 8,
+      "dayOfWeek": 3,
+      "label": "Week 8 Wed - Walk (recovery)",
+      "exercises": [
+        [
+          {
+            "openChoice": "cardio",
+            "variant": "Walk with wife (recovery)",
+            "notes": "keep it — mid-week disc offload",
+            "sets": []
+          }
+        ]
+      ]
+    },
+    {
+      "week": 8,
+      "dayOfWeek": 4,
+      "label": "Week 8 Thu - Press day (all volume)",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Bench_Press_-_Medium_Grip",
+            "variant": "Bench volume — light paused bench",
+            "rpe": 6.0,
+            "notes": "deload",
+            "sets": [
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 210,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 210,
+                  "unit": "lb"
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Close-Grip_Barbell_Bench_Press",
+            "variant": "Close-grip bench (straight bar, shoulder-width)",
+            "rpe": 6.0,
+            "notes": "deload",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 235,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 235,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 235,
+                  "unit": "lb"
+                }
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 8,
+      "dayOfWeek": 5,
+      "label": "Week 8 Fri - Speed/hack",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Deadlift",
+            "variant": "Deadlift — speed from floor (straight bar)",
+            "rpe": 5.0,
+            "notes": "explosive; 60-90s rest",
+            "sets": [
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.6
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.6
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.6
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.6
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Barbell_Squat",
+            "variant": "Squat — paused (2s, comp stance)",
+            "rpe": 5.0,
+            "notes": "deload",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.55
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.55
+                }
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 9,
+      "dayOfWeek": 1,
+      "label": "Week 9 Mon - Bench+Squat",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Bench_Press_-_Medium_Grip",
+            "variant": "Bench press — heavy (paused, comp grip)",
+            "rpe": 8.0,
+            "notes": "Top set",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.825
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.825
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.825
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Barbell_Bench_Press_-_Medium_Grip",
+            "variant": "Bench — back-off (paused)",
+            "rpe": 8.0,
+            "notes": "RPE 8 cap",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.725
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.725
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Barbell_Squat",
+            "variant": "Squat — volume (comp stance)",
+            "rpe": 7.0,
+            "notes": "intensification",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.79
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.79
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.79
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.79
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "triceps",
+            "variant": "Triceps (overhead ext / pushdown)",
+            "rpe": 9.5,
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 9,
+      "dayOfWeek": 2,
+      "label": "Week 9 Tue - Deadlift",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Deadlift",
+            "variant": "Deadlift — heavy (straight bar)",
+            "rpe": 7.5,
+            "notes": "top set",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.8
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.8
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.8
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.8
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Deficit_Deadlift",
+            "variant": "Deficit DL (1.5\")",
+            "rpe": 7.5,
+            "notes": "off-floor strength",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Romanian_Deadlift",
+            "variant": "RDL",
+            "rpe": 8.0,
+            "notes": "posterior chain",
+            "sets": [
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "row",
+            "variant": "Chest-supported row (or seal row)",
+            "rpe": 8.0,
+            "notes": "upper back; keeps bar tight off floor",
+            "sets": [
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 9,
+      "dayOfWeek": 3,
+      "label": "Week 9 Wed - Walk (recovery)",
+      "exercises": [
+        [
+          {
+            "openChoice": "cardio",
+            "variant": "Walk with wife (recovery)",
+            "notes": "keep it — mid-week disc offload",
+            "sets": []
+          }
+        ]
+      ]
+    },
+    {
+      "week": 9,
+      "dayOfWeek": 4,
+      "label": "Week 9 Thu - Press day (all volume)",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Bench_Press_-_Medium_Grip",
+            "variant": "Bench volume — long-pause bench (3s)",
+            "rpe": 7.5,
+            "notes": "ESTIMATE - calibrate to last-set RPE",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 280,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 280,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 280,
+                  "unit": "lb"
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Standing_Military_Press",
+            "variant": "Overhead press (standing, to chest)",
+            "rpe": 8.0,
+            "notes": "new rep bracket",
+            "sets": [
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 170,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 170,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 170,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 170,
+                  "unit": "lb"
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Close-Grip_Barbell_Bench_Press",
+            "variant": "Close-grip bench (straight bar, shoulder-width)",
+            "rpe": 7.0,
+            "notes": "lockout strength press",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 305,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 305,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 305,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 305,
+                  "unit": "lb"
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "incline-press",
+            "variant": "Incline press (BB or DB)",
+            "rpe": 7.0,
+            "notes": "compound press, 3+ RIR - do NOT approach failure on light day",
+            "sets": [
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "vertical-horizontal-pull",
+            "rpe": 9.0,
+            "notes": "back + shoulder health",
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          },
+          {
+            "openChoice": "rear-delts",
+            "rpe": 9.0,
+            "notes": "back + shoulder health",
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 9,
+      "dayOfWeek": 5,
+      "label": "Week 9 Fri - Speed/hack",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Deadlift",
+            "variant": "Deadlift — speed from floor (straight bar)",
+            "rpe": 7.0,
+            "notes": "explosive; 60-90s rest",
+            "sets": [
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Barbell_Squat",
+            "variant": "Squat — paused (2s, comp stance)",
+            "rpe": 7.0,
+            "notes": "paused",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.71
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.71
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.71
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Hack_Squat",
+            "variant": "Hack squat (quad / leg drive off floor)",
+            "rpe": 8.0,
+            "notes": "feet low & close = quad-dominant; full depth, controlled eccentric",
+            "sets": [
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 9,
+      "dayOfWeek": 7,
+      "label": "Week 9 Sun - Back/arms/core",
+      "exercises": [
+        [
+          {
+            "exercise": "Weighted_Pull_Ups",
+            "variant": "Pull-ups (weighted if easy)",
+            "rpe": 9.0,
+            "notes": "upper back",
+            "sets": [
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "triceps",
+            "rpe": 9.5,
+            "notes": "arms / pressing support",
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          },
+          {
+            "openChoice": "biceps",
+            "rpe": 9.5,
+            "notes": "arms / pressing support",
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "core",
+            "variant": "Core (ab wheel / hanging leg raise)",
+            "rpe": 9.0,
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 10,
+      "dayOfWeek": 1,
+      "label": "Week 10 Mon - Bench+Squat",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Bench_Press_-_Medium_Grip",
+            "variant": "Bench press — heavy (paused, comp grip)",
+            "rpe": 8.5,
+            "notes": "Top set",
+            "sets": [
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.875
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.875
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Barbell_Bench_Press_-_Medium_Grip",
+            "variant": "Bench — back-off (paused)",
+            "rpe": 8.0,
+            "notes": "RPE 8 cap",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.725
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.725
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Barbell_Squat",
+            "variant": "Squat — volume (comp stance)",
+            "rpe": 8.0,
+            "notes": "comp stance",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.84
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.84
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.84
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "triceps",
+            "variant": "Triceps (overhead ext / pushdown)",
+            "rpe": 9.5,
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 10,
+      "dayOfWeek": 2,
+      "label": "Week 10 Tue - Deadlift",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Deadlift",
+            "variant": "Deadlift — heavy (straight bar)",
+            "rpe": 8.5,
+            "notes": "top set",
+            "sets": [
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.875
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.875
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.875
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Barbell_Deadlift",
+            "variant": "Paused DL (below knee)",
+            "rpe": 8.0,
+            "notes": "off-floor strength",
+            "sets": [
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Romanian_Deadlift",
+            "variant": "RDL",
+            "rpe": 8.0,
+            "notes": "posterior chain",
+            "sets": [
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "row",
+            "variant": "Chest-supported row (or seal row)",
+            "rpe": 8.0,
+            "notes": "upper back; keeps bar tight off floor",
+            "sets": [
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 10,
+      "dayOfWeek": 3,
+      "label": "Week 10 Wed - Walk (recovery)",
+      "exercises": [
+        [
+          {
+            "openChoice": "cardio",
+            "variant": "Walk with wife (recovery)",
+            "notes": "keep it — mid-week disc offload",
+            "sets": []
+          }
+        ]
+      ]
+    },
+    {
+      "week": 10,
+      "dayOfWeek": 4,
+      "label": "Week 10 Thu - Press day (all volume)",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Bench_Press_-_Medium_Grip",
+            "variant": "Bench volume — long-pause bench (3s)",
+            "rpe": 8.0,
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 290,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 290,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 290,
+                  "unit": "lb"
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Standing_Military_Press",
+            "variant": "Overhead press (standing, to chest)",
+            "rpe": 8.5,
+            "sets": [
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 175,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 175,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 175,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 175,
+                  "unit": "lb"
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Close-Grip_Barbell_Bench_Press",
+            "variant": "Close-grip bench (straight bar, shoulder-width)",
+            "rpe": 7.5,
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 315,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 315,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 315,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 315,
+                  "unit": "lb"
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "incline-press",
+            "variant": "Incline press (BB or DB)",
+            "rpe": 7.0,
+            "notes": "compound press, 3+ RIR - do NOT approach failure on light day",
+            "sets": [
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "vertical-horizontal-pull",
+            "rpe": 9.0,
+            "notes": "back + shoulder health",
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          },
+          {
+            "openChoice": "rear-delts",
+            "rpe": 9.0,
+            "notes": "back + shoulder health",
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 10,
+      "dayOfWeek": 5,
+      "label": "Week 10 Fri - Speed/hack",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Deadlift",
+            "variant": "Deadlift — speed from floor (straight bar)",
+            "rpe": 7.0,
+            "notes": "explosive; 60-90s rest",
+            "sets": [
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.775
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.775
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.775
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.775
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.775
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Barbell_Squat",
+            "variant": "Squat — paused (2s, comp stance)",
+            "rpe": 7.5,
+            "notes": "paused/speed",
+            "sets": [
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.75
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Hack_Squat",
+            "variant": "Hack squat (quad / leg drive off floor)",
+            "rpe": 8.0,
+            "notes": "feet low & close = quad-dominant; full depth, controlled eccentric",
+            "sets": [
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 10,
+      "dayOfWeek": 7,
+      "label": "Week 10 Sun - Back/arms/core",
+      "exercises": [
+        [
+          {
+            "exercise": "Weighted_Pull_Ups",
+            "variant": "Pull-ups (weighted if easy)",
+            "rpe": 9.0,
+            "notes": "upper back",
+            "sets": [
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "triceps",
+            "rpe": 9.5,
+            "notes": "arms / pressing support",
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          },
+          {
+            "openChoice": "biceps",
+            "rpe": 9.5,
+            "notes": "arms / pressing support",
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "core",
+            "variant": "Core (ab wheel / hanging leg raise)",
+            "rpe": 9.0,
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 11,
+      "dayOfWeek": 1,
+      "label": "Week 11 Mon - Bench+Squat",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Bench_Press_-_Medium_Grip",
+            "variant": "Bench press — heavy (paused, comp grip)",
+            "rpe": 9.0,
+            "notes": "Top set",
+            "sets": [
+              {
+                "reps": 1,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.925
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Barbell_Bench_Press_-_Medium_Grip",
+            "variant": "Bench — back-off (paused)",
+            "rpe": 8.0,
+            "notes": "RPE 8 cap",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.725
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Barbell_Squat",
+            "variant": "Squat — volume (comp stance)",
+            "rpe": 8.0,
+            "notes": "confirmation single ~460 @ RPE8 (NOT a PR attempt)",
+            "sets": [
+              {
+                "reps": 1,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.93
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "triceps",
+            "variant": "Triceps (overhead ext / pushdown)",
+            "rpe": 9.5,
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 11,
+      "dayOfWeek": 2,
+      "label": "Week 11 Tue - Deadlift",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Deadlift",
+            "variant": "Deadlift — heavy (straight bar)",
+            "rpe": 9.0,
+            "notes": "confirmation single ~525 @ RPE9 (NOT a PR) — confirms completed 545",
+            "sets": [
+              {
+                "reps": 1,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.945
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Romanian_Deadlift",
+            "variant": "RDL",
+            "rpe": 8.0,
+            "notes": "posterior chain",
+            "sets": [
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "row",
+            "variant": "Chest-supported row (or seal row)",
+            "rpe": 8.0,
+            "notes": "upper back; keeps bar tight off floor",
+            "sets": [
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 11,
+      "dayOfWeek": 3,
+      "label": "Week 11 Wed - Walk (recovery)",
+      "exercises": [
+        [
+          {
+            "openChoice": "cardio",
+            "variant": "Walk with wife (recovery)",
+            "notes": "keep it — mid-week disc offload",
+            "sets": []
+          }
+        ]
+      ]
+    },
+    {
+      "week": 11,
+      "dayOfWeek": 4,
+      "label": "Week 11 Thu - Press day (all volume)",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Bench_Press_-_Medium_Grip",
+            "variant": "Bench volume — long-pause bench (3s)",
+            "rpe": 8.5,
+            "notes": "top of meso",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 295,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 295,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 295,
+                  "unit": "lb"
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Standing_Military_Press",
+            "variant": "Overhead press (standing, to chest)",
+            "rpe": 8.5,
+            "notes": "end target ~180x5 (e1RM ~210) = your 205-215 estimate",
+            "sets": [
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 180,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 180,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 180,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 180,
+                  "unit": "lb"
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Close-Grip_Barbell_Bench_Press",
+            "variant": "Close-grip bench (straight bar, shoulder-width)",
+            "rpe": 8.0,
+            "notes": "end target ~325x3",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 325,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 325,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 325,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 325,
+                  "unit": "lb"
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "incline-press",
+            "variant": "Incline press (BB or DB)",
+            "rpe": 7.0,
+            "notes": "compound press, 3+ RIR - do NOT approach failure on light day",
+            "sets": [
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              },
+              {
+                "reps": 10,
+                "type": "working"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "vertical-horizontal-pull",
+            "rpe": 9.0,
+            "notes": "back + shoulder health",
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          },
+          {
+            "openChoice": "rear-delts",
+            "rpe": 9.0,
+            "notes": "back + shoulder health",
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 11,
+      "dayOfWeek": 5,
+      "label": "Week 11 Fri - Speed/hack",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Deadlift",
+            "variant": "Deadlift — speed from floor (straight bar)",
+            "rpe": 6.0,
+            "notes": "explosive; 60-90s rest",
+            "sets": [
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.7
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Barbell_Squat",
+            "variant": "Squat — paused (2s, comp stance)",
+            "rpe": 6.0,
+            "notes": "light before Mon confirmation",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.65
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.65
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.65
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Hack_Squat",
+            "variant": "Hack squat (quad / leg drive off floor)",
+            "rpe": 8.0,
+            "notes": "feet low & close = quad-dominant; full depth, controlled eccentric",
+            "sets": [
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 11,
+      "dayOfWeek": 7,
+      "label": "Week 11 Sun - Back/arms/core",
+      "exercises": [
+        [
+          {
+            "exercise": "Weighted_Pull_Ups",
+            "variant": "Pull-ups (weighted if easy)",
+            "rpe": 9.0,
+            "notes": "upper back",
+            "sets": [
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              },
+              {
+                "reps": 8,
+                "type": "working"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "triceps",
+            "rpe": 9.5,
+            "notes": "arms / pressing support",
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          },
+          {
+            "openChoice": "biceps",
+            "rpe": 9.5,
+            "notes": "arms / pressing support",
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "openChoice": "core",
+            "variant": "Core (ab wheel / hanging leg raise)",
+            "rpe": 9.0,
+            "sets": [
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              },
+              {
+                "reps": 12,
+                "type": "working"
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 12,
+      "dayOfWeek": 1,
+      "label": "Week 12 Mon - Bench+Squat",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Bench_Press_-_Medium_Grip",
+            "variant": "Bench press — heavy (paused, comp grip)",
+            "rpe": 5.0,
+            "notes": "Top set",
+            "sets": [
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.6
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.6
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.6
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Barbell_Squat",
+            "variant": "Squat — volume (comp stance)",
+            "rpe": 5.0,
+            "notes": "deload",
+            "sets": [
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.55
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.55
+                }
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 12,
+      "dayOfWeek": 2,
+      "label": "Week 12 Tue - Deadlift",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Deadlift",
+            "variant": "Deadlift — heavy (straight bar)",
+            "rpe": 5.0,
+            "notes": "top set",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.575
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.575
+                }
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 12,
+      "dayOfWeek": 3,
+      "label": "Week 12 Wed - Walk (recovery)",
+      "exercises": [
+        [
+          {
+            "openChoice": "cardio",
+            "variant": "Walk with wife (recovery)",
+            "notes": "keep it — mid-week disc offload",
+            "sets": []
+          }
+        ]
+      ]
+    },
+    {
+      "week": 12,
+      "dayOfWeek": 4,
+      "label": "Week 12 Thu - Press day (all volume)",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Bench_Press_-_Medium_Grip",
+            "variant": "Bench volume — light paused bench",
+            "rpe": 6.0,
+            "notes": "deload",
+            "sets": [
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 195,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 5,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 195,
+                  "unit": "lb"
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Close-Grip_Barbell_Bench_Press",
+            "variant": "Close-grip bench (straight bar, shoulder-width)",
+            "rpe": 6.0,
+            "notes": "deload",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 225,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 225,
+                  "unit": "lb"
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "absolute",
+                  "value": 225,
+                  "unit": "lb"
+                }
+              }
+            ]
+          }
+        ]
+      ]
+    },
+    {
+      "week": 12,
+      "dayOfWeek": 5,
+      "label": "Week 12 Fri - Speed/hack",
+      "exercises": [
+        [
+          {
+            "exercise": "Barbell_Deadlift",
+            "variant": "Deadlift — speed from floor (straight bar)",
+            "rpe": 5.0,
+            "notes": "explosive; 60-90s rest",
+            "sets": [
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.575
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.575
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.575
+                }
+              },
+              {
+                "reps": 2,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.575
+                }
+              }
+            ]
+          }
+        ],
+        [
+          {
+            "exercise": "Barbell_Squat",
+            "variant": "Squat — paused (2s, comp stance)",
+            "rpe": 5.0,
+            "notes": "deload",
+            "sets": [
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.55
+                }
+              },
+              {
+                "reps": 3,
+                "type": "working",
+                "load": {
+                  "kind": "percentOfGoal",
+                  "value": 0.55
+                }
+              }
+            ]
+          }
+        ]
+      ]
+    }
+  ]
+}

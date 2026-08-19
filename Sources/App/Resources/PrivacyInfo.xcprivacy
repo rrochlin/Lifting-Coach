@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Phase 1 is local-first and offline: no analytics, no network calls, no
+	     third-party SDKs. Nothing leaves the phone, so there is nothing to
+	     declare as collected and no tracking domains. Revisit every key here
+	     when the phase 2 backend lands — training logs and bodyweight are
+	     health data, and that changes all three answers below. -->
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<!-- SQLite, through GRDB, stats the database file. C617.1 is the
+			     app-container reason, which is exactly and only what this is:
+			     one file in Application Support that the app itself wrote. -->
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>C617.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>
