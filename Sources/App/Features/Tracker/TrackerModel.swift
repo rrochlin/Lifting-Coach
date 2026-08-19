@@ -30,6 +30,7 @@ final class TrackerModel {
 
     private let workouts: WorkoutStore
     private let users: UserStore
+    private let stats: ExerciseStatsStore
     private let userID: UUID
     /// Called after an achieved max is recorded, so the view can refresh
     /// `AppEnvironment.currentUser` — TrackerModel doesn't hold a reference to
@@ -39,12 +40,14 @@ final class TrackerModel {
     init(
         workouts: WorkoutStore,
         users: UserStore,
+        stats: ExerciseStatsStore,
         userID: UUID,
         notifier: RestNotifier = RestNotifier(),
         onAchievedMaxRecorded: @escaping () -> Void = {}
     ) {
         self.workouts = workouts
         self.users = users
+        self.stats = stats
         self.userID = userID
         self.notifier = notifier
         self.onAchievedMaxRecorded = onAchievedMaxRecorded
@@ -83,6 +86,11 @@ final class TrackerModel {
         dismissRest()
         persist()
         self.session = nil
+        // A workout only becomes history when it ends, so this is exactly when
+        // the derived per-lift stats go stale. Recomputed rather than nudged —
+        // `finish` has just dropped every incomplete set, which is precisely
+        // the kind of thing an incremental counter gets wrong.
+        try? stats.rebuild(for: userID)
     }
 
     /// Abandons the workout without saving it as history.

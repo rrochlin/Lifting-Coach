@@ -390,6 +390,50 @@ extension AppDatabase {
             }
         }
 
+        // Additive.
+        //
+        // A **derived** summary of the log: how many completed workouts contain
+        // each lift, when it was last done, and the heaviest working set on
+        // record. Read by the exercise picker, which sorts ~870 catalog entries
+        // by how much the lifter actually uses them.
+        //
+        // Derived, and that word is doing work. This is not a counter that
+        // write paths increment — that shape has to be decremented correctly by
+        // finishing a workout (which deletes incomplete sets), discarding one,
+        // deleting a set, editing history and importing, and missing exactly
+        // one of those makes it lie forever with nothing able to notice.
+        // `ExerciseStatsStore.rebuild` recomputes every row from the log in a
+        // single statement, so the table can be stale but can never disagree:
+        // dropping it and rebuilding is always a valid repair.
+        //
+        // Why a table at all, when the equivalent live query measures 2.9 ms
+        // over five years of real history (840 workouts, 16k sets)? Not
+        // latency. It's that the log is about to get a CSV import of someone's
+        // whole training career in one transaction, and that the roadmap's
+        // fatigue and theoretical-max models are more aggregates wanting a
+        // home. One rebuilt table is where those go; a dozen ad-hoc read-time
+        // queries is the thing that gets rewritten later.
+        migrator.registerMigration("v12_exerciseStats") { db in
+            try db.create(table: "exerciseStats") { t in
+                t.autoIncrementedPrimaryKey("rowid")
+                t.column("userId", .text).notNull()
+                    .references("user", onDelete: .cascade)
+                t.column("exerciseId", .integer).notNull()
+                    .references("exercise", onDelete: .cascade)
+                // Completed workouts containing this lift — not sets, and not
+                // sessions abandoned mid-way.
+                t.column("sessionCount", .integer).notNull()
+                t.column("setCount", .integer).notNull()
+                t.column("lastPerformed", .datetime)
+                // Heaviest logged *working* set. Split value/unit, the same way
+                // every other weight is stored: normalizing to kilograms would
+                // round a number the lifter typed.
+                t.column("heaviestValue", .double)
+                t.column("heaviestUnit", .text)
+                t.uniqueKey(["userId", "exerciseId"])
+            }
+        }
+
         return migrator
     }
 }

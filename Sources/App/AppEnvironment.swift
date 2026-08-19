@@ -17,6 +17,9 @@ public final class AppEnvironment {
     public let workouts: WorkoutStore
     public let plans: PlanStore
     public let users: UserStore
+    /// Per-lift history, derived from the log. See `ExerciseStatsStore` for why
+    /// this is a rebuilt table rather than a live query or a counter.
+    public let exerciseStats: ExerciseStatsStore
 
     /// The single local lifter. Phase 1 has no sign-in, so this is resolved once
     /// at launch and treated as fixed for the session.
@@ -32,6 +35,7 @@ public final class AppEnvironment {
         self.workouts = WorkoutStore(database)
         self.plans = PlanStore(database)
         self.users = UserStore(database)
+        self.exerciseStats = ExerciseStatsStore(database)
         self.backend = backend
     }
 
@@ -62,6 +66,10 @@ public final class AppEnvironment {
         try importSampleBlockIfNeeded()
         // The program import writes goal maxes — re-read once at the end.
         currentUser = try users.localUser()
+        // Stats are derived, so a fresh install (or one whose log arrived by
+        // import rather than through the tracker) still needs them computed
+        // once. Cheap when there's nothing to count.
+        if let user = currentUser { try exerciseStats.rebuild(for: user.id) }
     }
 
     /// First launch only: loads the owner's real 12-week program (Block 1) so
