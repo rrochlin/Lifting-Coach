@@ -419,10 +419,10 @@ failure names itself:
 the expensive minutes, and a superseded run answers a question nobody is still
 asking.
 
-**Xcode is `latest-stable`, and that's a placeholder.** Nothing here has seen
-GitHub's runner image, and a pin naming an Xcode it doesn't ship fails every run
-on its first line. Pin it to whatever the first green run reports; local is
-Xcode 26.3 / Swift 6.2.
+**Xcode is pinned to 26.3**, which is what the first green run found on the
+`macos-15` image and matches the development machine exactly. Pinned rather than
+`latest-stable` because a toolchain that moves under you turns an unrelated push
+into the run that mysteriously breaks — raise it deliberately.
 
 **`.github/workflows/testflight.yml` is a scaffold that cannot fire.**
 `workflow_dispatch` only, with an input you have to type `upload` into, and it

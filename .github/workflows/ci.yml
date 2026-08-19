@@ -24,21 +24,19 @@ jobs:
     name: Swift package
     runs-on: macos-15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          # `latest-stable` rather than a pin, for now, because nothing here has
-          # seen GitHub's runner image and a pin naming an Xcode it doesn't ship
-          # fails every run on its first line. Pin this to whatever the first
-          # green run reports — a toolchain that moves under you turns an
-          # unrelated push into the run that mysteriously breaks. Local is
-          # Xcode 26.3 / Swift 6.2.
-          xcode-version: latest-stable
+          # Pinned, not `latest-stable`: a toolchain that moves under you turns
+          # an unrelated push into the run that mysteriously breaks. This is what
+          # the first green run reported the macos-15 image had, and it matches
+          # the development machine exactly (Swift 6.2). Raise it deliberately.
+          xcode-version: '26.3'
 
       - name: Cache SwiftPM
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: LiftingCoachModel/.build
           key: spm-${{ runner.os }}-${{ hashFiles('LiftingCoachModel/Package.resolved') }}
@@ -55,8 +53,8 @@ jobs:
     # It also costs 1x minutes where macOS costs 10x.
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10
         with:
           enable-cache: true
       - name: pytest
@@ -69,12 +67,12 @@ jobs:
     # No point building the app if the domain model is already broken.
     needs: model
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Select Xcode
         uses: maxim-lobanov/setup-xcode@v1
         with:
-          xcode-version: latest-stable
+          xcode-version: '26.3'
 
       - name: Install XcodeGen
         run: brew install xcodegen
@@ -101,7 +99,7 @@ jobs:
     name: Contrast floors
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: check-contrast
         # Parses Theme.swift's own literals and fails on a regression. Pure
         # Python, no toolchain — see CLAUDE.md's palette section for the floors.
