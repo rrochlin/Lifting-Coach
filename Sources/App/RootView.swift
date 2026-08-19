@@ -129,6 +129,15 @@ enum LaunchArguments {
         value(for: "-openWorkoutDetail").flatMap(Int.init)
     }
 
+    /// `-openBlockSettings` opens the planner's block settings sheet. Needs
+    /// `-initialTab plan` beside it, since it's read where that tab is built.
+    ///
+    /// Same family as the rest of these: the sheet is behind a tap on the
+    /// block's header panel, and nothing on the command line can tap.
+    static var opensBlockSettings: Bool {
+        ProcessInfo.processInfo.arguments.contains("-openBlockSettings")
+    }
+
     /// `-editWorkout` opens that detail screen straight into edit mode.
     ///
     /// Edit mode is behind a toolbar tap, which puts it in the same category as

@@ -135,6 +135,67 @@ public struct PlanStore: Sendable {
         }
     }
 
+    /// Writes a block's own settings — its dates, name, journal and rest
+    /// defaults — plus the dates of the days it programs.
+    ///
+    /// Deliberately narrow, and that narrowness is the point. `save(_:userId:)`
+    /// replaces a block by deleting it and reinserting the whole graph, which
+    /// is right when the program itself is what's being written. Changing a
+    /// start date is a different thing: the prescriptions aren't being edited,
+    /// they're being *moved*, and putting every set in a 12-week block through
+    /// a delete on the way to changing one date is a risk taken for nothing.
+    /// Nothing here touches `plannedExercise` or `plannedSet`, so this cannot
+    /// lose a prescription however it fails.
+    ///
+    /// Days move by whatever `block.program` says they are now — see
+    /// `WorkoutBlock.rescheduled(to:calendar:)`, which is where the shift is
+    /// actually computed. A block whose days haven't moved simply rewrites the
+    /// same dates.
+    public func updateSettings(_ block: WorkoutBlock, userId: UUID) throws {
+        try database.writer.write { db in
+            try db.execute(
+                sql: """
+                    UPDATE block
+                    SET startDate = ?, endDate = ?, notes = ?, journal = ?
+                    WHERE id = ? AND userId = ?
+                    """,
+                arguments: [
+                    block.startDate.map { calendar.startOfDay(for: $0) },
+                    block.endDate.map { calendar.startOfDay(for: $0) },
+                    block.notes,
+                    block.journal,
+                    block.id.uuidString,
+                    userId.uuidString,
+                ]
+            )
+
+            // Replaced wholesale rather than merged: a rest default the lifter
+            // cleared has to disappear, and an UPSERT per entry would leave it
+            // behind.
+            try db.execute(
+                sql: "DELETE FROM blockDefaultRest WHERE blockId = ?",
+                arguments: [block.id.uuidString]
+            )
+            for (type, seconds) in block.defaultRestTimes ?? [:] {
+                try BlockDefaultRestRow(
+                    blockId: block.id.uuidString,
+                    setType: type.rawValue,
+                    seconds: seconds
+                ).insert(db)
+            }
+
+            for (day, planned) in block.program ?? [:] {
+                let date = calendar.startOfDay(for: day)
+                for workout in planned {
+                    try db.execute(
+                        sql: "UPDATE plannedWorkout SET date = ? WHERE id = ?",
+                        arguments: [date, workout.id.uuidString]
+                    )
+                }
+            }
+        }
+    }
+
     public func deleteBlock(id: UUID) throws {
         _ = try database.writer.write { db in
             try BlockRow.deleteOne(db, key: id.uuidString)

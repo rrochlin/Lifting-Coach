@@ -149,6 +149,20 @@ final class PlannerModel {
         return block
     }
 
+    /// Writes a block's settings — name, dates, length, rest defaults — and the
+    /// dates of its programmed days, leaving every prescription alone.
+    ///
+    /// The shift itself is already in `block` by the time this runs: the editor
+    /// builds the moved block with `WorkoutBlock.rescheduled(to:)` and hands it
+    /// over whole, so there is one place that knows how a program moves and it
+    /// is a tested pure function rather than view code.
+    @discardableResult
+    func updateBlockSettings(_ block: WorkoutBlock) -> Bool {
+        guard persist({ try plans.updateSettings(block, userId: userID) }) else { return false }
+        load()
+        return true
+    }
+
     func deleteBlock(id: UUID) {
         guard persist({ try plans.deleteBlock(id: id) }) else { return }
         if selectedBlockID == id { selectedBlockID = nil }

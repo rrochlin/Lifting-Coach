@@ -159,6 +159,54 @@ struct PlanStoreTests {
         #expect(loaded?.program?.count == 2)
     }
 
+    @Test("Block settings update without rewriting the program")
+    func updatesBlockSettings() throws {
+        let fixture = try makeFixture()
+        let original = block()
+        try fixture.plans.save(original, userId: fixture.user.id)
+
+        var edited = original.rescheduled(to: day(2026, 2, 1), calendar: calendar)
+        edited = edited.withLength(weeks: 8, calendar: calendar)
+        edited.notes = "Moved back a month"
+        edited.defaultRestTimes = [.working: 240]
+
+        try fixture.plans.updateSettings(edited, userId: fixture.user.id)
+        let loaded = try fixture.plans.fetchBlock(id: original.id)
+
+        #expect(loaded?.startDate == day(2026, 2, 1))
+        #expect(loaded?.endDate == day(2026, 3, 28))
+        #expect(loaded?.notes == "Moved back a month")
+        #expect(loaded?.defaultRestTimes?[.working] == 240)
+        // Cleared, not merged — a rest default the lifter removed has to go.
+        #expect(loaded?.defaultRestTimes?[.warmup] == nil)
+    }
+
+    /// The safety property `updateSettings` exists for: a start date can move a
+    /// 12-week block without any prescription passing through a delete.
+    @Test("Moving a block carries its days and keeps every prescription")
+    func moveKeepsPrescriptions() throws {
+        let fixture = try makeFixture()
+        let original = block()
+        try fixture.plans.save(original, userId: fixture.user.id)
+
+        let moved = original.rescheduled(to: day(2026, 2, 1), calendar: calendar)
+        try fixture.plans.updateSettings(moved, userId: fixture.user.id)
+        let loaded = try fixture.plans.fetchBlock(id: original.id)
+
+        // The squat day was Mar 2, one day into a Mar 1 block; it's Feb 2 now.
+        #expect(loaded?.program?[day(2026, 3, 2)] == nil)
+        let squatDay = loaded?.program?[day(2026, 2, 2)]?.first
+        #expect(squatDay?.date == day(2026, 2, 2))
+
+        let squatSets = squatDay?.exercises?[0][0].sets ?? []
+        #expect(squatSets.count == 2)
+        #expect(squatSets[0].load == .percentOf(0.5, of: .goal))
+        #expect(squatSets[1].load == .percentOf(0.85, of: .goal))
+        // Identity is untouched too, so nothing downstream sees the move as a
+        // delete followed by a fresh day.
+        #expect(squatDay?.id == original.program?[day(2026, 3, 2)]?.first?.id)
+    }
+
     @Test("Every load and effort combination survives storage")
     func roundTripsEachLoadKind() throws {
         let fixture = try makeFixture()

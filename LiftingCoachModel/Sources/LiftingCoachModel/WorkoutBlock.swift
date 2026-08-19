@@ -80,15 +80,112 @@ public struct WorkoutBlock: Codable, Hashable, Identifiable, Sendable {
         let dayIndex = elapsed + 1
         let weekIndex = elapsed / 7 + 1
 
-        var totalWeeks: Int?
-        if let endDate {
-            let end = calendar.startOfDay(for: endDate)
-            if let span = calendar.dateComponents([.day], from: start, to: end).day {
-                totalWeeks = span / 7 + 1
-            }
+        return Progress(
+            dayIndex: dayIndex,
+            weekIndex: weekIndex,
+            totalWeeks: plannedWeeks(calendar: calendar)
+        )
+    }
+
+    // MARK: - Scheduling
+
+    /// The day this block's program is measured from: `startDate` where it has
+    /// one, else the earliest day with something programmed.
+    ///
+    /// The same fallback `programmedWeeks` uses, and for the same reason — an
+    /// unscheduled block still has a first day, and that is what "move the
+    /// program" has to measure from.
+    public func scheduleAnchor(calendar: Calendar = .current) -> Date? {
+        if let startDate { return calendar.startOfDay(for: startDate) }
+        return (program ?? [:])
+            .filter { !$0.value.isEmpty }
+            .keys
+            .map { calendar.startOfDay(for: $0) }
+            .min()
+    }
+
+    /// The block's planned length in weeks. `nil` without both dates — a block
+    /// with no planned end has no length, which is different from a length of
+    /// zero (`endDate` is a target, not a boundary; see the property).
+    public func plannedWeeks(calendar: Calendar = .current) -> Int? {
+        guard let startDate, let endDate else { return nil }
+        let start = calendar.startOfDay(for: startDate)
+        let end = calendar.startOfDay(for: endDate)
+        guard let span = calendar.dateComponents([.day], from: start, to: end).day else {
+            return nil
+        }
+        return span / 7 + 1
+    }
+
+    /// A copy `weeks` weeks long, measured forward from `startDate`.
+    ///
+    /// Rewrites `endDate` and nothing else: length is a statement about the
+    /// plan's horizon, not about where its days sit. A block with no start has
+    /// nothing to measure from and comes back unchanged.
+    public func withLength(weeks: Int, calendar: Calendar = .current) -> WorkoutBlock {
+        guard let startDate else { return self }
+        var copy = self
+        copy.endDate = calendar.date(
+            byAdding: .day,
+            value: weeks * 7 - 1,
+            to: calendar.startOfDay(for: startDate)
+        )
+        return copy
+    }
+
+    /// A copy that starts on `newStart`, carrying its whole program with it.
+    ///
+    /// Every programmed day, the planned end, and each `PlannedWorkout.date`
+    /// move by the same number of days, so the program's shape — which lifts
+    /// fall on which day of which week — is exactly preserved. That's the same
+    /// contract `ProgramLoader` has when it materializes a date-free file onto
+    /// a start date; a block that is already loaded should be movable on the
+    /// same terms.
+    ///
+    /// Deliberately *not* the only way to change a start date. Restating the
+    /// start without moving the days is a different edit — correcting a date
+    /// that was recorded wrong, rather than rescheduling the training — and
+    /// the caller says which one it means rather than this guessing (Core
+    /// Tenets §1).
+    ///
+    /// Days are shifted by calendar day rather than by elapsed seconds, so a
+    /// block moved across a daylight-saving boundary keeps landing on the start
+    /// of a day instead of drifting an hour off it.
+    public func rescheduled(to newStart: Date, calendar: Calendar = .current) -> WorkoutBlock {
+        let target = calendar.startOfDay(for: newStart)
+        var copy = self
+        copy.startDate = target
+
+        guard let anchor = scheduleAnchor(calendar: calendar),
+              let offset = calendar.dateComponents([.day], from: anchor, to: target).day,
+              offset != 0
+        else { return copy }
+
+        copy.endDate = endDate.flatMap {
+            calendar.date(byAdding: .day, value: offset, to: calendar.startOfDay(for: $0))
         }
 
-        return Progress(dayIndex: dayIndex, weekIndex: weekIndex, totalWeeks: totalWeeks)
+        if let program {
+            var moved: [Date: [PlannedWorkout]] = [:]
+            for (day, workouts) in program {
+                guard let newDay = calendar.date(
+                    byAdding: .day,
+                    value: offset,
+                    to: calendar.startOfDay(for: day)
+                ) else { continue }
+                moved[newDay, default: []].append(contentsOf: workouts.map {
+                    var workout = $0
+                    // The key and the workout's own date are two copies of one
+                    // fact; moving one without the other is how a program ends
+                    // up filed under a day it doesn't claim to be on.
+                    workout.date = newDay
+                    return workout
+                })
+            }
+            copy.program = moved
+        }
+
+        return copy
     }
 
     public struct Progress: Hashable, Sendable {

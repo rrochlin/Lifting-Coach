@@ -3,7 +3,7 @@ This document will be a thorough review of the current application state and iss
 
 ## Home
 - highlighted workout doesn't have  a quickstart click interaction
-- we should shift the plan timeline back for testing. I'm actually doing that plan now and I'm on the last workout of week 5 actually
+- ~~we should shift the plan timeline back for testing. I'm actually doing that plan now and I'm on the last workout of week 5 actually~~ — the block's header panel on Plan opens Block Settings: start date (with an explicit "move the program with it"), length in weeks, name, rest defaults, delete. The TODAY readout says which week the change lands you in, so you dial the date until it reads week 6.
 - I can log bodyweight, but that doesn't appear to go anywhere. Also I'd like to use a wheel selector prepoulated with the previous recorded weight. we should allow up to 1/10 kg/lb resolution entered.
 
 ## Workout

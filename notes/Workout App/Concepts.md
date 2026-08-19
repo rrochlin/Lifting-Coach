@@ -245,6 +245,38 @@ struct WorkoutBlock {
 }
 ```
 
+## Moving a block, and why the app asks first
+A block's `program` is keyed by absolute date, materialized from a date-free
+program file onto a start date (`ProgramLoader`). That's the right storage — a
+programmed day is a day, and everything from the tracker's week view to Home's
+"today" reads it as one — but it means a block created against the wrong start
+date can't be corrected by editing one field. The days are already somewhere.
+
+So changing a start date is two different edits wearing one name, and the block
+editor makes the lifter say which:
+
+- **Rescheduling** (`WorkoutBlock.rescheduled(to:calendar:)`) moves every
+  programmed day, every `PlannedWorkout.date`, and the planned end by the same
+  number of calendar days. The program's shape — which lifts fall on which day
+  of which week — is exactly preserved, which is the same contract
+  `ProgramLoader` has when it lands a file onto a start date. This is what
+  "I'm actually five weeks into this" means: week 6's programming has to
+  arrive *now*, not week 1's under a new label.
+- **Restating the start** leaves the days where they are and changes only the
+  block's own `startDate`. Which week each day falls in changes, because weeks
+  are counted from the anchor. This is the correction for a date recorded
+  wrong.
+
+Neither is inferable from the edit itself, so neither is the default the app
+picks quietly (Core Tenets §1). The shift is shown as a count of days and days
+moved before it lands, and it never touches a prescription or a logged workout
+— rescheduling moves *when*, never *what*.
+
+Shifted days are moved by calendar day rather than by elapsed seconds, so a
+block moved across a daylight-saving boundary keeps landing on the start of a
+day.
+
+
 ## #WorkoutPlan
 The umbrella for all of a #User's programming — a sequence of #WorkoutBlock 's over time. Starting a new training block means appending a new #WorkoutBlock here, not creating a new plan.
 ```swift

@@ -111,9 +111,11 @@ private struct BlockOverview: View {
     let model: PlannerModel
 
     @State private var isPickingDay = false
+    @State private var isEditingBlock = false
     @State private var editing: PlannedWorkout?
     @State private var collapsedWeeks: Set<Int> = []
     @State private var didSetInitialFocus = false
+    @State private var didOpenLaunchSettings = false
 
     var body: some View {
         List {
@@ -130,12 +132,31 @@ private struct BlockOverview: View {
                 }
             }
         }
+        .sheet(isPresented: $isEditingBlock) {
+            if let block = model.selectedBlock {
+                BlockSettingsSheet(
+                    original: block,
+                    calendar: model.calendar,
+                    onSave: { model.updateBlockSettings($0) },
+                    onDelete: { model.deleteBlock(id: block.id) }
+                )
+            }
+        }
         .navigationDestination(item: $editing) { workout in
             PlannedWorkoutEditor(model: model, workout: workout)
         }
         .onAppear {
             focusCurrentWeek()
             openLaunchArgumentDay()
+            openLaunchArgumentSettings()
+        }
+        // Moving the block changes which week is current, and the week that was
+        // open is now the wrong one. Refocusing on the start date rather than on
+        // every reload keeps the lifter's own expand/collapse choices otherwise
+        // intact.
+        .onChange(of: model.selectedBlock?.startDate) {
+            didSetInitialFocus = false
+            focusCurrentWeek()
         }
     }
 
@@ -146,6 +167,16 @@ private struct BlockOverview: View {
         let days = model.programmedWeeks.flatMap(\.days)
         guard days.indices.contains(index) else { return }
         editing = model.plannedWorkouts(on: days[index]).first
+    }
+
+    /// `-openBlockSettings` — the settings sheet is two taps deep and simctl
+    /// can't tap. Latched, because `.onAppear` runs again every time this tab
+    /// comes back and a sheet that reopens on every visit is indistinguishable
+    /// from a bug.
+    private func openLaunchArgumentSettings() {
+        guard !didOpenLaunchSettings, LaunchArguments.opensBlockSettings else { return }
+        didOpenLaunchSettings = true
+        isEditingBlock = true
     }
 
     /// Opens the week the lifter is actually in and collapses the rest. Only
@@ -163,27 +194,15 @@ private struct BlockOverview: View {
     @ViewBuilder
     private var headerSection: some View {
         if let block = model.selectedBlock {
-            Panel {
-                VStack(alignment: .leading, spacing: 9) {
-                    if let progress = block.progress(asOf: Date(), calendar: model.calendar) {
-                        // Reads "7 / 6" when a block runs long, rather than clamping
-                        // and pretending it's still on schedule.
-                        Readout(
-                            label: "week",
-                            value: progress.totalWeeks.map { "\(progress.weekIndex) / \($0)" }
-                                ?? "\(progress.weekIndex)",
-                            accent: Theme.signal,
-                            size: 17
-                        )
-                    }
-                    if let notes = block.notes, !notes.isEmpty {
-                        Rectangle().fill(Theme.hairline).frame(height: 1)
-                        Text(notes)
-                            .font(Theme.caption)
-                            .foregroundStyle(Theme.inkMuted)
-                    }
-                }
+            // The block's own panel is also the way into its settings, wearing
+            // the same pencil a programmed day does: a panel with that glyph
+            // opens an editor for what's in it. There's deliberately no second
+            // entry point in the toolbar menu — that menu picks *which* block,
+            // and one way to do one thing is the rule this app keeps applying.
+            Button { isEditingBlock = true } label: {
+                BlockHeaderPanel(block: block, calendar: model.calendar)
             }
+            .buttonStyle(.plain)
             .panelRow()
         }
 
@@ -274,6 +293,58 @@ private struct BlockOverview: View {
         week.days.reduce(0) { total, day in
             total + model.plannedWorkouts(on: day).reduce(0) { $0 + $1.allSets.count }
         }
+    }
+}
+
+/// The block at the top of the planner: what it's for, where it is, and the
+/// way into changing either.
+private struct BlockHeaderPanel: View {
+    let block: WorkoutBlock
+    let calendar: Calendar
+
+    var body: some View {
+        Panel {
+            VStack(alignment: .leading, spacing: 9) {
+                HStack(spacing: 8) {
+                    Text(block.notes?.isEmpty == false ? block.notes! : "Untitled block")
+                        .font(Theme.heading)
+                        .foregroundStyle(Theme.ink)
+                        .lineLimit(2)
+                    Spacer(minLength: 6)
+                    Image(systemName: "square.and.pencil")
+                        .font(.system(size: 13))
+                        .foregroundStyle(Theme.signal)
+                        .fixedSize()
+                }
+
+                Rectangle().fill(Theme.hairline).frame(height: 1)
+
+                if let progress = block.progress(asOf: Date(), calendar: calendar) {
+                    // Reads "7 / 6" when a block runs long, rather than clamping
+                    // and pretending it's still on schedule.
+                    Readout(
+                        label: "week",
+                        value: progress.totalWeeks.map { "\(progress.weekIndex) / \($0)" }
+                            ?? "\(progress.weekIndex)",
+                        accent: Theme.signal,
+                        size: 17
+                    )
+                }
+                if let dates {
+                    Readout(label: "dates", value: dates, accent: Theme.inkMuted, size: 14)
+                }
+            }
+        }
+    }
+
+    /// Shown so the start date is legible without opening the editor — it's the
+    /// setting most likely to be wrong, and a block that silently starts on the
+    /// day it was loaded is exactly how that goes unnoticed.
+    private var dates: String? {
+        guard let start = block.startDate else { return nil }
+        let opening = start.formatted(date: .abbreviated, time: .omitted)
+        guard let end = block.endDate else { return opening }
+        return "\(opening) – \(end.formatted(date: .abbreviated, time: .omitted))"
     }
 }
 
