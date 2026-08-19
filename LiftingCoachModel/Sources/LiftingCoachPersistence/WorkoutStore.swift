@@ -14,6 +14,9 @@ private struct WorkoutRow: Codable, FetchableRecord, PersistableRecord {
     var endTime: Date?
     var notes: String?
     var usernotes: String?
+    /// `nil` for a workout logged in this app; otherwise the translation that
+    /// produced it. See `Workout.source`.
+    var source: String?
 }
 
 private struct WorkoutExerciseRow: Codable, FetchableRecord, PersistableRecord {
@@ -49,6 +52,11 @@ struct WorkoutSetRow: Codable, FetchableRecord, PersistableRecord {
     /// Display/entry unit override for this set. Distinct from `weightUnit`
     /// above, which records what the logged weight actually is.
     var unit: String?
+    /// Time-based work: how long the set itself took. Nothing to do with the
+    /// two rest columns above, which measure the gap between sets.
+    var durationSeconds: Double?
+    var distanceValue: Double?
+    var distanceUnit: String?
     var rpe: Double?
     var notes: String?
     var usernotes: String?
@@ -67,6 +75,8 @@ struct WorkoutSetRow: Codable, FetchableRecord, PersistableRecord {
             restTime: restTime,
             restOverride: restOverride,
             unit: unit.flatMap(WeightUnit.init(rawValue:)),
+            duration: optionalDuration(seconds: durationSeconds),
+            distance: optionalDistance(value: distanceValue, symbol: distanceUnit),
             rpe: rpe.map(Float.init),
             notes: notes,
             usernotes: usernotes,
@@ -113,7 +123,8 @@ public struct WorkoutStore: Sendable {
                 startTime: workout.startTime,
                 endTime: workout.endTime,
                 notes: workout.notes,
-                usernotes: workout.usernotes
+                usernotes: workout.usernotes,
+                source: workout.source
             ).insert(db)
 
             for (groupIndex, group) in (workout.exercises ?? []).enumerated() {
@@ -147,6 +158,10 @@ public struct WorkoutStore: Sendable {
                             restTime: set.restTime,
                             restOverride: set.restOverride,
                             unit: set.unit?.rawValue,
+                            durationSeconds: set.duration
+                                .map { $0.converted(to: .seconds).value },
+                            distanceValue: set.distance?.value,
+                            distanceUnit: set.distance?.unit.symbol,
                             rpe: set.rpe.map(Double.init),
                             notes: set.notes,
                             usernotes: set.usernotes,
@@ -257,7 +272,8 @@ public struct WorkoutStore: Sendable {
             startTime: row.startTime,
             endTime: row.endTime,
             notes: row.notes,
-            usernotes: row.usernotes
+            usernotes: row.usernotes,
+            source: row.source
         )
     }
 

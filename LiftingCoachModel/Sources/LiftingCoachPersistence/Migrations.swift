@@ -434,6 +434,47 @@ extension AppDatabase {
             }
         }
 
+        // Additive, and it settles an open question rather than working around
+        // one.
+        //
+        // `Concepts.md` has carried "does `WorkoutSet` need non-strength
+        // fields?" as undecided since the model was written, on the reasoning
+        // that phase 1 is scoped to the owner's own barbell training. Importing
+        // five years of that training is what forces the answer: 75 of the
+        // logged sets are a walk, a bike, a swim, a plank — real sessions with
+        // no reps and no weight, and the only alternatives were to drop them or
+        // to bury "12 min · 2.4 mi" in a notes string nothing can read back.
+        //
+        // Duration needs no unit column: seconds is the only sane storage and
+        // there is nothing to disambiguate. Distance carries its symbol beside
+        // it, exactly as weight does — a distance logged in miles reads back in
+        // miles rather than as a converted decimal nobody entered.
+        //
+        // `workout.source` is provenance. `nil` is "logged in this app";
+        // anything else names the translation that produced the row. It's what
+        // makes an import re-runnable — a reload replaces `WHERE source = ?`
+        // instead of doubling the log — and what lets history admit a session
+        // came from somewhere else instead of quietly claiming it.
+        migrator.registerMigration("v13_setDurationDistance") { db in
+            try db.alter(table: "workoutSet") { t in
+                t.add(column: "durationSeconds", .double)
+                t.add(column: "distanceValue", .double)
+                t.add(column: "distanceUnit", .text)
+            }
+            try db.alter(table: "workout") { t in
+                t.add(column: "source", .text)
+            }
+            // Achieved maxes get the same tag, and need it more. They are
+            // append-only events, so a second run of an import would announce
+            // the same five years of records a second time with nothing able to
+            // tell the copies apart. Tagged, a reload deletes exactly what it
+            // wrote. Nothing in the app reads this column — it exists so an
+            // import can undo itself.
+            try db.alter(table: "achievedMax") { t in
+                t.add(column: "source", .text)
+            }
+        }
+
         return migrator
     }
 }

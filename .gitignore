@@ -28,3 +28,11 @@ build/
 .claude/settings.local.json
 # Worktrees are their own git checkouts — never commit them into this one.
 .claude/worktrees/
+
+## Personal training data
+# The Strong export is 1.4 MB of one person's health history and has no reason
+# to be in version control. What the repo *does* own is the reviewed
+# translation of it — scripts/data/strong_exercise_map.json — because that's
+# the part that took judgment and that anything else importing the same format
+# would need. See scripts/README.md.
+notes/Workout App/workout_history/

@@ -26,3 +26,32 @@ func optionalMeasurement(value: Double?, symbol: String?) -> Measurement<UnitMas
     guard let value else { return nil }
     return measurement(value: value, symbol: symbol)
 }
+
+/// Rebuilds a set's distance from a stored value and unit symbol.
+///
+/// Same contract as weights, and for the same reason: a bike ride logged in
+/// miles reads back in miles. Only the units a lifter plausibly records
+/// distance in are recognized; anything else round-trips as itself.
+func optionalDistance(value: Double?, symbol: String?) -> Measurement<UnitLength>? {
+    guard let value else { return nil }
+    guard let symbol else { return Measurement(value: value, unit: .meters) }
+
+    let unit: UnitLength = switch symbol {
+    case UnitLength.miles.symbol: .miles
+    case UnitLength.kilometers.symbol: .kilometers
+    case UnitLength.meters.symbol: .meters
+    case UnitLength.yards.symbol: .yards
+    case UnitLength.feet.symbol: .feet
+    default: UnitLength(symbol: symbol)
+    }
+    return Measurement(value: value, unit: unit)
+}
+
+/// Rebuilds a set's duration from stored seconds.
+///
+/// No symbol column to go with it: seconds is the only storage, so there is
+/// nothing here to disambiguate.
+func optionalDuration(seconds: Double?) -> Measurement<UnitDuration>? {
+    guard let seconds else { return nil }
+    return Measurement(value: seconds, unit: .seconds)
+}

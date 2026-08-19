@@ -84,6 +84,21 @@ public struct WorkoutSet: Codable, Hashable, Identifiable, Sendable {
     /// and rewrites nothing, exactly as `User.preferredUnit` does. 100 lb read
     /// in kg is 45.4 kg, the same iron; it is never reinterpreted as 100 kg.
     public var unit: WeightUnit?
+    /// How long the set took, for work measured in time rather than reps — a
+    /// plank, a bike interval, a walk.
+    ///
+    /// Distinct from every other duration on this type. `restTime` and
+    /// `restOverride` are both about the gap *between* sets; this is the set
+    /// itself. A set carrying a duration usually has no reps and no weight, and
+    /// that's a complete record rather than a half-filled one.
+    ///
+    /// A `Measurement` for the same reason weights are: the unit travels with
+    /// the number instead of living in a comment. Stored as seconds — there is
+    /// no second unit to disambiguate, unlike distance.
+    public var duration: Measurement<UnitDuration>?
+    /// How far, for work measured in distance. Same shape and same reasoning as
+    /// `duration`; the two usually appear together.
+    public var distance: Measurement<UnitLength>?
     /// Achieved effort as the lifter rated it, per set — never defaulted from
     /// the prescription. Same 1–10 scale as `EffortTarget`.
     public var rpe: Float?
@@ -105,6 +120,8 @@ public struct WorkoutSet: Codable, Hashable, Identifiable, Sendable {
         restTime: Int? = nil,
         restOverride: Int? = nil,
         unit: WeightUnit? = nil,
+        duration: Measurement<UnitDuration>? = nil,
+        distance: Measurement<UnitLength>? = nil,
         rpe: Float? = nil,
         notes: String? = nil,
         usernotes: String? = nil,
@@ -119,6 +136,8 @@ public struct WorkoutSet: Codable, Hashable, Identifiable, Sendable {
         self.restTime = restTime
         self.restOverride = restOverride
         self.unit = unit
+        self.duration = duration
+        self.distance = distance
         self.rpe = rpe
         self.notes = notes
         self.usernotes = usernotes

@@ -174,6 +174,14 @@ public struct Workout: Codable, Hashable, Identifiable, Sendable {
     public var endTime: Date?
     public var notes: String?
     public var usernotes: String?
+    /// Where this workout came from. `nil` means it was logged in this app;
+    /// anything else names the translation that produced it (`"strong-csv"`).
+    ///
+    /// Provenance, not a category. It earns its place twice: a reload can
+    /// replace exactly what a given source wrote instead of doubling the log,
+    /// and history can say a session was imported rather than letting five
+    /// years of someone else's app read as though it were tracked here.
+    public var source: String?
 
     public init(
         id: UUID = UUID(),
@@ -181,7 +189,8 @@ public struct Workout: Codable, Hashable, Identifiable, Sendable {
         startTime: Date? = nil,
         endTime: Date? = nil,
         notes: String? = nil,
-        usernotes: String? = nil
+        usernotes: String? = nil,
+        source: String? = nil
     ) {
         self.id = id
         self.exercises = exercises
@@ -189,6 +198,7 @@ public struct Workout: Codable, Hashable, Identifiable, Sendable {
         self.endTime = endTime
         self.notes = notes
         self.usernotes = usernotes
+        self.source = source
     }
 
     /// A workout that has been started but not ended.
