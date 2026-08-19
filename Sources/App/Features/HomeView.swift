@@ -10,11 +10,18 @@ import LiftingCoachModel
 struct HomeView: View {
     @Environment(AppEnvironment.self) private var environment
 
-    /// Switches to the Workout tab. Home shows today's session and hands off to
-    /// the tab that owns it; it deliberately doesn't *start* anything, because
-    /// starting writes a real in-progress workout and a stray tap on a home
-    /// screen shouldn't do that. One more tap on the other side begins it.
-    var onOpenWorkout: () -> Void = {}
+    /// Starts a programmed day and switches to the Workout tab.
+    ///
+    /// This used to only navigate, on the reasoning that starting writes a real
+    /// in-progress workout and a stray tap on a home screen shouldn't. In
+    /// practice the card is the one thing on Home a lifter deliberately reaches
+    /// for, and landing on a screen that asks you to tap the same workout again
+    /// is the app making you say it twice. Reversed on the owner's call.
+    ///
+    /// Home still doesn't own session state — it hands the planned day to the
+    /// Workout tab, which starts it. And starting is not destructive: an
+    /// in-progress workout is never clobbered, and DISCARD is one tap away.
+    var onStartWorkout: (PlannedWorkout) -> Void = { _ in }
 
     @State private var plan = WorkoutPlan()
     @State private var todaysPlan: [PlannedWorkout] = []
@@ -69,7 +76,7 @@ struct HomeView: View {
             .panelRow()
         } else {
             ForEach(todaysPlan) { workout in
-                Button(action: onOpenWorkout) {
+                Button { onStartWorkout(workout) } label: {
                     Panel(accent: Theme.signal.opacity(0.45)) {
                         HStack(alignment: .center, spacing: 10) {
                             VStack(alignment: .leading, spacing: 7) {
@@ -95,7 +102,7 @@ struct HomeView: View {
                             // The card is the affordance now. It used to read
                             // "Open the Workout tab to start," which is an app
                             // asking to be navigated by hand.
-                            Image(systemName: "chevron.right")
+                            Image(systemName: "play.fill")
                                 .font(.system(size: 14, weight: .semibold))
                                 .foregroundStyle(Theme.signal)
                         }

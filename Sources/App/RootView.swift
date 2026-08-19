@@ -1,4 +1,5 @@
 import SwiftUI
+import LiftingCoachModel
 
 /// Top-level navigation.
 ///
@@ -7,6 +8,12 @@ import SwiftUI
 /// belongs as an overlay over whatever the user is already doing, not as a tab.
 struct RootView: View {
     @State private var selection = RootTab.initialFromLaunchArguments
+    /// A day Home asked to start, handed to the Workout tab to act on.
+    ///
+    /// Passed rather than started here because the Workout tab owns session
+    /// state and there is exactly one owner. Cleared by the tracker once it has
+    /// taken it, so switching tabs later can't start the same day twice.
+    @State private var pendingStart: PlannedWorkout?
 
     var body: some View {
         tabs
@@ -26,10 +33,13 @@ struct RootView: View {
     private var tabs: some View {
         TabView(selection: $selection) {
             Tab("Home", systemImage: "house.fill", value: RootTab.home) {
-                HomeView(onOpenWorkout: { selection = .workout })
+                HomeView(onStartWorkout: { planned in
+                    pendingStart = planned
+                    selection = .workout
+                })
             }
             Tab("Workout", systemImage: "figure.strengthtraining.traditional", value: RootTab.workout) {
-                WorkoutTrackerView()
+                WorkoutTrackerView(pendingStart: $pendingStart)
             }
             Tab("Plan", systemImage: "calendar.badge.clock", value: RootTab.plan) {
                 WorkoutPlannerView()

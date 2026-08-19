@@ -6,6 +6,10 @@ import LiftingCoachModel
 /// `Roadmap.md` names this as the first thing to build in phase 1: it's
 /// fundamentally device-local and needs nothing from the backend.
 struct WorkoutTrackerView: View {
+    /// A day Home asked to start. Consumed once and cleared — see
+    /// `consumePendingStart`.
+    @Binding var pendingStart: PlannedWorkout?
+
     @Environment(AppEnvironment.self) private var environment
     @State private var model: TrackerModel?
     @State private var isPickingExercise = false
@@ -225,12 +229,30 @@ struct WorkoutTrackerView: View {
         model?.start(from: planned, block: block, user: environment.currentUser)
     }
 
+    /// Takes the day Home handed over, if there is one, and starts it.
+    ///
+    /// Cleared unconditionally, so a request is acted on at most once — coming
+    /// back to this tab later must not restart the same day.
+    ///
+    /// **An in-progress workout wins.** If the lifter is already mid-session,
+    /// the request is dropped rather than replacing it: starting from a plan
+    /// would throw away sets that are already logged, and a tap on a home
+    /// screen is nowhere near enough authority for that (Core Tenets §8). They
+    /// land on the session they're actually in, which is what they wanted.
+    private func consumePendingStart() {
+        guard let planned = pendingStart else { return }
+        pendingStart = nil
+        guard let model, !model.isActive else { return }
+        start(planned)
+    }
+
     // MARK: Active workout
 
     private func activeWorkout(_ model: TrackerModel) -> some View {
         ActiveWorkoutList(
             model: model,
-            unit: environment.weightUnit,
+            unitFor: { environment.weightUnit(forExerciseID: $0) },
+            onSetExerciseUnit: { environment.setExerciseUnit($1, forExerciseID: $0) },
             onAddExercise: { isPickingExercise = true }
         )
         .themedConfirm(
