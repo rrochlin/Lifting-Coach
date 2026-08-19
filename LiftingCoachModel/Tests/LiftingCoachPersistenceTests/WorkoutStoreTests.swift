@@ -463,3 +463,189 @@ struct SupersetPersistenceTests {
         #expect(summaries[0].startTime == noon)
     }
 }
+
+/// Editing a workout that's already in the log.
+///
+/// `update` exists because `save` takes `blockId` as a parameter and `Workout`
+/// has no such field — so an edit that round-trips through `fetch` would write
+/// `NULL` back and detach the workout from the block it was performed in.
+@Suite("Rewriting a logged workout")
+struct WorkoutUpdateTests {
+
+    @Test("An updated workout keeps its block")
+    func updatePreservesBlockId() throws {
+        let database = try AppDatabase.inMemory()
+        try ExerciseStore(database).save(ExerciseCatalog.seed)
+        let users = UserStore(database, calendar: calendar)
+        let user = try users.localUser()
+        let plans = PlanStore(database, calendar: calendar)
+        let store = WorkoutStore(database, calendar: calendar)
+
+        let block = WorkoutBlock(startDate: noon, endDate: later(86_400 * 28))
+        try plans.save(block, userId: user.id)
+
+        var session = WorkoutSession.start(
+            from: PlannedWorkout(exercises: [[
+                PlannedExercise(exercise: squat, sets: [PlannedSet(reps: 5, type: .working)])
+            ]]),
+            at: noon
+        )
+        session.completeSet(id: session.workout.allSets[0].id, at: later(60))
+        session.finish(at: later(3600))
+        try store.save(session.workout, blockId: block.id)
+
+        // The correction: a mislogged rep count, fixed months later.
+        var workout = try #require(try store.fetch(id: session.workout.id))
+        workout.exercises?[0][0].sets?[0].reps = 4
+        try store.update(workout)
+
+        let reloaded = try #require(try store.fetch(id: workout.id))
+        #expect(reloaded.allSets[0].reps == 4)
+
+        let blockId: String? = try database.writer.read { db in
+            try String.fetchOne(
+                db,
+                sql: "SELECT blockId FROM workout WHERE id = ?",
+                arguments: [workout.id.uuidString]
+            )
+        }
+        #expect(blockId == block.id.uuidString)
+    }
+
+    @Test("Updating a workout that was never in a block leaves it that way")
+    func updateKeepsNilBlockId() throws {
+        let (store, database) = try makeStore()
+
+        var session = WorkoutSession.start(
+            from: PlannedWorkout(exercises: [[
+                PlannedExercise(exercise: bench, sets: [PlannedSet(reps: 5, type: .working)])
+            ]]),
+            at: noon
+        )
+        session.completeSet(id: session.workout.allSets[0].id, at: later(60))
+        session.finish(at: later(3600))
+        try store.save(session.workout)
+
+        var workout = try #require(try store.fetch(id: session.workout.id))
+        workout.notes = "Push day"
+        try store.update(workout)
+
+        let blockId: String? = try database.writer.read { db in
+            try String.fetchOne(
+                db,
+                sql: "SELECT blockId FROM workout WHERE id = ?",
+                arguments: [workout.id.uuidString]
+            )
+        }
+        #expect(blockId == nil)
+        #expect(try store.fetch(id: workout.id)?.notes == "Push day")
+    }
+
+    /// Provenance survives an edit. The importer replaces its own rows by
+    /// matching on `source`, so an imported workout that lost the tag when the
+    /// lifter fixed a rep count would be duplicated on the next reload.
+    @Test("An edited import is still an import")
+    func updateKeepsSource() throws {
+        let (store, _) = try makeStore()
+
+        let workout = Workout(
+            exercises: [[WorkoutExercise(exercise: squat, sets: [
+                WorkoutSet(reps: 5, weight: Measurement(value: 315, unit: .pounds), complete: true, type: .working)
+            ])]],
+            startTime: noon,
+            endTime: later(3600),
+            source: "strong-csv"
+        )
+        try store.save(workout)
+
+        var edited = try #require(try store.fetch(id: workout.id))
+        edited.exercises?[0][0].sets?[0].weight = Measurement(value: 325, unit: .pounds)
+        try store.update(edited)
+
+        let reloaded = try #require(try store.fetch(id: workout.id))
+        #expect(reloaded.source == "strong-csv")
+        #expect(reloaded.allSets[0].weight?.value == 325)
+    }
+
+    /// `day` is what the calendar and the block-adherence join read. Moving a
+    /// workout's start time has to move it, or a session corrected from 11pm
+    /// Monday to 1am Tuesday still counts as Monday's.
+    @Test("Correcting the start time moves the workout's calendar day")
+    func updateRecomputesDay() throws {
+        let (store, database) = try makeStore()
+
+        let workout = Workout(
+            exercises: [[WorkoutExercise(exercise: squat, sets: [
+                WorkoutSet(reps: 5, complete: true, type: .working)
+            ])]],
+            startTime: noon,
+            endTime: later(3600)
+        )
+        try store.save(workout)
+
+        var edited = try #require(try store.fetch(id: workout.id))
+        edited.startTime = later(86_400)
+        edited.endTime = later(86_400 + 3600)
+        try store.update(edited)
+
+        let day: Date? = try database.writer.read { db in
+            try Date.fetchOne(
+                db,
+                sql: "SELECT day FROM workout WHERE id = ?",
+                arguments: [workout.id.uuidString]
+            )
+        }
+        #expect(day == calendar.startOfDay(for: later(86_400)))
+    }
+}
+
+@Suite("Completion timestamps survive storage")
+struct SetTimestampPersistenceTests {
+
+    /// Sub-second precision is the whole point: this is the anchor a heart rate
+    /// series (or anything else on the same clock) would be correlated against.
+    /// A store that rounded to the second would quietly make that useless.
+    @Test("A completion timestamp round-trips to the millisecond")
+    func roundTripsMillisecondPrecision() throws {
+        let (store, _) = try makeStore()
+        let stamped = noon.addingTimeInterval(63.125)
+
+        let workout = Workout(
+            exercises: [[WorkoutExercise(exercise: squat, sets: [
+                WorkoutSet(
+                    reps: 5,
+                    weight: Measurement(value: 315, unit: .pounds),
+                    complete: true,
+                    type: .working,
+                    timeComplete: stamped
+                )
+            ])]],
+            startTime: noon,
+            endTime: later(3600)
+        )
+        try store.save(workout)
+
+        let reloaded = try #require(try store.fetch(id: workout.id))
+        let read = try #require(reloaded.allSets[0].timeComplete)
+        #expect(abs(read.timeIntervalSince(stamped)) < 0.001)
+    }
+
+    /// Imported history has none, and can't: the source export carries no
+    /// per-set times. A nil here is honest and has to stay representable.
+    @Test("An unstamped set stays unstamped")
+    func roundTripsMissingTimestamp() throws {
+        let (store, _) = try makeStore()
+        let workout = Workout(
+            exercises: [[WorkoutExercise(exercise: squat, sets: [
+                WorkoutSet(reps: 5, complete: true, type: .working)
+            ])]],
+            startTime: noon,
+            endTime: later(3600),
+            source: "strong-csv"
+        )
+        try store.save(workout)
+
+        let reloaded = try #require(try store.fetch(id: workout.id))
+        #expect(reloaded.allSets[0].timeComplete == nil)
+    }
+}

@@ -92,6 +92,42 @@ enum LaunchArguments {
     static var restDemoSeconds: Int? {
         value(for: "-restDemo").flatMap(Int.init)
     }
+
+    /// `-openExercisePicker` opens the tracker's exercise picker on launch, and
+    /// `-openExercisePicker <name>` pushes straight through to the detail
+    /// screen of the first exercise whose name contains that text.
+    ///
+    /// Both are two taps deep — the picker behind "Add Exercise", the detail
+    /// behind a row — so neither is otherwise reachable from the command line.
+    static var exercisePickerQuery: String? {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let index = arguments.firstIndex(of: "-openExercisePicker") else { return nil }
+        let next = arguments.index(after: index)
+        // A bare flag opens the list; a following value that isn't itself a
+        // flag names the exercise to push onto.
+        guard next < arguments.endIndex, !arguments[next].hasPrefix("-") else { return "" }
+        return arguments[next]
+    }
+
+    /// `-openWorkoutDetail 0` pushes the detail screen of the nth most recent
+    /// logged workout (0-based). Needs `-initialTab history` beside it — the
+    /// flag is read where that tab is built.
+    ///
+    /// The detail screen is behind a row tap, so this is the only way to see it
+    /// from the command line.
+    static var workoutDetailIndex: Int? {
+        value(for: "-openWorkoutDetail").flatMap(Int.init)
+    }
+
+    /// `-editWorkout` opens that detail screen straight into edit mode.
+    ///
+    /// Edit mode is behind a toolbar tap, which puts it in the same category as
+    /// the picker and the rest editor: reachable by hand, invisible to simctl.
+    /// Same family of stopgap as `-initialTab`, and it stops being needed the
+    /// day there's a UI test target.
+    static var opensWorkoutEditor: Bool {
+        ProcessInfo.processInfo.arguments.contains("-editWorkout")
+    }
 }
 
 #Preview {

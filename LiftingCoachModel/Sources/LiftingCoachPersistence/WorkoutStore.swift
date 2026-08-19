@@ -85,6 +85,50 @@ struct WorkoutSetRow: Codable, FetchableRecord, PersistableRecord {
     }
 }
 
+// MARK: - Summary
+
+/// Enough of a logged workout to draw one row of history, and nothing more.
+///
+/// Deliberately not a `Workout` with some fields left empty: a half-filled
+/// domain value invites a caller to reach for `allSets` and get a wrong answer
+/// silently. This type simply doesn't have sets, so the compiler says so.
+public struct WorkoutSummary: Hashable, Sendable, Identifiable {
+    public var id: UUID
+    public var startTime: Date?
+    public var endTime: Date?
+    /// The workout's own title, where it has one ("Legs", "Full Body 1").
+    public var notes: String?
+    /// `nil` for a workout logged in this app. See `Workout.source`.
+    public var source: String?
+    /// Exercise display names in the order they were performed.
+    public var exerciseNames: [String]
+    public var completedSetCount: Int
+
+    public init(
+        id: UUID,
+        startTime: Date? = nil,
+        endTime: Date? = nil,
+        notes: String? = nil,
+        source: String? = nil,
+        exerciseNames: [String] = [],
+        completedSetCount: Int = 0
+    ) {
+        self.id = id
+        self.startTime = startTime
+        self.endTime = endTime
+        self.notes = notes
+        self.source = source
+        self.exerciseNames = exerciseNames
+        self.completedSetCount = completedSetCount
+    }
+
+    /// How long the session took, when both ends are known.
+    public var duration: TimeInterval? {
+        guard let startTime, let endTime else { return nil }
+        return endTime.timeIntervalSince(startTime)
+    }
+}
+
 // MARK: - Store
 
 /// Read/write access to logged workouts.
@@ -173,6 +217,25 @@ public struct WorkoutStore: Sendable {
         }
     }
 
+    /// Rewrites a workout already in the log, keeping its block association.
+    ///
+    /// `save` takes `blockId` as a parameter because the caller is the only one
+    /// who knows it — `Workout` has no such field, and `hydrate` therefore
+    /// can't return one. That's correct for logging a *new* workout and wrong
+    /// for correcting an old one: an edit round-trips through `fetch`, so
+    /// calling `save` on the result would write `blockId = NULL` and quietly
+    /// detach the workout from the block it was performed in.
+    ///
+    /// Nothing writes `blockId` today (the tracker saves without one, and
+    /// adherence joins by date), so this is not a live bug — it is the one line
+    /// that stops editing history from becoming one the moment something does.
+    public func update(_ workout: Workout) throws {
+        let existingBlockId = try database.writer.read { db in
+            try WorkoutRow.fetchOne(db, key: workout.id.uuidString)?.blockId
+        }
+        try save(workout, blockId: existingBlockId.flatMap(UUID.init(uuidString:)))
+    }
+
     public func delete(id: UUID) throws {
         _ = try database.writer.write { db in
             try WorkoutRow.deleteOne(db, key: id.uuidString)
@@ -210,6 +273,88 @@ public struct WorkoutStore: Sendable {
                 .order(Column("startTime"))
                 .fetchAll(db)
                 .map { try hydrate($0, db) }
+        }
+    }
+
+    /// A page of finished workouts, newest first, without hydrating any of them.
+    ///
+    /// `fetch(from:to:)` builds whole `Workout` values — a query per exercise, a
+    /// query per set, and a catalog lookup for each — which is right when
+    /// something is going to read the sets and ruinous when it isn't. The
+    /// History list renders a date, a few names and a count; against five years
+    /// of imported history that was several thousand queries to draw a screen
+    /// nobody had scrolled yet.
+    ///
+    /// Three bounded queries per page instead: the rows, then the names and the
+    /// counts for exactly those ids. Names are fetched separately rather than
+    /// with `group_concat` because ordering inside that aggregate needs a SQLite
+    /// newer than the deployment target can promise, and the order exercises
+    /// were performed in is the whole point of showing them.
+    ///
+    /// - Parameter before: return workouts started strictly before this instant.
+    ///   Pass the last summary's `startTime` to page backwards.
+    public func fetchSummaries(limit: Int, before: Date? = nil) throws -> [WorkoutSummary] {
+        try database.writer.read { db in
+            var request = WorkoutRow
+                // History is what was finished. The in-progress session belongs
+                // to the tracker, and listing it here would offer a way to open
+                // a workout that is still being written.
+                .filter(Column("endTime") != nil)
+                .order(Column("startTime").desc)
+                .limit(limit)
+            if let before {
+                request = request.filter(Column("startTime") < before)
+            }
+            let rows = try request.fetchAll(db)
+            guard !rows.isEmpty else { return [] }
+
+            let ids = rows.map(\.id)
+            let placeholders = databaseQuestionMarks(count: ids.count)
+
+            var names: [String: [String]] = [:]
+            let nameRows = try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT we.workoutId AS workoutId,
+                           COALESCE(NULLIF(we.variant, ''), e.name) AS name
+                    FROM workoutExercise we
+                    JOIN exercise e ON e.id = we.exerciseId
+                    WHERE we.workoutId IN (\(placeholders))
+                    ORDER BY we.workoutId, we.groupIndex, we.position
+                    """,
+                arguments: StatementArguments(ids)
+            )
+            for row in nameRows {
+                names[row["workoutId"], default: []].append(row["name"])
+            }
+
+            var counts: [String: Int] = [:]
+            let countRows = try Row.fetchAll(
+                db,
+                sql: """
+                    SELECT we.workoutId AS workoutId, COUNT(*) AS n
+                    FROM workoutSet s
+                    JOIN workoutExercise we ON we.id = s.workoutExerciseId
+                    WHERE we.workoutId IN (\(placeholders)) AND s.complete = 1
+                    GROUP BY we.workoutId
+                    """,
+                arguments: StatementArguments(ids)
+            )
+            for row in countRows {
+                counts[row["workoutId"]] = row["n"]
+            }
+
+            return rows.map { row in
+                WorkoutSummary(
+                    id: UUID(uuidString: row.id) ?? UUID(),
+                    startTime: row.startTime,
+                    endTime: row.endTime,
+                    notes: row.notes,
+                    source: row.source,
+                    exerciseNames: names[row.id] ?? [],
+                    completedSetCount: counts[row.id] ?? 0
+                )
+            }
         }
     }
 

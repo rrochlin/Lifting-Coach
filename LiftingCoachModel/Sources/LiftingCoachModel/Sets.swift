@@ -51,6 +51,33 @@ public struct WorkoutSet: Codable, Hashable, Identifiable, Sendable {
     public var weight: Measurement<UnitMass>?
     public var complete: Bool?
     public var type: SetType?
+    /// When this set was checked off, to the millisecond.
+    ///
+    /// **It is the tap, not the last rep.** The lifter racks the bar, breathes,
+    /// picks the phone up and hits the checkbox, so this runs late by however
+    /// long that took — a lag that never cancels out, and the same bias that
+    /// got measured rest deleted from this app (see `restTime` below). Anything
+    /// reading these as physiology has to carry that caveat with it; nothing
+    /// here should quietly present one as the instant the set ended.
+    ///
+    /// **A set is stamped as an instant, not an interval.** There is no
+    /// recorded start, so "when was this lifter working rather than resting"
+    /// is not answerable from the log — it can only be *inferred* from
+    /// consecutive completions, and that inference belongs to whatever does the
+    /// analysis, not to storage. Recording a real start was considered and
+    /// deliberately not built: the honest ways to get one are a per-set gesture
+    /// mid-workout or an event written when the rest timer ends, and neither is
+    /// worth its cost until something actually consumes the data.
+    ///
+    /// The point of keeping it precise anyway is correlation later — a heart
+    /// rate series, or anything else on the same clock, lined up against the
+    /// moment work stopped. That's why it's stored to the millisecond and why
+    /// nothing rounds it.
+    ///
+    /// `nil` in two cases, both honest: a set that isn't complete, and the
+    /// imported history — Strong's export carries no per-set times, so 14,520
+    /// sets have none and never will. Any analysis has to tolerate that hole
+    /// rather than filling it in.
     public var timeComplete: Date?
     /// Legacy: rest actually taken, in seconds. **Nothing writes this any more.**
     ///
