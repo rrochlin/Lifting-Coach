@@ -64,42 +64,177 @@ struct NumberField<F: ParseableFormatStyle>: View where F.FormatOutput == String
                 accent: focused ? Theme.signal : Theme.fieldEdge
             )
             #if os(iOS)
-            .toolbar { keyboardBar }
+            .numericKeyboardBar(
+                isFocused: focused, label: label, step: step,
+                onStep: onStep, onDone: { focused = false }
+            )
+            #endif
+    }
+}
+
+// MARK: - Suggesting field
+
+/// A number field that can be **empty**, showing what the lifter did last time
+/// as a proposal rather than as a value.
+///
+/// The problem it solves: `NumberField` binds a non-optional number, so an
+/// unlogged set rendered `0` — a weight nobody has ever lifted, sitting in the
+/// field as though it were data. Strong and Hevy both show last session's
+/// numbers greyed instead, and checking the set off accepts them.
+///
+/// **What's shown here is a proposal, not a prescription.** It only ever fills
+/// a field that is otherwise empty: a set carrying program data keeps it, since
+/// `WorkoutSession.start(from:)` writes the prescribed reps and resolved weight
+/// as real values. So this never overrides what a coach asked for — it fills in
+/// where nothing was asked at all (Core Tenets §1).
+///
+/// **It is not styled with colour alone.** The placeholder is `inkMuted`, which
+/// meets AA as text because it is text you can commit by tapping a checkbox —
+/// not decorative hint text. Where the number came from is said in words on the
+/// annotation line, because "this is a suggestion" is not something a shade of
+/// grey can convey to everyone (WCAG §1.4.1).
+struct SuggestingNumberField: View {
+    /// `nil` means the lifter hasn't entered anything here.
+    @Binding var value: Double?
+    /// What they did last time, shown greyed when `value` is nil.
+    var suggestion: Double?
+    /// Digits to keep. Reps take 0; a weight takes 2.
+    var fractionDigits: Int = 2
+    var label: String = ""
+    var isActive: Bool = true
+    var font: Font = Theme.data(15, weight: .medium)
+    var foreground: Color = Theme.ink
+    var minWidth: CGFloat = 30
+    var maxWidth: CGFloat = 72
+    var step: Double?
+    var onStep: (Double) -> Void = { _ in }
+
+    @FocusState private var focused: Bool
+    /// Editing happens in text so the field can be genuinely empty. A numeric
+    /// binding has no way to represent "nothing typed yet".
+    @State private var text: String = ""
+
+    var body: some View {
+        TextField("", text: $text, prompt: prompt)
+            #if os(iOS)
+            .keyboardType(.decimalPad)
+            #endif
+            .focused($focused)
+            .font(font)
+            .foregroundStyle(foreground)
+            .multilineTextAlignment(.center)
+            .frame(minWidth: minWidth, maxWidth: maxWidth)
+            .editableField(
+                isActive: focused || isActive,
+                accent: focused ? Theme.signal : Theme.fieldEdge
+            )
+            // Committing on blur, never per keystroke — the same contract
+            // `NumberField` has. A `2` on the way to `225` is not a weight.
+            .onChange(of: focused) { _, isFocused in
+                if !isFocused { commit() }
+            }
+            .onAppear { text = Self.format(value, fractionDigits: fractionDigits) }
+            // A step button (or any other writer) changed the value out from
+            // under the text — take it, unless the lifter is mid-type.
+            .onChange(of: value) { _, newValue in
+                guard !focused else { return }
+                text = Self.format(newValue, fractionDigits: fractionDigits)
+            }
+            #if os(iOS)
+            .numericKeyboardBar(
+                isFocused: focused, label: label, step: step,
+                onStep: onStep, onDone: { focused = false }
+            )
             #endif
     }
 
-    @ToolbarContentBuilder
-    private var keyboardBar: some ToolbarContent {
-        if focused {
-            ToolbarItemGroup(placement: .keyboard) {
-                if let step {
-                    stepButton(-step)
-                    stepButton(step)
-                }
-                if !label.isEmpty {
-                    Text(label.uppercased())
-                        .font(Theme.label)
-                        .tracking(1.4)
-                        .foregroundStyle(Theme.inkMuted)
-                        // The bar is wide and the label is one word; without
-                        // this it wraps to "WEIG / HT" beside the steppers.
-                        .lineLimit(1)
-                        .fixedSize()
-                }
-                Spacer()
-                Button("DONE") { focused = false }
-                    .font(Theme.label)
-                    .tracking(1.4)
-                    .foregroundStyle(Theme.signal)
-            }
-        }
+    private var prompt: Text? {
+        guard let suggestion else { return nil }
+        return Text(Self.format(suggestion, fractionDigits: fractionDigits))
+            .foregroundColor(Theme.inkMuted)
     }
 
-    /// Steps apply immediately and leave the field focused — the lifter is
-    /// usually adding a plate and then another one.
-    private func stepButton(_ delta: Double) -> some View {
-        Button { onStep(delta) } label: {
-            Text(Self.stepLabel(delta))
+    /// Clearing the field is a real edit — it means "I didn't do this" — so an
+    /// empty string writes `nil` rather than being ignored.
+    private func commit() {
+        let trimmed = text.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty {
+            value = nil
+            return
+        }
+        // A comma decimal separator is what some locales' pads emit.
+        guard let parsed = Double(trimmed.replacingOccurrences(of: ",", with: ".")) else {
+            // Unparseable input reverts rather than silently becoming zero.
+            text = Self.format(value, fractionDigits: fractionDigits)
+            return
+        }
+        value = parsed
+        text = Self.format(parsed, fractionDigits: fractionDigits)
+    }
+
+    static func format(_ value: Double?, fractionDigits: Int) -> String {
+        guard let value else { return "" }
+        return value.formatted(.number.precision(.fractionLength(0...fractionDigits)))
+    }
+}
+
+// MARK: - The keyboard bar
+
+extension View {
+    /// The accessory bar every numeric field carries. Shared rather than
+    /// duplicated, so the two field types can't drift apart on the one
+    /// interaction they both exist to provide.
+    @ViewBuilder
+    func numericKeyboardBar(
+        isFocused: Bool,
+        label: String,
+        step: Double?,
+        onStep: @escaping (Double) -> Void,
+        onDone: @escaping () -> Void
+    ) -> some View {
+        #if os(iOS)
+        self.toolbar {
+            // Only the focused field contributes a bar. Every set row holds two
+            // of these; without the guard each one adds its own and they stack.
+            if isFocused {
+                ToolbarItemGroup(placement: .keyboard) {
+                    if let step {
+                        StepButton(delta: -step, action: onStep)
+                        StepButton(delta: step, action: onStep)
+                    }
+                    if !label.isEmpty {
+                        Text(label.uppercased())
+                            .font(Theme.label)
+                            .tracking(1.4)
+                            .foregroundStyle(Theme.inkMuted)
+                            // The bar is wide and the label is one word;
+                            // without this it wraps to "WEIG / HT".
+                            .lineLimit(1)
+                            .fixedSize()
+                    }
+                    Spacer()
+                    Button("DONE", action: onDone)
+                        .font(Theme.label)
+                        .tracking(1.4)
+                        .foregroundStyle(Theme.signal)
+                }
+            }
+        }
+        #else
+        self
+        #endif
+    }
+}
+
+/// Steps apply immediately and leave the field focused — the lifter is usually
+/// adding a plate and then another one.
+private struct StepButton: View {
+    let delta: Double
+    let action: (Double) -> Void
+
+    var body: some View {
+        Button { action(delta) } label: {
+            Text(Self.label(delta))
                 .font(Theme.data(15, weight: .medium))
                 .foregroundStyle(Theme.ink)
                 .frame(minWidth: 54, minHeight: 30)
@@ -114,7 +249,7 @@ struct NumberField<F: ParseableFormatStyle>: View where F.FormatOutput == String
     }
 
     /// A true minus sign, and no trailing `.0` on a whole-number step.
-    static func stepLabel(_ delta: Double) -> String {
+    static func label(_ delta: Double) -> String {
         let magnitude = abs(delta)
         let text = magnitude == magnitude.rounded()
             ? String(Int(magnitude))

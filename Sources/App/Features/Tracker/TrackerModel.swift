@@ -63,6 +63,7 @@ final class TrackerModel {
         do {
             if let workout = try workouts.fetchInProgress() {
                 session = WorkoutSession(workout: workout)
+                loadSuggestionHistory()
             }
         } catch {
             saveError = error.localizedDescription
@@ -71,11 +72,13 @@ final class TrackerModel {
 
     func startAdHoc(at date: Date = Date()) {
         session = WorkoutSession.adHoc(at: date)
+        loadSuggestionHistory()
         persist()
     }
 
     func start(from planned: PlannedWorkout, block: WorkoutBlock? = nil, user: User? = nil) {
         session = WorkoutSession.start(from: planned, block: block, user: user)
+        loadSuggestionHistory()
         persist()
     }
 
@@ -156,6 +159,41 @@ final class TrackerModel {
         }
     }
 
+    // MARK: Suggestions
+
+    /// Last completed session for each exercise in this workout, keyed by
+    /// `Exercise.id` — where the greyed proposals in empty set fields come
+    /// from.
+    ///
+    /// Loaded once when the session starts rather than per row: the picker is
+    /// not on screen, the log isn't changing underneath us, and a query per set
+    /// per redraw would be an aggregate in the hot path of a workout.
+    private(set) var lastSessions: [Int: [WorkoutSet]] = [:]
+
+    private func loadSuggestionHistory() {
+        guard let session else { return }
+        var loaded: [Int: [WorkoutSet]] = [:]
+        for exercise in session.exerciseGroups.flatMap({ $0 }) {
+            let id = exercise.exercise.id
+            guard loaded[id] == nil else { continue }
+            // Open-choice slots are deliberately included: unlike an achieved
+            // max, "what did I load last time I did some triceps thing" is a
+            // useful starting point even when it might not be the same
+            // movement — because it's a proposal the lifter edits, not a
+            // record being compared (Core Tenets §6 vs §1).
+            if let previous = try? stats.lastSession(forExerciseID: id) {
+                loaded[id] = previous.sets
+            }
+        }
+        lastSessions = loaded
+    }
+
+    /// What to propose for one set, or nil if there's nothing to say.
+    func suggestion(forSetAt index: Int, in exercise: WorkoutExercise) -> SetSuggestion.Values? {
+        guard let previous = lastSessions[exercise.exercise.id] else { return nil }
+        return SetSuggestion.forSet(at: index, in: exercise.sets ?? [], previous: previous)
+    }
+
     func dismissAchievedMaxBanner() {
         newAchievedMax = nil
     }
@@ -179,6 +217,9 @@ final class TrackerModel {
 
     func updateExercise(id: UUID, _ change: (inout WorkoutExercise) -> Void) {
         mutate { $0.updateExercise(id: id, change) }
+        // Filling an open-choice slot changes which lift this is, and therefore
+        // whose history to propose from.
+        loadSuggestionHistory()
     }
 
     func addSet(toExerciseWith id: UUID) {
@@ -196,6 +237,10 @@ final class TrackerModel {
 
     func addExercise(_ exercise: Exercise, sets: Int = 1) {
         mutate { $0.addExercise(exercise, sets: sets) }
+        // An exercise chosen mid-workout has its own history, and it's exactly
+        // the case suggestions matter most for — an unplanned lift arrives with
+        // no prescription at all.
+        loadSuggestionHistory()
     }
 
     func deleteExercise(id: UUID) {
