@@ -350,6 +350,46 @@ extension AppDatabase {
             }
         }
 
+        // Additive, same reasoning as v2-v7 above.
+        //
+        // Backs User.exerciseUnits: a sticky per-lift reading preference, so a
+        // rack of kg dumbbells stays kg for that exercise instead of being
+        // re-set every session.
+        //
+        // Its own table rather than a column on `exercise`, because it is a
+        // property of the *lifter*, not of the catalog entry. The catalog is
+        // shared, vendored reference data whose rows are identity claims
+        // (`sourceSlug`); writing a personal preference into one would make a
+        // re-import either clobber it or have to preserve it. Shaped exactly
+        // like `goalMax` — the other per-user, per-exercise setting.
+        migrator.registerMigration("v10_exerciseUnitPreference") { db in
+            try db.create(table: "exerciseUnitPreference") { t in
+                t.autoIncrementedPrimaryKey("rowid")
+                t.column("userId", .text).notNull()
+                    .references("user", onDelete: .cascade)
+                t.column("exerciseId", .integer).notNull()
+                    .references("exercise", onDelete: .cascade)
+                t.column("unit", .text).notNull()
+                t.uniqueKey(["userId", "exerciseId"])
+            }
+        }
+
+        // Additive, same reasoning as v2-v7 above.
+        //
+        // Backs WorkoutSet.unit — the most specific level of the unit chain,
+        // for the one set done on the kg rack.
+        //
+        // A column of its own rather than reading the unit off the stored
+        // weight: an empty set has no weight and still needs to know what unit
+        // it is being entered in. And this is a display preference, so it must
+        // not be confused with `weightUnit` beside it, which records what the
+        // weight actually was.
+        migrator.registerMigration("v11_setUnitOverride") { db in
+            try db.alter(table: "workoutSet") { t in
+                t.add(column: "unit", .text)
+            }
+        }
+
         return migrator
     }
 }

@@ -42,6 +42,14 @@ public struct User: Codable, Hashable, Identifiable, Sendable {
     public var goalMaxes: [Int: GoalMax]?
     /// Keyed by start of day, same convention as `WorkoutBlock`'s dictionaries.
     public var bodyWeight: [Date: Measurement<UnitMass>]?
+    /// Per-lift unit preferences, keyed by `Exercise.id` — the same shape as
+    /// `goalMaxes`. Sticky: a gym whose dumbbells are marked in kg stays kg for
+    /// that lift across sessions, rather than being re-set every workout.
+    ///
+    /// An entry here overrides `preferredUnit` for one exercise and nothing
+    /// else. Like every unit preference in this app it changes *reading*, never
+    /// storage — see `Measurement.expressed(in:)`.
+    public var exerciseUnits: [Int: WeightUnit]?
     /// The unit weights are read and entered in.
     ///
     /// A display and entry preference, not a storage format: weights are still
@@ -60,7 +68,8 @@ public struct User: Codable, Hashable, Identifiable, Sendable {
         achievedMaxes: [Int: [AchievedMax]]? = nil,
         goalMaxes: [Int: GoalMax]? = nil,
         bodyWeight: [Date: Measurement<UnitMass>]? = nil,
-        preferredUnit: WeightUnit = .pounds
+        preferredUnit: WeightUnit = .pounds,
+        exerciseUnits: [Int: WeightUnit]? = nil
     ) {
         self.id = id
         self.name = name
@@ -70,6 +79,18 @@ public struct User: Codable, Hashable, Identifiable, Sendable {
         self.goalMaxes = goalMaxes
         self.bodyWeight = bodyWeight
         self.preferredUnit = preferredUnit
+        self.exerciseUnits = exerciseUnits
+    }
+
+    /// The unit a given lift is read and entered in: its own preference, then
+    /// the app-wide default.
+    ///
+    /// This is the top two levels of the chain. The third and most specific —
+    /// a single set's own `WorkoutSet.unit` — is resolved by the caller that
+    /// has the set in hand, the same way `WorkoutSession.restTarget` layers a
+    /// per-set override over the exercise's prescription.
+    public func unit(forExerciseID exerciseID: Int) -> WeightUnit {
+        exerciseUnits?[exerciseID] ?? preferredUnit
     }
 
     /// Most recently recorded bodyweight, if any.

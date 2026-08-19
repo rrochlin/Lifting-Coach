@@ -73,6 +73,17 @@ public struct WorkoutSet: Codable, Hashable, Identifiable, Sendable {
     /// Also distinct from `restTime` above, which is legacy *measured* rest.
     /// This one is a chosen duration, not an observation.
     public var restOverride: Int?
+    /// The unit this set is read and entered in, overriding the exercise's
+    /// preference and the lifter's app-wide default. `nil` defers up the chain
+    /// (`User.unit(forExerciseID:)`).
+    ///
+    /// A field of its own rather than reading `weight?.unit`, for two reasons.
+    /// An empty set has no weight yet and still needs somewhere to say "I'm
+    /// entering this one in kg." And this is a *reading* preference, not a
+    /// restatement of what's stored — switching it converts what's on screen
+    /// and rewrites nothing, exactly as `User.preferredUnit` does. 100 lb read
+    /// in kg is 45.4 kg, the same iron; it is never reinterpreted as 100 kg.
+    public var unit: WeightUnit?
     /// Achieved effort as the lifter rated it, per set — never defaulted from
     /// the prescription. Same 1–10 scale as `EffortTarget`.
     public var rpe: Float?
@@ -93,6 +104,7 @@ public struct WorkoutSet: Codable, Hashable, Identifiable, Sendable {
         timeComplete: Date? = nil,
         restTime: Int? = nil,
         restOverride: Int? = nil,
+        unit: WeightUnit? = nil,
         rpe: Float? = nil,
         notes: String? = nil,
         usernotes: String? = nil,
@@ -106,6 +118,7 @@ public struct WorkoutSet: Codable, Hashable, Identifiable, Sendable {
         self.timeComplete = timeComplete
         self.restTime = restTime
         self.restOverride = restOverride
+        self.unit = unit
         self.rpe = rpe
         self.notes = notes
         self.usernotes = usernotes

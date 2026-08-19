@@ -101,6 +101,23 @@ public final class AppEnvironment {
         reloadUser()
     }
 
+    /// The unit a given lift is read and entered in — its own preference, then
+    /// the app-wide default. The third and most specific level, a single set's
+    /// own `WorkoutSet.unit`, is applied by whoever holds the set.
+    public func weightUnit(forExerciseID exerciseID: Int) -> WeightUnit {
+        currentUser?.unit(forExerciseID: exerciseID) ?? .pounds
+    }
+
+    /// Pins one lift to a unit, or clears it back to the app default with `nil`.
+    ///
+    /// Sticky from here on, which is the point — the kg dumbbell rack is still
+    /// kg next week. Nothing stored changes, same as `setWeightUnit`.
+    public func setExerciseUnit(_ unit: WeightUnit?, forExerciseID exerciseID: Int) {
+        guard let user = currentUser else { return }
+        try? users.setUnit(unit, forExerciseID: exerciseID, for: user.id)
+        reloadUser()
+    }
+
     /// Re-reads the lifter after their metrics change, so a newly recorded 1RM
     /// is reflected the next time a plan resolves a `%1RM` prescription.
     public func reloadUser() {

@@ -41,6 +41,14 @@ private struct GoalMaxRow: Codable, FetchableRecord, PersistableRecord {
     var dateSet: Date?
 }
 
+private struct ExerciseUnitRow: Codable, FetchableRecord, PersistableRecord {
+    static let databaseTableName = "exerciseUnitPreference"
+
+    var userId: String
+    var exerciseId: Int
+    var unit: String
+}
+
 /// Read/write access to the lifter and their tracked metrics.
 ///
 /// Phase 1 is single-user and offline, so there's no sign-in to establish who
@@ -94,6 +102,19 @@ public struct UserStore: Sendable {
                 }
             }
 
+            try db.execute(
+                sql: "DELETE FROM exerciseUnitPreference WHERE userId = ?",
+                arguments: [user.id.uuidString]
+            )
+            for (exerciseId, unit) in user.exerciseUnits ?? [:] {
+                guard try ExerciseRecord.fetchOne(db, key: exerciseId) != nil else { continue }
+                try ExerciseUnitRow(
+                    userId: user.id.uuidString,
+                    exerciseId: exerciseId,
+                    unit: unit.rawValue
+                ).insert(db)
+            }
+
             try db.execute(sql: "DELETE FROM goalMax WHERE userId = ?", arguments: [user.id.uuidString])
             for (exerciseId, goal) in user.goalMaxes ?? [:] {
                 guard try ExerciseRecord.fetchOne(db, key: exerciseId) != nil else { continue }
@@ -141,6 +162,29 @@ public struct UserStore: Sendable {
                 sql: "UPDATE user SET preferredUnit = ? WHERE id = ?",
                 arguments: [unit.rawValue, userId.uuidString]
             )
+        }
+    }
+
+    /// Sets (or clears, with `nil`) the unit one lift is read and entered in.
+    ///
+    /// Sticky across sessions on purpose — a rack of kg dumbbells doesn't
+    /// become pounds next Tuesday. Same discipline as `setPreferredUnit`: this
+    /// touches one row of preference and rewrites no logged weight. A set
+    /// recorded at 100 lb still reads back as 100 lb of iron, shown as 45.4 kg.
+    public func setUnit(_ unit: WeightUnit?, forExerciseID exerciseId: Int, for userId: UUID) throws {
+        try database.writer.write { db in
+            guard let unit else {
+                try db.execute(
+                    sql: "DELETE FROM exerciseUnitPreference WHERE userId = ? AND exerciseId = ?",
+                    arguments: [userId.uuidString, exerciseId]
+                )
+                return
+            }
+            try ExerciseUnitRow(
+                userId: userId.uuidString,
+                exerciseId: exerciseId,
+                unit: unit.rawValue
+            ).upsert(db)
         }
     }
 
@@ -211,6 +255,9 @@ public struct UserStore: Sendable {
         let goals = try GoalMaxRow
             .filter(Column("userId") == row.id)
             .fetchAll(db)
+        let units = try ExerciseUnitRow
+            .filter(Column("userId") == row.id)
+            .fetchAll(db)
 
         var achievedByExercise: [Int: [AchievedMax]] = [:]
         for row in achieved {
@@ -241,7 +288,14 @@ public struct UserStore: Sendable {
                     ($0.day, measurement(value: $0.value, symbol: $0.unit))
                 }
             ),
-            preferredUnit: WeightUnit(rawValue: row.preferredUnit) ?? .pounds
+            preferredUnit: WeightUnit(rawValue: row.preferredUnit) ?? .pounds,
+            exerciseUnits: units.isEmpty ? nil : Dictionary(
+                uniqueKeysWithValues: units.compactMap { row in
+                    // A stored symbol outside lb/kg isn't a preference this app
+                    // can adopt — drop it rather than inventing a default.
+                    WeightUnit(rawValue: row.unit).map { (row.exerciseId, $0) }
+                }
+            )
         )
     }
 }

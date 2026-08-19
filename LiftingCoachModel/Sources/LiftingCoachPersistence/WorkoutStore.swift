@@ -29,7 +29,10 @@ private struct WorkoutExerciseRow: Codable, FetchableRecord, PersistableRecord {
     var usernotes: String?
 }
 
-private struct WorkoutSetRow: Codable, FetchableRecord, PersistableRecord {
+/// Internal rather than private: `ExerciseStatsStore` reads sets straight from
+/// the log for its per-exercise history, and a second hand-rolled decoder there
+/// would be one more place for the mapping to drift.
+struct WorkoutSetRow: Codable, FetchableRecord, PersistableRecord {
     static let databaseTableName = "workoutSet"
 
     var id: String
@@ -43,12 +46,33 @@ private struct WorkoutSetRow: Codable, FetchableRecord, PersistableRecord {
     var timeComplete: Date?
     var restTime: Int?
     var restOverride: Int?
+    /// Display/entry unit override for this set. Distinct from `weightUnit`
+    /// above, which records what the logged weight actually is.
+    var unit: String?
     var rpe: Double?
     var notes: String?
     var usernotes: String?
     /// JSON-encoded `PlannedSet`. See the migration for why this is a snapshot
     /// rather than a foreign key.
     var plannedFrom: String?
+
+    var domain: WorkoutSet {
+        WorkoutSet(
+            id: UUID(uuidString: id) ?? UUID(),
+            reps: reps,
+            weight: optionalMeasurement(value: weightValue, symbol: weightUnit),
+            complete: complete,
+            type: setType.flatMap(SetType.init(rawValue:)),
+            timeComplete: timeComplete,
+            restTime: restTime,
+            restOverride: restOverride,
+            unit: unit.flatMap(WeightUnit.init(rawValue:)),
+            rpe: rpe.map(Float.init),
+            notes: notes,
+            usernotes: usernotes,
+            plannedFrom: plannedFrom.flatMap(decodePlannedSet)
+        )
+    }
 }
 
 // MARK: - Store
@@ -122,6 +146,7 @@ public struct WorkoutStore: Sendable {
                             timeComplete: set.timeComplete,
                             restTime: set.restTime,
                             restOverride: set.restOverride,
+                            unit: set.unit?.rawValue,
                             rpe: set.rpe.map(Double.init),
                             notes: set.notes,
                             usernotes: set.usernotes,
@@ -206,7 +231,7 @@ public struct WorkoutStore: Sendable {
                 .filter(Column("workoutExerciseId") == exerciseRow.id)
                 .order(Column("position"))
                 .fetchAll(db)
-                .map(decodeSet)
+                .map(\.domain)
 
             let exercise = WorkoutExercise(
                 id: UUID(uuidString: exerciseRow.id) ?? UUID(),
@@ -236,22 +261,6 @@ public struct WorkoutStore: Sendable {
         )
     }
 
-    private func decodeSet(_ row: WorkoutSetRow) -> WorkoutSet {
-        WorkoutSet(
-            id: UUID(uuidString: row.id) ?? UUID(),
-            reps: row.reps,
-            weight: optionalMeasurement(value: row.weightValue, symbol: row.weightUnit),
-            complete: row.complete,
-            type: row.setType.flatMap(SetType.init(rawValue:)),
-            timeComplete: row.timeComplete,
-            restTime: row.restTime,
-            restOverride: row.restOverride,
-            rpe: row.rpe.map(Float.init),
-            notes: row.notes,
-            usernotes: row.usernotes,
-            plannedFrom: row.plannedFrom.flatMap(decodePlannedSet)
-        )
-    }
 }
 
 // MARK: - Encoding helpers
