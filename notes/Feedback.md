@@ -28,9 +28,10 @@ we should have the ability to drag to reorder the sets and whole exercises.
 - no where to set RPE's
 
 ## History
-- no interaction on completed sets
-- should be able to update them, i.e. fix mislogged sets, see incomplete sets, and update start/stop times.
-- not showing time of day workout was completed
+- ~~no interaction on completed sets~~ — tapping a workout opens `WorkoutDetailView`.
+- ~~should be able to update them, i.e. fix mislogged sets, see incomplete sets, and update start/stop times.~~ — EDIT on the detail screen: reps, weight, RPE, set type, notes, add/delete sets and exercises, title, and both start/stop times. Draft-based, saved on an explicit SAVE.
+  - "See incomplete sets" is the one part with nothing to show: finishing a workout deletes its incomplete sets, so none survive into history. If they should survive instead, that's a change to `WorkoutSession.finish`, not to this screen.
+- ~~not showing time of day workout was completed~~ — shown on every row.
 
 ## Profile
 - fine for now
@@ -47,8 +48,22 @@ Not broken — wanted, and bigger than a fix.
   in the wrong unit gives a number nobody can load. Reads naturally next to the
   weight field, which since the numeric keyboard bar landed is also where the
   ±2.5 lb / ±1 kg step lives — Strong puts both in the same panel.
-- **Set type in the tracker.** "Add Warmup Set" makes a `.warmup`; nothing in the
-  tracker can change a set's type after the fact, so a set added as the wrong
-  kind has to be deleted and remade. The planner has the control already.
 - **Bodyweight wheel selector**, prepopulated with the last recorded weight, to
   1/10 of a unit (from Home, above) — still a plain text field.
+- **Replay achieved maxes after a history edit.** Correcting a 500 lb squat
+  down to 405 leaves the max event that was recorded at the time, and marking a
+  heavy single as `.working` after the fact doesn't produce the max it should
+  have. `achievedMax` is deliberately append-only *event history* rather than a
+  derived table (Core Tenets §6), so a rebuild-from-log would change what that
+  table is — which is a decision, not a detail. `scripts/src/liftimport/maxes.py`
+  already replays the rule chronologically and is the reference for how.
+- **Swap which exercise a logged block was.** "I logged this under the wrong
+  lift" is a real correction and the History editor can't make it. Needs the
+  picker in the editor plus an answer to the maxes question above, since moving
+  sets between lifts invalidates both lifts' bests.
+- **Reorder exercises and sets in a logged workout.** `LoggedWorkoutDraft` has
+  `moveGroup`/`moveSet` and nothing in the editor drives them — same unresolved
+  drag-to-reorder question as the tracker, which lost its `EditButton`.
+- **Reorder exercises within one superset.** `moveGroup` reorders whole groups
+  and `superset`/`ungroup` form and dissolve them, but nothing swaps the two
+  lifts inside a pair.

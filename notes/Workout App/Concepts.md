@@ -8,6 +8,10 @@ struct Workout {
 	var endTime: Date?
 	var notes: String?
 	var usernotes: String?
+	// where this workout came from. nil = logged in this app; anything else
+	// names the translation that produced it ("strong-csv"). See "Imports are
+	// translated, never guessed" below.
+	var source: String?
 }
 ```
 
@@ -131,6 +135,18 @@ struct WorkoutSet {
 	// from restTime above (measured, legacy) and from plannedFrom.restTime
 	// (what the program asked for). See "Rest is prescribed, not measured".
 	var restOverride: Int?
+	// the unit THIS set is read and entered in, overriding the exercise's
+	// preference and the app default. See "Units are a reading preference".
+	// A field of its own, not derived from weight.unit: an empty set has no
+	// weight yet and still needs to say what unit it's being entered in.
+	var unit: WeightUnit?
+	// work measured in time and distance rather than reps: a plank, a bike
+	// interval, a walk. Nothing to do with the two rest fields above — those
+	// are the gap BETWEEN sets, this is the set itself. A set carrying a
+	// duration usually has no reps and no weight, and that is a complete
+	// record, not a half-filled one.
+	var duration: Measurement<UnitDuration>?
+	var distance: Measurement<UnitLength>?
 	// achieved effort as the lifter rated it, per set — never defaulted from the
 	// prescription. Same scale as #RPE.
 	var rpe: Float?
@@ -174,6 +190,15 @@ struct PlannedSet {
 }
 
 ```
+
+## Set completion is stamped; a set is still an instant, not an interval
+#WorkoutSet `timeComplete` records when a set was checked off, to the millisecond, and is kept precise on purpose: it's the anchor anything else on the same clock — a heart rate series, sleep, HRV — would be lined up against later.
+
+**It is the tap, not the last rep.** The lifter racks the bar, breathes, picks the phone up and hits the checkbox. That lag never cancels out, and it's the same bias that got measured rest deleted (below). Anything reading these as physiology carries the caveat; nothing presents one as the moment work stopped.
+
+**There is no recorded set start**, so "working rather than resting" is not answerable from the log — only *inferrable* from consecutive completions, and that inference belongs to whatever analyses the data, not to storage. Recording a real start was considered and deliberately not built: the honest ways to get one are a per-set gesture mid-workout or an event written when the rest timer ends, and neither earns its cost until something consumes the data. Revisit when HealthKit correlation is actually being built, not before.
+
+**Two honest nils**: a set that isn't complete, and the whole imported history — the Strong export carries no per-set times, so 14,520 sets have none and never will. Analysis has to tolerate that hole rather than fill it.
 
 ## Rest is prescribed, not measured
 Rest owed resolves in one chain: #WorkoutSet `restOverride`, then #PlannedSet `restTime`, then the #WorkoutBlock's `defaultRestTimes` for that #SetType, then an app default. `WorkoutSession.restTarget(afterSetWith:)` walks it; `prescribedRest(afterSetWith:)` walks the same chain minus the override, which is what "back to prescribed" reverts to.
@@ -277,6 +302,9 @@ struct User {
 	// always use start of day, same as WorkoutBlock's dictionaries
 	var bodyWeight: Dictionary<Date, Measurement<UnitMass>>?
 	var preferredUnit: WeightUnit  // lb | kg — a reading preference, see below
+	// per-lift unit preferences, keyed by Exercise.id, same shape as goalMaxes.
+	// Sticky across sessions: a rack of kg dumbbells stays kg for that lift.
+	var exerciseUnits: Dictionary<Int, WeightUnit>?
 	var email: String
 	var uuid: UUID
 	var name: String
@@ -292,9 +320,91 @@ The two rules that follow from that split:
 - **Switching units rewrites nothing.** A set logged at 225 lb is still a 225 lb row after the lifter switches to kg; it simply reads as 102.1 kg. Converting the tables instead would round every historical row and make a display choice destructive.
 - **A conversion rounds to a tenth; an unconverted weight is left exactly alone.** 157.5 lb read in pounds is what the lifter typed, and rounding it would be the app editing their log. A converted weight's extra decimals are conversion noise — a tenth of a kilo is more than ten times finer than the smallest plate on any bar.
 
+### The unit chain
+
+A unit resolves most-specific-first, the same shape rest already resolves in:
+
+**`WorkoutSet.unit` → `User.exerciseUnits[exercise.id]` → `User.preferredUnit`**
+
+Three levels because a real gym has three answers. The app default is what you
+read everywhere. The per-lift preference is sticky and exists because the
+dumbbell rack is marked in kg and will still be next Tuesday — re-setting it
+every session is the friction it removes. The per-set override is for the one
+set done on the other rack.
+
+Every level is *authored by the lifter*, so the most specific one wins outright
+([[Core Tenets]] §1) — the app never averages a preference against a program.
+
+The rules above hold at every level. **Switching any of them rewrites nothing:**
+a set logged at 100 lb pinned to kg reads 45.4 kg, the same iron. It is never
+reinterpreted as 100 kg — that would be a correction, and this is a display
+choice.
+
 There's one deliberate asymmetry, in the planner. An **authored** absolute load keeps the unit it was written in (the load mode menu is where lb/kg is chosen for a prescription — that's authorship, and the plan means what it says). A **derived** weight — 72% of a 495 lb goal — reads in the lifter's unit like everything else.
 
 `WeightUnit` is a two-case enum rather than all of `UnitMass`: grams and stones are real units and neither is a plausible answer to "what do you load your bar in." Its raw values are the same symbols weights are stored under, so a preference and a stored weight's unit column speak the same language.
+
+## Exercise stats are derived and rebuilt, never incremented
+
+Per-lift history — how many completed workouts contain a lift, when it was last
+done, the heaviest working set — is stored in an `exerciseStats` table, and the
+distinction that makes that safe is worth stating plainly, because the obvious
+reading of "stored aggregate" is the wrong one.
+
+**Nothing increments it.** `ExerciseStatsStore.rebuild(for:)` recomputes every
+row from the log in one statement and is the only writer. It runs on the few
+events that change history: finishing a workout, deleting one, finishing an
+import.
+
+The alternative — a counter adjusted at write time — has to be adjusted
+correctly by *every* path that touches the log: finishing a workout (which
+deletes its incomplete sets), discarding one, deleting a set, editing history,
+importing. Miss one and the number is wrong permanently, with nothing able to
+detect it. A recomputed table can only ever be *stale*; it cannot disagree with
+the log, because the log is what it's computed from, and dropping it is always a
+valid repair. There's a test asserting rebuild is idempotent and agrees with the
+equivalent live query, and it should stay.
+
+Why store it at all, when the live query measures ~3 ms over five years of real
+history? Not latency. Because a CSV import lands a whole training career in one
+transaction and wants stats to exist immediately rather than be recomputed by
+whoever opens a picker first — and because the fatigue and theoretical-max
+models in [[Ideas]] are more aggregates that will want a home. One rebuilt table
+is where those go.
+
+What it's *for*, concretely: ordering the exercise picker by what the lifter
+actually uses (twenty real lifts above eight hundred they'll never pick), and
+proposing a starting weight for an unplanned set — see `SetSuggestion`, which is
+a proposal the lifter edits, never a prescription ([[Core Tenets]] §1), and only
+ever fills a field that was empty because nothing was prescribed there.
+
+## Three editing models, and when each saves
+The app edits workouts in three places, and the difference between them is *when a write happens*, not what the screens look like.
+
+**`WorkoutSession`** is the tracker, and it saves after **every** mutation. A workout is a live thing; a phone that locks in a gym bag and gets killed by the OS has to come back with every logged set intact, so there is no such thing as an unsaved rep here.
+
+**`PlannedWorkoutDraft`** is the planner, and it saves on demand. Programming is deliberate authoring — a half-typed percentage should not become the plan — so edits accumulate against an `original` and land on an explicit Save, with a confirmation on the way out.
+
+**`LoggedWorkoutDraft`** corrects a workout already in the log, and takes the planner's shape rather than the tracker's. There is nothing to recover: the session is over. Fixing a set logged in March is authoring, and a half-typed weight shouldn't overwrite five years of history on the way to being finished.
+
+All three compare **structurally** rather than setting a dirty flag, so typing a value and typing it back leaves nothing to save and warns about nothing on the way out.
+
+**Correcting history reaches what was lifted, and nothing else.** `Workout.source` and each set's `plannedFrom` stay untouched by an edit — the first is a fact about where the row came from, the second is what was *asked for*, and an edit that could reach either would let a correction rewrite provenance or make adherence lie. A contradiction (a workout that ends before it starts) is **reported and blocks the save**, never resolved by moving the other end of the range: that would silently change a number nobody touched.
+
+**Editing does not replay achieved maxes.** Correcting a weight downward leaves the #AchievedMax event recorded at the time, because that table is append-only event history rather than something derived. `exerciseStats` *is* rebuilt on save, because rebuilding is that table's only write path. Making maxes derived instead is an open decision — see `notes/Feedback.md`.
+
+## Imports are translated, never guessed
+An external log — a Strong export, someone else's app, a spreadsheet — has the same three problems every time: its workouts belong to no #WorkoutBlock, its exercise names don't match the catalog, and some of its columns have nowhere to land. The answer is the one "Programs name exercises, they don't describe them" already settled, applied to imports.
+
+**Three stages, and only the middle one is allowed to think.** A deterministic, catalog-blind parser turns the export into a normalized staging file. A person or an agent then decides, *once*, what each of the source's exercise names actually is, and that decision is committed to the repo as a mapping artifact. A strict loader reads only that mapping and aborts on any name it doesn't cover.
+
+Measured, on the owner's own five-year Strong export: matching its 149 exercise names against the vendored catalog by string similarity resolves **31**. The top candidate for "Squat (Barbell)" is *Front Barbell Squat To A Bench*. That is why the middle stage is a person and not a function, and why nothing in the app's own code reads a name and guesses — see `scripts/README.md` and `scripts/data/strong_exercise_map.json`.
+
+The mapping records one of three authored outcomes per name. **slug**: this name *is* that catalog entry. **create**: a real specific lift the vendored catalog doesn't have ("Belt Squat"), minted the way #ProgramLoader mints open slots. **openChoice**: the name states a goal, not a movement — five years of "Triceps Extension" across a 50–160 lb range is demonstrably not one lift, and marking it open is what stops `AchievedMaxUpdate` recording a max that means nothing. Plus an optional **variant**, for where the source's wording is prescription rather than identity: a Pendlay row and a bent-over row share a max, so they share an #Exercise and differ by variant.
+
+**`Workout.source` is provenance, not a category.** It earns its place twice: a reload replaces exactly what a given source wrote instead of doubling the log, and history can say a session was imported rather than letting five years of another app read as though it were tracked here. `achievedMax` carries the same tag, and needs it more — maxes are append-only events, so a second import run would announce the same records again with nothing able to tell the copies apart.
+
+**Imported workouts have no block and no prescription.** `blockId` and `plannedFrom` are both nil, which is honest: there was no plan. Block adherence joins on `blockId`, so imported history can't distort it.
 
 ## Exercise Catalog
 Resolved: backed by a vendored snapshot of `yuhonas/free-exercise-db` (public domain, ~870 exercises — equipment, muscle groups, instructions, category). See `notes/Workout App/workout_assets_overview.md` for the license survey this came out of, and `LiftingCoachModel/Sources/LiftingCoachPersistence/Resources/FreeExerciseDB.LICENSE.txt` for exact provenance. Vendored, not fetched live — a shipped app depending on a third-party GitHub URL for its own catalog is an availability/integrity risk not worth taking for data this static.
