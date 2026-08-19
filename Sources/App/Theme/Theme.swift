@@ -11,6 +11,26 @@ import SwiftUI
 /// glow of *The Matrix*. The restraint matters more than the neon — one accent
 /// carries interaction, amber marks the live moment, and everything else stays
 /// quiet so the numbers read.
+///
+/// **The palette is held to WCAG 2.1, measured rather than eyeballed**, against
+/// `panelRaised` — the worst-case ground, since panels stack:
+///
+/// - **All text: 4.5:1** (§1.4.3).
+/// - **Lift data: 7:1** (§1.4.6). Reps, weight and RPE are read at arm's length
+///   over a loaded bar, which is the case AAA exists for.
+/// - **Meaningful UI boundaries and states: 3:1** (§1.4.11) — field outlines,
+///   the set checkbox, a filter chip's on/off.
+/// - **Purely decorative rules are exempt**, which is why `hairline` is allowed
+///   to sit at 1.23:1 and stay there.
+///
+/// `Tools/check-contrast.py` computes these from the literals below and fails
+/// on a regression. Run it when adding or changing a colour — three of these
+/// were under the floor before anyone measured, including the one field outline
+/// whose entire purpose was visibility.
+///
+/// State is never carried by colour alone (§1.4.1). Where a value needs to read
+/// as complete, or as a suggestion rather than an entry, it changes font weight
+/// or gains a label — not just a shade.
 enum Theme {
 
     // MARK: Ground
@@ -29,20 +49,34 @@ enum Theme {
     /// structural rule can afford to be felt rather than seen, but the outline
     /// that says "you can change this number" has to be seen, in a gym, at
     /// arm's length, mid-set.
-    static let fieldEdge = Color(red: 0.243, green: 0.318, blue: 0.412)
+    ///
+    /// Measured at 3.10:1 against `panelRaised` — the WCAG 2.1 §1.4.11 floor for
+    /// a UI component boundary, and not a stylistic choice. It sat at 2.02:1 and
+    /// failed, which is a poor showing for the one colour in the palette whose
+    /// stated job is to be seen.
+    static let fieldEdge = Color(red: 0.328, green: 0.429, blue: 0.556)
 
     // MARK: Ink
 
     static let ink = Color(red: 0.890, green: 0.925, blue: 0.949)
     static let inkMuted = Color(red: 0.518, green: 0.592, blue: 0.671)
-    static let inkFaint = Color(red: 0.353, green: 0.420, blue: 0.494)
+    /// The quiet annotation layer. Raised to 4.60:1 against `panelRaised` — past the
+    /// WCAG 2.1 §1.4.3 floor for normal text. It was 3.00:1, which failed, and
+    /// it carries real content: set numbers, prescriptions, the "×" between
+    /// reps and weight.
+    ///
+    /// Deliberately still the quietest ink in the palette. Meeting a contrast
+    /// floor is not the same as being loud, and the hierarchy survives the
+    /// raise — what doesn't survive it is text nobody can read on a rack.
+    static let inkFaint = Color(red: 0.454, green: 0.540, blue: 0.635)
 
     // MARK: Signal
 
     /// The single interactive accent: HUD cyan. Completion, links, focus.
     static let signal = Color(red: 0.275, green: 0.835, blue: 0.878)
-    /// Dimmed signal for fills and glows.
-    static let signalDim = Color(red: 0.165, green: 0.541, blue: 0.576)
+    /// Dimmed signal for fills and glows. 4.60:1 on `panelRaised`, up from
+    /// 4.03:1 — it reads as text often enough to owe the §1.4.3 floor.
+    static let signalDim = Color(red: 0.178, green: 0.583, blue: 0.621)
     /// The live moment — an in-progress set, a running rest timer. Amber earns
     /// its loudness by being rare.
     static let live = Color(red: 0.941, green: 0.651, blue: 0.235)
