@@ -372,7 +372,11 @@ Tools/testflight.sh --upload   # and send it
   `Info.plist` now reads both from build settings.
 - **Uploading needs an App Store Connect API key**: the `.p8` at
   `~/.appstoreconnect/private_keys/AuthKey_<KEYID>.p8`, plus `ASC_KEY_ID` and
-  `ASC_ISSUER_ID` in the environment. A key rather than an app-specific password
+  `ASC_ISSUER_ID` — which live in `~/.appstoreconnect/credentials.env`
+  (mode 600), sourced by the script when they aren't already exported. Outside
+  any repo, beside the key they belong to, and one answer to "where do the ASC
+  credentials live" rather than two. An exported value still wins, which is how
+  CI would supply them. A key rather than an app-specific password
   so no secret is ever typed on a command line or pasted into a chat.
 - **The app has to be registered in App Store Connect first**, against
   `com.rrochlin.LiftingCoach`. Without a record the upload fails with "No
@@ -393,6 +397,48 @@ uploads don't stop to ask, and `PrivacyInfo.xcprivacy` states the honest answers
 for a local-only app — **all three need revisiting when the phase 2 backend
 lands**, because a training log leaving the phone changes the encryption answer
 and every line of the privacy manifest.
+
+### Continuous integration
+`.github/workflows/ci.yml` runs on every push and PR. Four jobs, split so a
+failure names itself:
+
+- **`model`** — `swift test` (261 tests). Its own job because it needs no Xcode
+  project, no simulator and no signing, so it goes red in about a minute when
+  the domain logic breaks rather than after a full app build.
+- **`scripts`** — `uv run pytest` (53 tests), on **Ubuntu on purpose**:
+  `scripts/` is standard-library Python meant to lift into a Lambda, so it
+  should never quietly acquire a macOS dependency. Also 1x minutes instead of
+  macOS's 10x.
+- **`app`** — `xcodegen generate` then the simulator build, gated on `model`.
+  Regenerating is not incidental: the `.xcodeproj` is gitignored, so this is
+  also the only thing that catches a `project.yml` that doesn't generate.
+- **`palette`** — `Tools/check-contrast.py`, which parses `Theme.swift`'s own
+  literals and fails on a regression.
+
+`concurrency` cancels superseded runs on the same branch — macOS runners are
+the expensive minutes, and a superseded run answers a question nobody is still
+asking.
+
+**Xcode is `latest-stable`, and that's a placeholder.** Nothing here has seen
+GitHub's runner image, and a pin naming an Xcode it doesn't ship fails every run
+on its first line. Pin it to whatever the first green run reports; local is
+Xcode 26.3 / Swift 6.2.
+
+**`.github/workflows/testflight.yml` is a scaffold that cannot fire.**
+`workflow_dispatch` only, with an input you have to type `upload` into, and it
+has never been run. The steps are written out — throwaway keychain, imported
+`.p12`, installed profile, API key — and the file ends with the exact list of
+secrets and the one code change still needed (`Tools/testflight.sh` signs
+automatically, which is right on a Mac signed into an Apple ID and wrong on a
+runner). **The reason it isn't finished is written in it**: given an API key and
+no certificate, `-allowProvisioningUpdates` will *mint a new distribution
+certificate* per ephemeral runner, the team limit is three, and two or three runs
+locks every Mac out of signing this app until they're revoked by hand.
+
+Until it's finished, `Tools/testflight.sh --upload` from the Mac is the path, and
+**Xcode Cloud is the alternative worth weighing** — it does the signing half with
+no secrets and no certificate to rotate, and 25 compute hours a month come with
+the Developer Program already being paid for.
 
 ## Working conventions from this project
 - The notes docs are living working files, not archives — once a design conversation converges on a direction, implement it directly in the relevant `.md` (or, going forward, the actual Swift code). Don't leave agreed decisions sitting only in chat.

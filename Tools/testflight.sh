@@ -10,9 +10,13 @@
 #     A build for an unregistered app is rejected at upload with "No suitable
 #     application records were found."
 #   - An App Store Connect API key (Users and Access > Integrations), with the
-#     .p8 saved as ~/.appstoreconnect/private_keys/AuthKey_<KEYID>.p8, and
-#     ASC_KEY_ID / ASC_ISSUER_ID exported. A key is used rather than an
-#     app-specific password so no secret is ever typed on a command line.
+#     .p8 saved as ~/.appstoreconnect/private_keys/AuthKey_<KEYID>.p8. A key is
+#     used rather than an app-specific password so no secret is ever typed on a
+#     command line.
+#   - ASC_KEY_ID / ASC_ISSUER_ID. Put them in
+#     ~/.appstoreconnect/credentials.env, which this script sources when it
+#     exists — beside the key they belong to, and outside any repo. Exporting
+#     them in the environment works too, which is how CI supplies them.
 #
 # The build number is the commit count, so it rises on its own and can't
 # collide with one already uploaded. The marketing version comes from
@@ -70,8 +74,16 @@ if [[ "${1:-}" != "--upload" ]]; then
     exit 0
 fi
 
-: "${ASC_KEY_ID:?set ASC_KEY_ID (App Store Connect API key id)}"
-: "${ASC_ISSUER_ID:?set ASC_ISSUER_ID (App Store Connect issuer id)}"
+# Sourced late, so an already-exported value (CI, or a one-off on the command
+# line) wins over the file rather than being silently overwritten by it.
+CREDENTIALS="$HOME/.appstoreconnect/credentials.env"
+if [[ -z "${ASC_KEY_ID:-}" || -z "${ASC_ISSUER_ID:-}" ]] && [[ -f "$CREDENTIALS" ]]; then
+    # shellcheck source=/dev/null
+    source "$CREDENTIALS"
+fi
+
+: "${ASC_KEY_ID:?set ASC_KEY_ID, or put it in ~/.appstoreconnect/credentials.env}"
+: "${ASC_ISSUER_ID:?set ASC_ISSUER_ID, or put it in ~/.appstoreconnect/credentials.env}"
 
 xcrun altool --validate-app -f "$IPA" -t ios \
     --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"

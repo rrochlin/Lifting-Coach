@@ -1,0 +1,151 @@
+name: TestFlight
+
+# SCAFFOLD — NOT FINISHED, AND DELIBERATELY CANNOT FIRE BY ITSELF.
+#
+# `workflow_dispatch` only: no push or tag trigger, so merging something can
+# never surprise you with an upload. The steps below are written out but have
+# never run, and the secrets they need do not exist yet. Finishing this is the
+# "Setup still required" list at the bottom.
+#
+# Until then, `Tools/testflight.sh --upload` from the Mac is the real path, and
+# it stays the real path — this exists to make the remaining work explicit
+# rather than to replace a script that already works.
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "upload" to confirm sending a build to TestFlight'
+        required: true
+        default: ''
+
+jobs:
+  upload:
+    name: Build and upload
+    runs-on: macos-15
+    # Belt and braces: even a manual run has to say what it means.
+    if: inputs.confirm == 'upload'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # `Tools/testflight.sh` derives the build number from
+          # `git rev-list --count HEAD`, and App Store Connect rejects a build
+          # number it has already seen. A shallow clone counts 1 commit and
+          # would collide on the second run, permanently.
+          fetch-depth: 0
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      # ---- Signing -------------------------------------------------------
+      #
+      # The awkward part, and the reason this is scaffolded rather than done.
+      # A fresh runner has no keychain, no distribution certificate and no
+      # provisioning profile, and the local script's `-allowProvisioningUpdates`
+      # with automatic signing does not substitute for them: given an API key
+      # and no certificate, Xcode will *mint a new distribution certificate* on
+      # each ephemeral runner. The team limit is three. Two or three runs and
+      # every Mac that signs this app is locked out until the certs are revoked
+      # by hand.
+      #
+      # So: manual signing, with a certificate and profile exported once and
+      # carried as secrets. The keychain is created per-run and thrown away.
+      - name: Import signing certificate
+        env:
+          CERTIFICATE_P12: ${{ secrets.BUILD_CERTIFICATE_BASE64 }}
+          P12_PASSWORD: ${{ secrets.P12_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+          echo -n "$CERTIFICATE_P12" | base64 --decode -o "$RUNNER_TEMP/cert.p12"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" \
+            -P "$P12_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          # Without this, codesign blocks on a GUI prompt nobody can answer and
+          # the job hangs until it times out.
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security list-keychain -d user -s "$KEYCHAIN"
+
+      - name: Install provisioning profile
+        env:
+          PROVISIONING_PROFILE: ${{ secrets.PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          set -euo pipefail
+          PROFILES="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$PROFILES"
+          echo -n "$PROVISIONING_PROFILE" | base64 --decode \
+            -o "$PROFILES/build.mobileprovision"
+
+      - name: Install App Store Connect API key
+        env:
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.appstoreconnect/private_keys
+          echo -n "$ASC_PRIVATE_KEY" | base64 --decode \
+            -o ~/.appstoreconnect/private_keys/"AuthKey_$ASC_KEY_ID.p8"
+
+      # ---- Build and upload ----------------------------------------------
+      #
+      # The same script the Mac runs, so there is exactly one definition of
+      # what a TestFlight build is. It reads ASC_KEY_ID / ASC_ISSUER_ID from
+      # the environment, which is why it prefers already-exported values over
+      # its local credentials file.
+      #
+      # UNVERIFIED: the script signs with automatic signing
+      # (`signingStyle: automatic` in its ExportOptions.plist), which is right
+      # on a Mac signed into an Apple ID and wrong here. Making this work means
+      # teaching it a manual-signing mode with the profile name — the last real
+      # piece of work, and the reason this job has never been run.
+      - name: Archive, export and upload
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: Tools/testflight.sh --upload
+
+      - name: Clean up keychain
+        # Runs even on failure: a signing keychain outliving its job is how a
+        # runner leaks a certificate into whatever runs next.
+        if: always()
+        run: security delete-keychain "$RUNNER_TEMP/signing.keychain-db" || true
+
+# ---------------------------------------------------------------------------
+# Setup still required, in the order it has to happen:
+#
+# 1. Repository secrets (Settings > Secrets and variables > Actions):
+#      ASC_KEY_ID                   G8GDSM7BUR
+#      ASC_ISSUER_ID                the issuer UUID
+#      ASC_PRIVATE_KEY              base64 of the .p8
+#                                     base64 -i ~/.appstoreconnect/private_keys/AuthKey_G8GDSM7BUR.p8
+#      BUILD_CERTIFICATE_BASE64     base64 of an "Apple Distribution" .p12
+#                                     exported from Keychain Access, with a password
+#      P12_PASSWORD                 that password
+#      PROVISIONING_PROFILE_BASE64  base64 of an App Store profile for
+#                                     com.rrochlin.LiftingCoach, downloaded from
+#                                     developer.apple.com
+#      KEYCHAIN_PASSWORD            any string; scopes the throwaway keychain
+#
+# 2. Teach Tools/testflight.sh a manual-signing mode (see the UNVERIFIED note
+#    above) — an env var that switches ExportOptions.plist to
+#    `signingStyle: manual` plus a `provisioningProfiles` dict, and passes
+#    PROVISIONING_PROFILE_SPECIFIER / CODE_SIGN_IDENTITY to the archive step.
+#
+# 3. Run it once by hand and watch it. Only then consider a trigger.
+#
+# Worth weighing before finishing any of this: **Xcode Cloud** does the signing
+# half with no secrets, no keychain dance and no certificate to rotate — Apple
+# holds the credentials because it is Apple. 25 compute hours a month are
+# included with the Developer Program already being paid for. The argument for
+# GitHub Actions is that the tests and the PR checks live here anyway; the
+# argument against doing the *upload* here is this entire file.
+# ---------------------------------------------------------------------------

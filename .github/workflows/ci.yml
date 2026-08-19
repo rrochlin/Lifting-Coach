@@ -1,0 +1,108 @@
+name: CI
+
+# Every push and every PR. The whole point is that a red main is visible
+# immediately rather than at the next TestFlight build.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  # So a check can be re-run by hand without an empty commit.
+  workflow_dispatch:
+
+concurrency:
+  # A new push to the same branch cancels the run it superseded. Xcode runners
+  # are the expensive minutes on GitHub's pricing, and a superseded run is
+  # answering a question nobody is still asking.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # The fast inner loop, and deliberately its own job: it needs no Xcode
+  # project, no simulator and no signing, so it fails in ~1 minute when the
+  # domain logic breaks rather than after a full app build.
+  model:
+    name: Swift package
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          # `latest-stable` rather than a pin, for now, because nothing here has
+          # seen GitHub's runner image and a pin naming an Xcode it doesn't ship
+          # fails every run on its first line. Pin this to whatever the first
+          # green run reports — a toolchain that moves under you turns an
+          # unrelated push into the run that mysteriously breaks. Local is
+          # Xcode 26.3 / Swift 6.2.
+          xcode-version: latest-stable
+
+      - name: Cache SwiftPM
+        uses: actions/cache@v4
+        with:
+          path: LiftingCoachModel/.build
+          key: spm-${{ runner.os }}-${{ hashFiles('LiftingCoachModel/Package.resolved') }}
+          restore-keys: spm-${{ runner.os }}-
+
+      - name: swift test
+        working-directory: LiftingCoachModel
+        run: swift test
+
+  scripts:
+    name: Import pipeline
+    # Ubuntu on purpose: `scripts/` is standard-library Python and is meant to
+    # lift into a Lambda, so it should never quietly acquire a macOS dependency.
+    # It also costs 1x minutes where macOS costs 10x.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - name: pytest
+        working-directory: scripts
+        run: uv run pytest
+
+  app:
+    name: iOS build
+    runs-on: macos-15
+    # No point building the app if the domain model is already broken.
+    needs: model
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate project
+        # The .xcodeproj is gitignored by design, so CI regenerates it. This
+        # also means a project.yml that doesn't generate is caught here.
+        run: xcodegen generate
+
+      - name: Build
+        # `-target`, not `-scheme`: scheme-based builds fail destination
+        # resolution because no *runnable* simulator matches. Same reason the
+        # local build in CLAUDE.md uses it.
+        run: |
+          xcodebuild -project LiftingCoach.xcodeproj -target LiftingCoach \
+            -sdk iphonesimulator -configuration Debug \
+            CODE_SIGNING_ALLOWED=NO \
+            SYMROOT="$RUNNER_TEMP/Products" \
+            OBJROOT="$RUNNER_TEMP/Intermediates" \
+            SHARED_PRECOMPS_DIR="$RUNNER_TEMP/PCH" \
+            build
+
+  palette:
+    name: Contrast floors
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: check-contrast
+        # Parses Theme.swift's own literals and fails on a regression. Pure
+        # Python, no toolchain — see CLAUDE.md's palette section for the floors.
+        run: python3 Tools/check-contrast.py
