@@ -18,6 +18,10 @@ struct WorkoutTrackerView: View {
     /// The current calendar week's plan — a lifter should be able to see (and
     /// start, or skip) more than just today.
     @State private var weekPlan: [PlannedWorkout] = []
+    #if DEBUG
+    /// Latches `-openExercisePicker` to a single presentation.
+    @State private var didOpenDebugPicker = false
+    #endif
 
     var body: some View {
         NavigationStack {
@@ -36,6 +40,7 @@ struct WorkoutTrackerView: View {
                 let model = TrackerModel(
                     workouts: environment.workouts,
                     users: environment.users,
+                    stats: environment.exerciseStats,
                     userID: userID,
                     notifier: RestNotifier(isEnabled: !isRestDemo),
                     onAchievedMaxRecorded: { environment.reloadUser() }
@@ -47,12 +52,41 @@ struct WorkoutTrackerView: View {
                 #endif
             }
             loadWeek()
+            consumePendingStart()
+            #if DEBUG
+            // One-shot. `.task` re-runs every time this tab is selected, so
+            // without the latch the picker re-opened on every return from Home
+            // — which looked exactly like a bug in the Home card.
+            //
+            // A beat before presenting, too: setting this in the same turn as
+            // the view's first appearance lands before there's anything to
+            // present from, and the sheet silently never opens.
+            if LaunchArguments.exercisePickerQuery != nil, !didOpenDebugPicker {
+                didOpenDebugPicker = true
+                try? await Task.sleep(for: .milliseconds(700))
+                isPickingExercise = true
+            }
+            #endif
         }
+        // Home may hand over a day while this tab is already built, in which
+        // case `.task` has long since run.
+        .onChange(of: pendingStart?.id) { _, _ in consumePendingStart() }
         .sheet(isPresented: $isPickingExercise) {
-            ExercisePicker { exercise in
+            ExercisePicker(initialDetailQuery: pickerDetailQuery) { exercise in
                 model?.addExercise(exercise, sets: 1)
             }
         }
+    }
+
+    /// Under `-openExercisePicker`, the name to push a detail screen onto.
+    /// Empty string means "open the list and stop there".
+    private var pickerDetailQuery: String? {
+        #if DEBUG
+        let query = LaunchArguments.exercisePickerQuery
+        return (query?.isEmpty ?? true) ? nil : query
+        #else
+        return nil
+        #endif
     }
 
     /// True only under `-restDemo`, which is DEBUG-gated everywhere it acts.
@@ -338,10 +372,14 @@ struct WorkoutTrackerView: View {
 /// nested `ForEach`es, and half a dozen closures is more than it will solve.
 private struct ActiveWorkoutList: View {
     let model: TrackerModel
-    /// The unit the lifter reads weights in. Passed down rather than read from
-    /// the environment here, for the same reason `model` is: this list is
+    /// The unit the lifter reads a given lift in — `exerciseUnits[id]`, then the
+    /// app default. Passed as a function rather than a value because it now
+    /// varies per exercise, and passed down rather than read from the
+    /// environment here for the same reason `model` is: this list is
     /// deliberately a plain view over its inputs.
-    let unit: WeightUnit
+    let unitFor: (Int) -> WeightUnit
+    /// Pins a lift to a unit, or clears it with `nil`. Sticky across sessions.
+    let onSetExerciseUnit: (Int, WeightUnit?) -> Void
     let onAddExercise: () -> Void
 
     /// Per-exercise expand override. Absent means "default to expanded only if
@@ -387,14 +425,16 @@ private struct ActiveWorkoutList: View {
             #endif
         }
         .sheet(item: $noteEditorTarget) { target in
-            NoteEditorSheet(
-                programmedNote: programmedNote(for: target),
-                usernote: usernoteBinding(for: target)
+            NoteSheet(
+                title: "Note",
+                context: programmedNote(for: target).map { ("programmed", $0) },
+                note: usernoteBinding(for: target)
             )
         }
         .sheet(item: $choosingFor) { target in
             ExercisePicker(
                 initialMuscleFilter: target.muscleGroup,
+                initialEquipmentFilter: target.equipment,
                 suggestions: target.suggestions
             ) { picked in
                 // Recording what actually filled the slot: the logged exercise
@@ -429,7 +469,11 @@ private struct ActiveWorkoutList: View {
     @ViewBuilder
     private var achievedMaxBanner: some View {
         if let record = model.newAchievedMax {
-            AchievedMaxBanner(exercise: record.exercise, max: record.max, unit: unit) {
+            AchievedMaxBanner(
+                exercise: record.exercise,
+                max: record.max,
+                unit: unitFor(record.exercise.id)
+            ) {
                 model.dismissAchievedMaxBanner()
             }
             .padding(.horizontal, 16)
@@ -448,7 +492,11 @@ private struct ActiveWorkoutList: View {
                     .padding(.top, groupIndex == 0 ? 0 : 8)
             }
             ForEach(group) { exercise in
-                exerciseRows(exercise: exercise, groupIndex: groupIndex)
+                exerciseRows(
+                    exercise: exercise,
+                    groupIndex: groupIndex,
+                    isSuperset: group.count > 1
+                )
             }
         }
         // Reorders whole exercise groups (supersets move together). Known
@@ -461,7 +509,11 @@ private struct ActiveWorkoutList: View {
     }
 
     @ViewBuilder
-    private func exerciseRows(exercise: WorkoutExercise, groupIndex: Int) -> some View {
+    private func exerciseRows(
+        exercise: WorkoutExercise,
+        groupIndex: Int,
+        isSuperset: Bool
+    ) -> some View {
         let isActiveGroup = model.session?.activeExercise?.group == groupIndex
         let sets = exercise.sets ?? []
         let restTimer = model.rest?.exerciseID == exercise.id ? model.rest : nil
@@ -470,22 +522,46 @@ private struct ActiveWorkoutList: View {
         // "active" to the next lift, which used to fold this one shut with a
         // live countdown inside it. A tap still overrides in either direction.
         let expanded = expandedOverrides[exercise.id] ?? (isActiveGroup || restTimer != nil)
-        let accent = isActiveGroup ? Theme.live.opacity(0.55) : Theme.hairline
+        // A superset's members share an accent so they read as one unit. A
+        // caption above two otherwise-identical exercises doesn't say they're
+        // paired — it says there's a caption. Live still wins: whichever lift
+        // is being worked is the more urgent fact.
+        let accent: Color = if isActiveGroup {
+            Theme.live.opacity(0.55)
+        } else if isSuperset {
+            Theme.signal.opacity(0.45)
+        } else {
+            Theme.hairline
+        }
+        // The middle level of the unit chain. A set may still override it.
+        let exerciseUnit = unitFor(exercise.exercise.id)
 
         ExerciseHeaderRow(
             exercise: exercise,
             isActive: isActiveGroup,
             isExpanded: expanded,
+            unit: exerciseUnit,
+            isSupersetted: (model.session?.exerciseGroups[groupIndex].count ?? 1) > 1,
+            supersetCandidates: supersetCandidates(excluding: exercise.id),
             onToggleExpanded: { expandedOverrides[exercise.id] = !expanded },
+            onSetUnit: { onSetExerciseUnit(exercise.exercise.id, $0) },
+            onSuperset: { model.superset(id: exercise.id, with: $0) },
+            onUngroup: { model.ungroup(id: exercise.id) },
+            onAddDropSet: { model.addDropSet(toExerciseWith: exercise.id) },
             onDelete: { model.deleteExercise(id: exercise.id) },
             onEditNote: { noteEditorTarget = .exercise(exercise.id) },
             onChooseExercise: {
+                let open = exercise.exercise.isOpenChoice
                 choosingFor = ChoosingTarget(
                     id: exercise.id,
-                    muscleGroup: exercise.exercise.isOpenChoice ? exercise.exercise.muscleGroup : nil,
-                    suggestions: exercise.exercise.isOpenChoice
-                        ? (exercise.exercise.suggestions ?? [])
-                        : []
+                    // An open slot filters to the muscle group the coach named.
+                    // A *swap* filters to what's being replaced — someone
+                    // changing barbell rows is looking for another back
+                    // movement, and usually another barbell one. Both are
+                    // visible chips that clear in a tap.
+                    muscleGroup: exercise.exercise.muscleGroup,
+                    equipment: open ? nil : exercise.exercise.equipment,
+                    suggestions: open ? (exercise.exercise.suggestions ?? []) : []
                 )
             }
         )
@@ -515,13 +591,23 @@ private struct ActiveWorkoutList: View {
                     SetRow(
                         number: index + 1,
                         set: set,
+                        suggestion: model.suggestion(forSetAt: index, in: exercise),
                         isNextUp: model.session?.nextSet?.id == set.id,
-                        unit: unit,
-                        onToggle: { toggle(set) },
+                        // Most specific wins: this set's own unit, else the
+                        // exercise's, else the app default.
+                        unit: set.unit ?? exerciseUnit,
+                        exerciseUnit: exerciseUnit,
+                        hasUnitOverride: set.unit != nil,
+                        onToggle: {
+                            toggle(set, suggestion: model.suggestion(forSetAt: index, in: exercise))
+                        },
                         onRepsChange: { reps in model.updateSet(id: set.id) { $0.reps = reps } },
                         onWeightChange: { weight in model.updateSet(id: set.id) { $0.weight = weight } },
                         onRPEChange: { rpe in model.updateSet(id: set.id) { $0.rpe = rpe } },
-                        onEditNote: { noteEditorTarget = .set(set.id) }
+                        onUnitChange: { unit in model.updateSet(id: set.id) { $0.unit = unit } },
+                        onTypeChange: { type in model.updateSet(id: set.id) { $0.type = type } },
+                        onEditNote: { noteEditorTarget = .set(set.id) },
+                        onDelete: { model.deleteSet(id: set.id) }
                     )
 
                     // Every set carries its rest, on the line under it, in the
@@ -669,11 +755,34 @@ private struct ActiveWorkoutList: View {
         .panelRow()
     }
 
-    private func toggle(_ set: WorkoutSet) {
+    /// The exercises this one could be paired with — everything else in the
+    /// workout, named as the lifter sees them. Pairing is only offered against
+    /// something that exists, so a one-exercise workout gets no menu entry.
+    private func supersetCandidates(excluding id: UUID) -> [(id: UUID, name: String)] {
+        (model.session?.exerciseGroups ?? [])
+            .flatMap { $0 }
+            .filter { $0.id != id }
+            .map { (id: $0.id, name: $0.displayName) }
+    }
+
+    /// Checking off an untouched set commits whatever was proposed in it.
+    ///
+    /// That's the convention Strong and Hevy set and it's the frictionless path
+    /// `Features/Workout Tracker.md` asks for — but it's only honest because
+    /// the number was on screen, in a field, before the tap. The lifter has
+    /// seen it and can type over it; the checkbox is the confirmation.
+    ///
+    /// `completeSet` already takes reps/weight overrides, so nothing in the
+    /// model has to know suggestions exist.
+    private func toggle(_ set: WorkoutSet, suggestion: SetSuggestion.Values? = nil) {
         if set.complete == true {
             model.uncompleteSet(id: set.id)
         } else {
-            model.completeSet(id: set.id)
+            model.completeSet(
+                id: set.id,
+                reps: set.reps == nil ? suggestion?.reps : nil,
+                weight: set.weight == nil ? suggestion?.weight : nil
+            )
         }
     }
 
@@ -722,9 +831,12 @@ private struct ActiveWorkoutList: View {
 /// Which exercise slot the picker is filling, and what to pre-filter it by.
 private struct ChoosingTarget: Identifiable {
     let id: UUID
-    /// Non-nil for an open-choice slot — the muscle group the coach specified,
-    /// used to pre-filter the picker to plausible choices.
+    /// The muscle group to pre-filter by: the coach's target for an open slot,
+    /// or the outgoing exercise's own when swapping.
     let muscleGroup: String?
+    /// Set when swapping a specific lift rather than filling an open slot —
+    /// "another barbell movement" is the overwhelmingly likely intent.
+    var equipment: String?
     /// Movements the program floated for this slot. Shortcuts into the search,
     /// never a restriction on it — the lifter picks what they pick.
     var suggestions: [String] = []
@@ -808,7 +920,18 @@ private struct ExerciseHeaderRow: View {
     let exercise: WorkoutExercise
     let isActive: Bool
     let isExpanded: Bool
+    /// The unit this lift resolves to today, for the checkmark in the menu.
+    let unit: WeightUnit
+    /// Whether this exercise is currently sharing a group with another.
+    let isSupersetted: Bool
+    /// Everything else in the workout, as pairing targets.
+    let supersetCandidates: [(id: UUID, name: String)]
     let onToggleExpanded: () -> Void
+    /// Pins this lift to a unit for good, or clears it back to the app default.
+    let onSetUnit: (WeightUnit?) -> Void
+    let onSuperset: (UUID) -> Void
+    let onUngroup: () -> Void
+    let onAddDropSet: () -> Void
     let onDelete: () -> Void
     let onEditNote: () -> Void
     let onChooseExercise: () -> Void
@@ -879,6 +1002,29 @@ private struct ExerciseHeaderRow: View {
                     systemImage: "arrow.triangle.2.circlepath",
                     action: onChooseExercise
                 )
+                // Sticky, and the menu says so — a control that silently
+                // changes every future session is worse than one that doesn't.
+                // Pairing is a decision made at the rack, not something that
+                // can only arrive from a plan.
+                if isSupersetted {
+                    Button("Remove From Superset", systemImage: "arrow.up.and.down.and.arrow.left.and.right", action: onUngroup)
+                } else if !supersetCandidates.isEmpty {
+                    Menu("Superset With", systemImage: "arrow.triangle.merge") {
+                        ForEach(supersetCandidates, id: \.id) { candidate in
+                            Button(candidate.name) { onSuperset(candidate.id) }
+                        }
+                    }
+                }
+                Button("Add Drop Set", systemImage: "arrow.down.right", action: onAddDropSet)
+                Menu("Unit — \(unit.symbol)", systemImage: "scalemass") {
+                    Picker("Unit", selection: unitSelection) {
+                        ForEach(WeightUnit.allCases, id: \.self) { option in
+                            Text(option == .pounds ? "Pounds (lb)" : "Kilograms (kg)")
+                                .tag(Optional(option))
+                        }
+                    }
+                    Button("Use App Default") { onSetUnit(nil) }
+                }
                 Button("Edit Note", systemImage: "note.text", action: onEditNote)
                 Button("Delete Exercise", systemImage: "trash", role: .destructive, action: onDelete)
             } label: {
@@ -887,6 +1033,12 @@ private struct ExerciseHeaderRow: View {
                     .foregroundStyle(Theme.inkMuted)
             }
         }
+    }
+
+    /// Writes through on pick; reading it back is what puts the checkmark on
+    /// the unit currently in force, inherited or not.
+    private var unitSelection: Binding<WeightUnit?> {
+        Binding(get: { unit }, set: { onSetUnit($0) })
     }
 
     private var collapsedProgress: String {
@@ -902,14 +1054,27 @@ private struct ExerciseHeaderRow: View {
 private struct SetRow: View {
     let number: Int
     let set: WorkoutSet
+    /// What the lifter did last time, shown greyed in whichever of reps/weight
+    /// is still empty. A proposal, never a prescription — see `SetSuggestion`.
+    let suggestion: SetSuggestion.Values?
     let isNextUp: Bool
-    /// The unit this row reads and writes weights in.
+    /// The unit this row reads and writes weights in — already resolved by the
+    /// caller through `set.unit ?? exerciseUnit ?? preferredUnit`.
     let unit: WeightUnit
+    /// What this set would fall back to, for the menu's "use exercise default".
+    let exerciseUnit: WeightUnit
+    /// Whether this set is overriding that fallback, for the menu's checkmark.
+    let hasUnitOverride: Bool
     let onToggle: () -> Void
     let onRepsChange: (Int?) -> Void
     let onWeightChange: (Measurement<UnitMass>?) -> Void
     let onRPEChange: (Float?) -> Void
+    let onUnitChange: (WeightUnit?) -> Void
+    /// Retypes a set after the fact — warmup / working / drop. Load-bearing:
+    /// `AchievedMaxUpdate` only ever records a max from a `.working` set.
+    let onTypeChange: (SetType) -> Void
     let onEditNote: () -> Void
+    let onDelete: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
@@ -922,9 +1087,30 @@ private struct SetRow: View {
     }
 
     private var hasAnnotations: Bool {
-        prescription != nil || (self.set.type.map { $0 != .working } ?? false)
+        prescription != nil
+            || showsSuggestionTag
+            || (self.set.type.map { $0 != .working } ?? false)
     }
 
+    /// Whether a greyed number is currently standing in for an entry.
+    ///
+    /// Drives the `LAST` tag, which exists because contrast alone can't say
+    /// "this is a proposal": the placeholder meets AA as text (it's committable
+    /// by tapping the checkbox, so it has to), which necessarily brings it
+    /// closer to an entered value. WCAG §1.4.1 — never colour as the only
+    /// channel — and it answers the more useful question anyway, which is
+    /// *where the number came from*.
+    private var showsSuggestionTag: Bool {
+        guard !done, let suggestion else { return false }
+        return !suggestion.isEmpty
+    }
+
+    /// A completed set keeps `Theme.ink` rather than dimming to `inkMuted`.
+    /// Reps and weight are lift data — you read set 1's weight while doing set
+    /// 3 — and AAA (7:1) applies to them; `inkMuted` is 5.47:1. Done-ness is
+    /// carried by font weight instead, which is the better channel anyway:
+    /// state should never be colour alone (WCAG §1.4.1).
+    ///
     /// Every quantity is visible and directly tappable — no expand step. Reps
     /// and weight are inline text fields; RPE is a chip opening `RPEPicker`,
     /// constrained to the app's 1–10 by 0.5 scale (Core Tenets §3) so an
@@ -947,13 +1133,14 @@ private struct SetRow: View {
                 // Never let the index be the thing that gets truncated.
                 .fixedSize()
 
-            NumberField(
+            SuggestingNumberField(
                 value: repsBinding,
-                format: .number,
+                suggestion: suggestion?.reps.map(Double.init),
+                fractionDigits: 0,
                 label: "reps",
                 isActive: !done,
                 font: Theme.data(15, weight: done ? .regular : .medium),
-                foreground: done ? Theme.inkMuted : Theme.ink,
+                foreground: Theme.ink,
                 step: 1,
                 onStep: { delta in onRepsChange(max(0, (self.set.reps ?? 0) + Int(delta))) }
             )
@@ -964,13 +1151,15 @@ private struct SetRow: View {
                 .foregroundStyle(Theme.inkFaint)
                 .fixedSize()
 
-            NumberField(
+            SuggestingNumberField(
                 value: weightBinding,
-                format: .number.precision(.fractionLength(0...2)),
+                // Read in this row's unit like everything else, so a suggestion
+                // drawn from a set logged in kg still reads in pounds here.
+                suggestion: suggestion?.weight?.expressed(in: unit).value,
                 label: "weight",
                 isActive: !done,
                 font: Theme.data(15, weight: done ? .regular : .medium),
-                foreground: done ? Theme.inkMuted : Theme.ink,
+                foreground: Theme.ink,
                 // One plate per side, in the unit the plates are marked in.
                 step: unit == .pounds ? 2.5 : 1,
                 onStep: { delta in
@@ -991,14 +1180,49 @@ private struct SetRow: View {
                 onChange: onRPEChange
             )
 
-            Button(action: onEditNote) {
-                Image(systemName: hasNote ? "note.text" : "square.and.pencil")
-                    .font(.system(size: 14))
-                    .foregroundStyle(hasNote ? Theme.signal : Theme.inkFaint)
-            }
-            .buttonStyle(.plain)
-            .fixedSize()
+            setMenu
         }
+    }
+
+    /// One glyph, four capabilities. This was a bare note button; a set had no
+    /// way to change its own unit or its type, which meant a set added as the
+    /// wrong kind had to be deleted and remade. Matches the planner's set row,
+    /// which has had this menu all along.
+    private var setMenu: some View {
+        Menu {
+            Menu("Unit — \(unit.symbol)", systemImage: "scalemass") {
+                Picker("Unit", selection: unitSelection) {
+                    ForEach(WeightUnit.allCases, id: \.self) { option in
+                        Text(option == .pounds ? "Pounds (lb)" : "Kilograms (kg)")
+                            .tag(Optional(option))
+                    }
+                }
+                // Only offered when it would do something.
+                if hasUnitOverride {
+                    Button("Use Exercise Default (\(exerciseUnit.symbol))") { onUnitChange(nil) }
+                }
+            }
+            Picker("Set Type", selection: typeSelection) {
+                ForEach(SetType.allCases, id: \.self) { type in
+                    Text(type.rawValue.capitalized).tag(type)
+                }
+            }
+            Button("Edit Note", systemImage: "note.text", action: onEditNote)
+            Button("Delete Set", systemImage: "trash", role: .destructive, action: onDelete)
+        } label: {
+            Image(systemName: hasNote ? "note.text" : "ellipsis")
+                .font(.system(size: 14))
+                .foregroundStyle(hasNote ? Theme.signal : Theme.inkFaint)
+        }
+        .fixedSize()
+    }
+
+    private var unitSelection: Binding<WeightUnit?> {
+        Binding(get: { unit }, set: { onUnitChange($0) })
+    }
+
+    private var typeSelection: Binding<SetType> {
+        Binding(get: { self.set.type ?? .working }, set: { onTypeChange($0) })
     }
 
     /// The quiet second line: what was *prescribed*, where that isn't already
@@ -1019,6 +1243,14 @@ private struct SetRow: View {
                     .font(Theme.data(12))
                     .foregroundStyle(done ? Theme.inkMuted : Theme.inkFaint)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if showsSuggestionTag {
+                Text("LAST")
+                    .font(Theme.label)
+                    .tracking(1.1)
+                    .foregroundStyle(Theme.inkMuted)
+                    .fixedSize()
             }
 
             Spacer(minLength: 0)
@@ -1066,8 +1298,14 @@ private struct SetRow: View {
     private var done: Bool { self.set.complete == true }
     private var hasNote: Bool { !(self.set.usernotes ?? "").isEmpty }
 
-    private var repsBinding: Binding<Int> {
-        Binding(get: { self.set.reps ?? 0 }, set: { onRepsChange($0) })
+    /// Optional on purpose. An unlogged set has *no* reps, and binding a
+    /// non-optional rendered that as `0` — a number nobody performed, sitting
+    /// in the field as though it were data.
+    private var repsBinding: Binding<Double?> {
+        Binding(
+            get: { self.set.reps.map(Double.init) },
+            set: { onRepsChange($0.map { Int($0.rounded()) }) }
+        )
     }
 
     /// Reads and writes in the lifter's own unit.
@@ -1077,20 +1315,26 @@ private struct SetRow: View {
     /// they're committing. `expressed(in:)` rounds to two decimals precisely so
     /// that tapping into a converted field and tapping out again can't drift
     /// the weight in a decimal place nobody can see.
-    private var weightBinding: Binding<Double> {
+    private var weightBinding: Binding<Double?> {
         Binding(
-            get: { self.set.weight?.expressed(in: unit).value ?? 0 },
-            set: { onWeightChange(Measurement(value: $0, unit: weightUnit)) }
+            get: { self.set.weight?.expressed(in: unit).value },
+            set: { onWeightChange($0.map { Measurement(value: $0, unit: weightUnit) }) }
         )
     }
 
-    /// The lifter's unit, always — not the set's, and not the prescription's.
+    /// The unit this row reads and writes in — the resolved end of the chain
+    /// `set.unit ?? exerciseUnit ?? user.preferredUnit`, decided by the caller.
     ///
-    /// This used to fall back through the set's own weight and then the
-    /// prescribed load, because there was no app-wide preference to consult.
-    /// There is one now (`User.preferredUnit`), and a preference that the
-    /// tracker overrode whenever a program happened to be written in pounds
-    /// would be a preference in name only.
+    /// It briefly meant "the lifter's app-wide unit, always." That was right
+    /// when the app-wide preference was the only one that existed: a preference
+    /// the tracker overrode whenever a program happened to be written in pounds
+    /// would have been a preference in name only. Now there are two more
+    /// specific preferences above it, both authored by the lifter — a lift
+    /// pinned to kg, and one set done on the kg rack — and the most specific
+    /// authored answer wins, exactly as rest resolves (Core Tenets §1).
+    ///
+    /// What has *not* changed: none of this touches storage. A set logged at
+    /// 225 lb stays a 225 lb row; the chain decides what it's rendered as.
     private var weightUnit: UnitMass { unit.unit }
 
     /// Warmups read quieter than working sets — the HUD annotation layer
@@ -1123,50 +1367,6 @@ private struct SetRow: View {
             parts.append("planned \(plannedReps)")
         }
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
-    }
-}
-
-// MARK: - Note editor
-
-private struct NoteEditorSheet: View {
-    let programmedNote: String?
-    @Binding var usernote: String
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            VStack(alignment: .leading, spacing: 16) {
-                if let programmedNote, !programmedNote.isEmpty {
-                    SectionLabel(text: "programmed", accent: Theme.inkFaint)
-                    Text(programmedNote)
-                        .font(Theme.body)
-                        .foregroundStyle(Theme.inkMuted)
-                }
-
-                SectionLabel(text: "your note", accent: Theme.signal)
-                TextEditor(text: $usernote)
-                    .font(Theme.body)
-                    .foregroundStyle(Theme.ink)
-                    .scrollContentBackground(.hidden)
-                    .padding(8)
-                    .background(Theme.panel)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-
-                Spacer()
-            }
-            .padding(16)
-            .background(Theme.void)
-            .navigationTitle("Note")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                }
-            }
-        }
-        .presentationDetents([.medium])
     }
 }
 
@@ -1206,158 +1406,7 @@ private struct AchievedMaxBanner: View {
 
 // MARK: - Rest timer
 
-// MARK: - Exercise picker
-
-private struct ExercisePicker: View {
-    @Environment(AppEnvironment.self) private var environment
-    @Environment(\.dismiss) private var dismiss
-
-    /// Pre-selects a muscle filter — set when filling an open-choice slot the
-    /// coach targeted at a specific muscle group.
-    var initialMuscleFilter: String?
-    /// What the program suggested for this slot, if anything.
-    var suggestions: [String] = []
-    let onPick: (Exercise) -> Void
-
-    @State private var exercises: [Exercise] = []
-    @State private var query = ""
-    @State private var muscleFilter: String?
-    @State private var equipmentFilter: String?
-
-    var body: some View {
-        NavigationStack {
-            VStack(spacing: 0) {
-                suggestionBar
-                filterBar
-                List(filtered) { exercise in
-                    Button {
-                        onPick(exercise)
-                        dismiss()
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(exercise.name)
-                            HStack(spacing: 4) {
-                                Text(exercise.muscleGroup)
-                                if let equipment = exercise.equipment {
-                                    Text("· \(equipment.capitalized)")
-                                }
-                            }
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        }
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .searchable(text: $query)
-            .navigationTitle(initialMuscleFilter == nil ? "Add Exercise" : "Choose Exercise")
-            // iOS-only, and the app is iOS-only — the guard exists so these
-            // sources still typecheck against the macOS SDK, which is currently
-            // the only way to compile-check them on this machine.
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-            }
-            .task {
-                exercises = (try? environment.exercises.fetchAll()) ?? []
-                if muscleFilter == nil { muscleFilter = initialMuscleFilter }
-            }
-        }
-    }
-
-    /// What the program floated for this slot — "overhead extension,"
-    /// "pushdown." Tapping one searches for it.
-    ///
-    /// Suggestions, not a whitelist. The program leaving the movement open is
-    /// the whole point of the slot, so these can't narrow what's pickable — the
-    /// app doesn't overrule the lifter (Core Tenets §1). Absent entirely where
-    /// the program suggested nothing, rather than showing an empty rail.
-    @ViewBuilder
-    private var suggestionBar: some View {
-        if !suggestions.isEmpty {
-            VStack(alignment: .leading, spacing: 6) {
-                SectionLabel(text: "programmed as")
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 6) {
-                        ForEach(suggestions, id: \.self) { suggestion in
-                            Button { query = suggestion } label: {
-                                Text(suggestion)
-                                    .font(Theme.data(13))
-                                    .foregroundStyle(Theme.signal)
-                                    .padding(.horizontal, 9)
-                                    .padding(.vertical, 5)
-                                    .background(Theme.panelRaised)
-                                    .clipShape(Capsule())
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.top, 10)
-        }
-    }
-
-    /// Muscle and equipment chips. Lift-family grouping (Larsen/Spoto/close-grip
-    /// as bench variations) isn't here yet — that needs a real notion of family
-    /// on the catalog, not a name-substring guess.
-    private var filterBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                ForEach(muscleOptions, id: \.self) { muscle in
-                    filterChip(muscle, isOn: muscleFilter == muscle) {
-                        muscleFilter = muscleFilter == muscle ? nil : muscle
-                    }
-                }
-                Divider().frame(height: 18)
-                ForEach(equipmentOptions, id: \.self) { equipment in
-                    filterChip(equipment.capitalized, isOn: equipmentFilter == equipment) {
-                        equipmentFilter = equipmentFilter == equipment ? nil : equipment
-                    }
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-        }
-    }
-
-    private func filterChip(_ label: String, isOn: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(label)
-                .font(Theme.data(13))
-                .foregroundStyle(isOn ? Theme.void : Theme.inkMuted)
-                .padding(.horizontal, 9)
-                .padding(.vertical, 5)
-                .background(isOn ? Theme.signal : Theme.panelRaised)
-                .clipShape(Capsule())
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var muscleOptions: [String] {
-        Array(Set(exercises.map(\.muscleGroup))).sorted()
-    }
-
-    private var equipmentOptions: [String] {
-        Array(Set(exercises.compactMap(\.equipment))).sorted()
-    }
-
-    private var filtered: [Exercise] {
-        exercises.filter { exercise in
-            if let muscleFilter, exercise.muscleGroup != muscleFilter { return false }
-            if let equipmentFilter, exercise.equipment != equipmentFilter { return false }
-            if !query.isEmpty, !exercise.name.localizedCaseInsensitiveContains(query) { return false }
-            return true
-        }
-    }
-}
-
 #Preview {
-    WorkoutTrackerView()
+    WorkoutTrackerView(pendingStart: .constant(nil))
         .environment(AppEnvironment.preview())
 }
