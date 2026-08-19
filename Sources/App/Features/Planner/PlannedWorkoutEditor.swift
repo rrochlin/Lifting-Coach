@@ -51,12 +51,16 @@ struct PlannedWorkoutEditor: View {
         .navigationBarBackButtonHidden(draft.hasUnsavedChanges)
         .toolbar { toolbar }
         .sheet(isPresented: $isPickingExercise) {
-            PlannerExercisePicker { exercise in
+            ExercisePicker { exercise in
                 draft.addExercise(exercise)
             }
         }
         .sheet(item: $noteTarget) { target in
-            PlannerNoteSheet(title: noteTitle(for: target), note: noteBinding(for: target))
+            NoteSheet(
+                title: noteTitle(for: target),
+                editorLabel: "programmed note",
+                note: noteBinding(for: target)
+            )
         }
         .themedConfirm(
             isPresented: $isConfirmingDiscard,
@@ -724,94 +728,4 @@ private struct RestMenu: View {
     }
 
     private var options: [Int] { [30, 45, 60, 90, 120, 150, 180, 240, 300] }
-}
-
-// MARK: - Note sheet
-
-/// The programmed note — "work up, stop at 9", tempo, a pause cue. Distinct
-/// from the lifter's own `usernotes`, which are written during a workout.
-private struct PlannerNoteSheet: View {
-    let title: String
-    @Binding var note: String
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        NavigationStack {
-            VStack(alignment: .leading, spacing: 16) {
-                SectionLabel(text: "programmed note", accent: Theme.signal)
-                TextEditor(text: $note)
-                    .font(Theme.body)
-                    .foregroundStyle(Theme.ink)
-                    .scrollContentBackground(.hidden)
-                    .padding(8)
-                    .background(Theme.panel)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                Spacer()
-            }
-            .padding(16)
-            .background(Theme.void)
-            .navigationTitle(title)
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
-                }
-            }
-        }
-        .presentationDetents([.medium])
-    }
-}
-
-// MARK: - Exercise picker
-
-private struct PlannerExercisePicker: View {
-    @Environment(AppEnvironment.self) private var environment
-    @Environment(\.dismiss) private var dismiss
-
-    let onPick: (Exercise) -> Void
-
-    @State private var exercises: [Exercise] = []
-    @State private var query = ""
-
-    var body: some View {
-        NavigationStack {
-            List(filtered) { exercise in
-                Button {
-                    onPick(exercise)
-                    dismiss()
-                } label: {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(exercise.name)
-                        HStack(spacing: 4) {
-                            Text(exercise.muscleGroup)
-                            if let equipment = exercise.equipment {
-                                Text("· \(equipment.capitalized)")
-                            }
-                        }
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    }
-                }
-                .buttonStyle(.plain)
-            }
-            .searchable(text: $query)
-            .navigationTitle("Add Exercise")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                }
-            }
-            .task { exercises = (try? environment.exercises.fetchAll()) ?? [] }
-        }
-    }
-
-    private var filtered: [Exercise] {
-        guard !query.isEmpty else { return exercises }
-        return exercises.filter { $0.name.localizedCaseInsensitiveContains(query) }
-    }
 }
