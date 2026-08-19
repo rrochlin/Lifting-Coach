@@ -54,7 +54,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v10
+      # Exact tag, not `@v10`: astral-sh publishes no floating major-version
+      # alias the way GitHub's own actions do, so `@v10` fails to resolve at
+      # "Set up job" before anything runs.
+      - uses: astral-sh/setup-uv@v10.0.1
         with:
           enable-cache: true
       - name: pytest
