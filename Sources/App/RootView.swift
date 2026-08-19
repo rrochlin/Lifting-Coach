@@ -152,6 +152,19 @@ enum LaunchArguments {
         ProcessInfo.processInfo.arguments.contains("-reorderMode")
     }
 
+    /// `-openExerciseLibrary` opens Profile's exercise library (needs
+    /// `-initialTab profile`); `-openExerciseLibrary "Squat"` pushes straight
+    /// through to that exercise's entry. Same stopgap family as the rest — the
+    /// library is behind a tap, and simctl can't tap.
+    static var opensExerciseLibrary: Bool {
+        ProcessInfo.processInfo.arguments.contains("-openExerciseLibrary")
+    }
+
+    /// The exercise `-openExerciseLibrary` should open, if it names one.
+    static var exerciseLibraryQuery: String? {
+        value(for: "-openExerciseLibrary")
+    }
+
     /// `-rpeDemo` opens the RPE scale on the first set row that draws one.
     ///
     /// The scale is a popover behind a tap, and simctl can't tap. It's also a

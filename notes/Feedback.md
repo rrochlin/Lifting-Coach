@@ -36,6 +36,7 @@ This document will be a thorough review of the current application state and iss
 
 ## Profile
 - fine for now
+- ~~look up exercise info — we have it all, we might as well show it~~ — EXERCISE LIBRARY under `reference`: the whole vendored catalog, searchable, ordered by what you actually train. Each entry shows its tags, primary and secondary muscles (imported since the catalog landed and displayed nowhere until now), everything you've logged under it, and the catalog's own step-by-step instructions. Mid-workout the same screen is one tap away from any lift's `…` menu as "Exercise Info".
 - ~~data export~~ — EXPORT DATA writes the whole local database as one JSON archive and hands it to the share sheet. Import stays out by direction; the screen says so rather than leaving the section half-empty.
 
 ## Backlog

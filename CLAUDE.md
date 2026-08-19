@@ -140,6 +140,12 @@ Wiping the phone is `xcrun devicectl device uninstall app --device <id> com.rroc
 - Only **completed** workouts count (`endTime IS NOT NULL`). That's correct for a count and *necessary* for suggestions — otherwise the session you're in proposes the set you're looking at.
 - Heaviest is **working sets only**; a ramp-up single and a back-off aren't attempts at a limit. Compared in kilograms across units, reported in the unit it was logged in.
 
+**The catalog is readable, not just pickable.** ~870 vendored entries carry equipment, mechanic, force, level, both muscle lists and step-by-step instructions; until now the only route to any of it was to go and *choose* an exercise, which is a verb you only reach for while editing a workout.
+- **`ExercisePicker` with no `onPick` is the library** — same search, same usage ordering, same detail screen, minus anything to commit to. One component rather than a second, because the difference between choosing a lift and reading about one is a single button, and this file exists precisely because there *were* two of these once and the copy drifted a redesign behind. Reached from **Profile → Exercise Library**; the title becomes "Exercises" and Cancel becomes Done, since reading the catalog isn't an action being abandoned.
+- **`ExerciseInfoSheet` is the in-the-moment route** — "Exercise Info" in the tracker's exercise `…` menu, opening straight to the lift in front of you without leaving the workout. It wraps `ExerciseDetailView` rather than reimplementing it, so both routes show the same thing.
+- **`primaryMuscles`/`secondaryMuscles` are displayed at last.** They were imported when the catalog landed and rendered nowhere. `muscleGroup` *is* the primary muscle, so its chip in the tag row is dropped whenever the muscles panel is present — otherwise the same word appeared twice in two panels. Both are absent, not empty, for an open slot or anything a program or the CSV importer created: those carry no catalog metadata at all, and that isn't a gap to paper over.
+- `-openExerciseLibrary` opens it (needs `-initialTab profile`); `-openExerciseLibrary "Squat"` pushes through to one entry.
+
 **One exercise picker, and picking is a two-step.** `Components/ExercisePicker.swift` replaces two near-duplicates (the tracker's themed one, and a stripped unthemed clone in the planner that had drifted a redesign behind).
 - A row used to commit on a single tap. It now pushes `ExerciseDetailView` — tags, your history, the catalog `instructions` that were imported and displayed nowhere — and commits on an explicit **Use This Exercise**.
 - **Ordered by `sessionCount` desc, then name.** Alphabetical over ~870 entries buries the twenty a person trains. Usage order applies inside a search too.
@@ -298,6 +304,7 @@ xcrun simctl io "$D" screenshot /tmp/shot.png
 - `-openPlanDay N` opens the planner's day editor.
 - `-restDemo <seconds>` starts a throwaway workout with two exercises, completes **every set of the first** through the real `completeSet` path, and leaves the rest timer running that long (`-restDemo 0` lands on the expired state). Finishing an exercise is deliberate: it hands "active" to the next lift, which is the state that used to fold the finished exercise shut with a live countdown inside it.
 - `-openBlockSettings` opens the planner's block settings sheet (needs `-initialTab plan`).
+- `-openExerciseLibrary [name]` opens Profile's exercise library, optionally straight to one entry (needs `-initialTab profile`).
 - `-rpeDemo` opens the RPE scale on the **first** picker that draws one, latched process-wide. The latch is the point: the first attempt forced every `RPEPicker` on screen open at once and iOS presented none of them.
 - `-reorderMode` puts the tracker into reorder mode (pair with `-restDemo`, which makes a workout to reorder).
 - `-openCalendarDay 18` opens History's calendar day dialog (needs `-initialTab history`).

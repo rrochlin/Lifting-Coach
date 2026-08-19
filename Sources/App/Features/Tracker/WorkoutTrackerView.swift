@@ -389,6 +389,9 @@ private struct ActiveWorkoutList: View {
     /// The exercise whose slot is being filled — an open-choice slot being
     /// resolved, or any exercise being swapped mid-workout.
     @State private var choosingFor: ChoosingTarget?
+    /// The lift whose catalog entry is being read. A separate presentation from
+    /// `choosingFor` because looking a lift up is not choosing one.
+    @State private var infoFor: Exercise?
 
     /// Whether the list is in reorder mode: every exercise collapsed to a
     /// single draggable row.
@@ -483,6 +486,9 @@ private struct ActiveWorkoutList: View {
                 context: programmedNote(for: target).map { ("programmed", $0) },
                 note: usernoteBinding(for: target)
             )
+        }
+        .sheet(item: $infoFor) { exercise in
+            ExerciseInfoSheet(exercise: exercise)
         }
         .sheet(item: $choosingFor) { target in
             ExercisePicker(
@@ -652,6 +658,7 @@ private struct ActiveWorkoutList: View {
             onSetUnit: { onSetExerciseUnit(exercise.exercise.id, $0) },
             onSuperset: { model.superset(id: exercise.id, with: $0) },
             onUngroup: { model.ungroup(id: exercise.id) },
+            onShowInfo: { infoFor = exercise.exercise },
             onAddDropSet: { model.addDropSet(toExerciseWith: exercise.id) },
             onDelete: { model.deleteExercise(id: exercise.id) },
             onEditNote: { noteEditorTarget = .exercise(exercise.id) },
@@ -1064,6 +1071,7 @@ private struct ExerciseHeaderRow: View {
     let onSetUnit: (WeightUnit?) -> Void
     let onSuperset: (UUID) -> Void
     let onUngroup: () -> Void
+    let onShowInfo: () -> Void
     let onAddDropSet: () -> Void
     let onDelete: () -> Void
     let onEditNote: () -> Void
@@ -1177,6 +1185,11 @@ private struct ExerciseHeaderRow: View {
                         }
                     }
                 }
+                // The catalog knows what this lift works and how it's
+                // performed; until now the only way to read any of it was to go
+                // and *choose* an exercise, which is the wrong verb for a lift
+                // you're already three sets into.
+                Button("Exercise Info", systemImage: "info.circle", action: onShowInfo)
                 Button("Add Drop Set", systemImage: "arrow.down.right", action: onAddDropSet)
                 Button("Reorder Exercises", systemImage: "arrow.up.arrow.down", action: onReorder)
                 Menu("Unit — \(unit.symbol)", systemImage: "scalemass") {

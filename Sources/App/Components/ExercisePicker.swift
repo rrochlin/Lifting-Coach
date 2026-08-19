@@ -15,6 +15,13 @@ import LiftingCoachPersistence
 /// check you had the right one before it landed in your workout. Tapping now
 /// opens `ExerciseDetailView`, which says what the exercise is and what you've
 /// done with it, and commits on an explicit button.
+///
+/// **It also browses.** With no `onPick`, this is the exercise library: the same
+/// search, the same usage ordering, the same detail screen, minus anything to
+/// commit to. That's one component rather than two because the difference
+/// between choosing a lift and reading about one is a single button — and this
+/// file exists precisely because there *were* two of these once and the copy
+/// drifted a redesign behind the original.
 struct ExercisePicker: View {
     @Environment(AppEnvironment.self) private var environment
     @Environment(\.dismiss) private var dismiss
@@ -31,7 +38,11 @@ struct ExercisePicker: View {
     /// this name, so `-openExercisePicker "Bench"` can screenshot a surface
     /// that's otherwise two taps deep. Nil in every real launch.
     var initialDetailQuery: String?
-    let onPick: (Exercise) -> Void
+    /// What to do with the chosen exercise. **`nil` means browsing** — the
+    /// catalog as reference, with nothing to select and no button offering to.
+    var onPick: ((Exercise) -> Void)?
+
+    private var isBrowsing: Bool { onPick == nil }
 
     @State private var exercises: [Exercise] = []
     @State private var stats: [Int: ExerciseStats] = [:]
@@ -50,7 +61,7 @@ struct ExercisePicker: View {
             }
             .screenGround()
             .searchable(text: $query)
-            .navigationTitle(initialMuscleFilter == nil ? "Add Exercise" : "Choose Exercise")
+            .navigationTitle(title)
             // iOS-only, and the app is iOS-only — the guard exists so these
             // sources still typecheck against the macOS SDK, which is currently
             // the only way to compile-check them on this machine.
@@ -59,18 +70,27 @@ struct ExercisePicker: View {
             #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    // "Cancel" is for an action being abandoned. Reading the
+                    // catalog isn't one, so browsing says Done.
+                    Button(isBrowsing ? "Done" : "Cancel") { dismiss() }
                         .foregroundStyle(Theme.inkMuted)
                 }
             }
             .navigationDestination(for: Exercise.self) { exercise in
-                ExerciseDetailView(exercise: exercise) { picked in
-                    onPick(picked)
-                    dismiss()
-                }
+                ExerciseDetailView(exercise: exercise, onSelect: onPick.map { pick in
+                    { picked in
+                        pick(picked)
+                        dismiss()
+                    }
+                })
             }
             .task { await load() }
         }
+    }
+
+    private var title: String {
+        if isBrowsing { return "Exercises" }
+        return initialMuscleFilter == nil ? "Add Exercise" : "Choose Exercise"
     }
 
     private func load() async {
@@ -374,7 +394,9 @@ struct ExerciseDetailView: View {
     @Environment(AppEnvironment.self) private var environment
 
     let exercise: Exercise
-    let onSelect: (Exercise) -> Void
+    /// `nil` when this screen is being read rather than chosen from — see
+    /// `ExercisePicker`'s browsing mode and `ExerciseInfoSheet`.
+    var onSelect: ((Exercise) -> Void)?
 
     @State private var stats: ExerciseStats?
     @State private var sessions: [ExerciseSessionRecord] = []
@@ -384,6 +406,7 @@ struct ExerciseDetailView: View {
     var body: some View {
         List {
             tagSection
+            muscleSection
             historySection
             if let instructions = exercise.instructions, !instructions.isEmpty {
                 instructionSection(instructions)
@@ -396,7 +419,8 @@ struct ExerciseDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         // A footer rather than a list row: the button that commits shouldn't be
-        // something you have to scroll a long instruction list to reach.
+        // something you have to scroll a long instruction list to reach. Absent
+        // entirely when there's nothing to commit to.
         .safeAreaInset(edge: .bottom) { selectButton }
         .task {
             if let userID = environment.currentUser?.id {
@@ -406,8 +430,10 @@ struct ExerciseDetailView: View {
         }
     }
 
+    @ViewBuilder
     private var selectButton: some View {
-        Button { onSelect(exercise) } label: {
+        if let onSelect {
+            Button { onSelect(exercise) } label: {
             Text("Use This Exercise")
                 .font(Theme.heading)
                 .foregroundStyle(Theme.void)
@@ -415,11 +441,55 @@ struct ExerciseDetailView: View {
                 .padding(.vertical, 13)
                 .background(Theme.signal)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 10)
+            .background(.ultraThinMaterial)
         }
-        .buttonStyle(.plain)
-        .padding(.horizontal, 16)
-        .padding(.bottom, 10)
-        .background(.ultraThinMaterial)
+    }
+
+    /// Which muscles the lift works — **imported since the catalog landed and
+    /// displayed nowhere until now.** `muscleGroup` (the chip above) is one
+    /// word and is the primary muscle; the vendored entry knows the rest, and
+    /// "what else does this hit" is most of why you look a lift up.
+    ///
+    /// Absent rather than empty for the exercises that have none: an open
+    /// choice, or anything created by a program or the CSV importer, carries no
+    /// catalog metadata at all, and that's not a gap to paper over.
+    @ViewBuilder
+    private var muscleSection: some View {
+        let primary = exercise.primaryMuscles ?? []
+        let secondary = exercise.secondaryMuscles ?? []
+        if hasMuscleDetail {
+            SectionLabel(text: "muscles").panelRow()
+
+            Panel {
+                VStack(alignment: .leading, spacing: 10) {
+                    if !primary.isEmpty {
+                        muscleRow("primary", primary, color: Theme.signal)
+                    }
+                    if !secondary.isEmpty {
+                        muscleRow("secondary", secondary, color: Theme.inkMuted)
+                    }
+                }
+            }
+            .panelRow()
+        }
+    }
+
+    private func muscleRow(_ label: String, _ muscles: [String], color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(label.uppercased())
+                .font(Theme.label)
+                .tracking(1.4)
+                .foregroundStyle(Theme.inkFaint)
+            FlowRow(spacing: 6) {
+                ForEach(muscles, id: \.self) { muscle in
+                    Chip(text: muscle.lowercased(), color: color)
+                }
+            }
+        }
     }
 
     @ViewBuilder
@@ -427,7 +497,12 @@ struct ExerciseDetailView: View {
         Panel {
             VStack(alignment: .leading, spacing: 8) {
                 FlowRow(spacing: 6) {
-                    Chip(text: exercise.muscleGroup.lowercased(), color: Theme.signal)
+                    // Only where the muscles section isn't about to say it
+                    // better. `muscleGroup` is the primary muscle, so with both
+                    // on screen the same word appeared twice in two panels.
+                    if !hasMuscleDetail {
+                        Chip(text: exercise.muscleGroup.lowercased(), color: Theme.signal)
+                    }
                     ForEach(tags, id: \.self) { tag in
                         Chip(text: tag.lowercased(), color: Theme.inkMuted)
                     }
@@ -440,6 +515,13 @@ struct ExerciseDetailView: View {
             }
         }
         .panelRow()
+    }
+
+    /// Whether the catalog knows the muscles in detail. False for an open slot
+    /// and for anything a program or the CSV importer created, which carry no
+    /// catalog metadata at all.
+    private var hasMuscleDetail: Bool {
+        !(exercise.primaryMuscles ?? []).isEmpty || !(exercise.secondaryMuscles ?? []).isEmpty
     }
 
     private var tags: [String] {
@@ -586,6 +668,37 @@ struct FlowRow: Layout {
             subview.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
             x += size.width + spacing
             lineHeight = max(lineHeight, size.height)
+        }
+    }
+}
+
+// MARK: - One exercise, as reference
+
+/// The catalog entry for a single lift, presented on its own.
+///
+/// The library (`ExercisePicker` with no `onPick`) is for *finding* an
+/// exercise; this is for the one already in front of you — "what does this
+/// actually work", "how am I supposed to do this" — reached from the exercise's
+/// own `…` menu in the tracker without leaving the workout.
+///
+/// It wraps `ExerciseDetailView` rather than reimplementing it, so the lift's
+/// tags, muscles, your history with it and the catalog's instructions are the
+/// same on both routes. There is no "Use This Exercise" here because there is
+/// nothing to use it *for*: you're already doing it.
+struct ExerciseInfoSheet: View {
+    @Environment(\.dismiss) private var dismiss
+
+    let exercise: Exercise
+
+    var body: some View {
+        NavigationStack {
+            ExerciseDetailView(exercise: exercise)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { dismiss() }
+                            .foregroundStyle(Theme.signal)
+                    }
+                }
         }
     }
 }
