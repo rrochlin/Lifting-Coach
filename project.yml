@@ -48,6 +48,13 @@ targets:
       path: Sources/App/Resources/Info.plist
       properties:
         CFBundleDisplayName: Lifting Coach
+        # Both read from build settings so project.yml is the single source of
+        # truth for the version. The build number is overridden on the command
+        # line by Tools/testflight.sh, which uses the commit count — App Store
+        # Connect rejects a build number it has already seen, and a number
+        # derived from history can't be forgotten or reused.
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait

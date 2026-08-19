@@ -291,6 +291,52 @@ xcrun devicectl device process launch --device "$DEV" com.rrochlin.LiftingCoach
 
 **The launch will fail after a fresh uninstall** with "profile has not been explicitly trusted by the user" — uninstalling the last app from a developer identity removes the trust with it. Re-trusting is a tap on the phone (Settings → General → VPN & Device Management → the developer profile → Trust) and **nothing here can do it**; hand that step to the owner.
 
+### Shipping to TestFlight
+**The Developer Program membership is active** (team `33G44VZ97Z`, the same id the
+free personal team used). Two things changed the day it landed: provisioning
+profiles last a year instead of seven days, so the phone stops needing a re-trust
+after every uninstall — and the **Time Sensitive Notifications entitlement
+provisions**, which is what `Sources/App/Resources/LiftingCoach.entitlements`
+declares and the rest alert relies on. A build signed by a free team still
+installs; iOS just silently demotes the alert to `.active`.
+
+`Tools/testflight.sh` archives, exports and uploads:
+
+```sh
+Tools/testflight.sh            # archive + export, stops before upload
+Tools/testflight.sh --upload   # and send it
+```
+
+- **The build number is `git rev-list --count HEAD`**, passed as
+  `CURRENT_PROJECT_VERSION` on the xcodebuild invocation. App Store Connect
+  rejects a build number it has already seen for a version, and a number derived
+  from history can't be forgotten, reused, or left un-bumped. The marketing
+  version is `MARKETING_VERSION` in `project.yml` — the only place it lives, since
+  `Info.plist` now reads both from build settings.
+- **Uploading needs an App Store Connect API key**: the `.p8` at
+  `~/.appstoreconnect/private_keys/AuthKey_<KEYID>.p8`, plus `ASC_KEY_ID` and
+  `ASC_ISSUER_ID` in the environment. A key rather than an app-specific password
+  so no secret is ever typed on a command line or pasted into a chat.
+- **The app has to be registered in App Store Connect first**, against
+  `com.rrochlin.LiftingCoach`. Without a record the upload fails with "No
+  suitable application records were found." The *App Store* name has to be
+  globally unique, unlike the home-screen name (`CFBundleDisplayName`), which
+  doesn't.
+- **Internal testers are App Store Connect users** — up to 100, no Beta App
+  Review, available minutes after processing. External testing is the one that
+  needs review. Installing on a second phone means signing into TestFlight there
+  with an Apple ID that's an internal tester, which on a **managed/corporate
+  phone may be blocked by MDM** — that's a policy question, not a build one.
+
+Three things were blockers and are now fixed, worth knowing if any of them
+regresses: the app **had no icon** (`Tools/make-app-icon.swift` renders one from
+`Theme.swift`'s own palette literals; App Store Connect rejects a build without a
+1024×1024 opaque marketing icon), `ITSAppUsesNonExemptEncryption` is declared so
+uploads don't stop to ask, and `PrivacyInfo.xcprivacy` states the honest answers
+for a local-only app — **all three need revisiting when the phase 2 backend
+lands**, because a training log leaving the phone changes the encryption answer
+and every line of the privacy manifest.
+
 ## Working conventions from this project
 - The notes docs are living working files, not archives — once a design conversation converges on a direction, implement it directly in the relevant `.md` (or, going forward, the actual Swift code). Don't leave agreed decisions sitting only in chat.
 - The repo owner is newer to Swift specifically (not to programming or architecture) — double-check type names against real Foundation/Swift APIs rather than assuming (past mistakes caught: `DateTime`→`Date`, `Dict`→`Dictionary`, `Uuid`→`UUID`, a custom `Unit`/`Set` type shadowing Swift's built-ins) and flag Swift-specific idioms proactively (structs can't inherit — only classes/protocols; `Hashable`/`Equatable` requirements for dictionary keys; `Measurement<UnitMass>` over raw numbers for anything weight-related, for consistent unit handling).
