@@ -51,6 +51,11 @@ targets:
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+        # Declared so every TestFlight upload doesn't stop to ask. True: the app
+        # makes no network calls at all, and uses no encryption beyond whatever
+        # the OS does for it. Revisit when the phase 2 backend lands — HTTPS to
+        # your own server is still exempt, but the answer stops being trivial.
+        ITSAppUsesNonExemptEncryption: false
         # HealthKit is in Backend/Overview.md as a phase 1 local concern, but
         # nothing reads Health yet — these are declared when that work starts,
         # not before, so the app doesn't prompt for access it never uses.
