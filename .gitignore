@@ -36,3 +36,10 @@ build/
 # the part that took judgment and that anything else importing the same format
 # would need. See scripts/README.md.
 notes/Workout App/workout_history/
+
+## Python
+# `uv sync` builds these per checkout; the lockfiles beside them are what's
+# owned. Neither scripts/ nor server/ had an entry until server/ was added.
+.venv/
+__pycache__/
+*.pyc
