@@ -34,6 +34,23 @@ This document will be a thorough review of the current application state and iss
   - "See incomplete sets" is the one part with nothing to show: finishing a workout deletes its incomplete sets, so none survive into history. If they should survive instead, that's a change to `WorkoutSession.finish`, not to this screen.
 - ~~not showing time of day workout was completed~~ — shown on every row.
 
+## Search
+- ~~search is far too naive — "Barbell incline press" finds nothing even though
+  "Barbell Incline Bench Press - Medium Grip" is right there~~ — the picker
+  ranks with `ExerciseSearch` now: tokens rather than substrings, so word order
+  and missing words are fine; equipment and muscles searchable; plurals and
+  compounds collapsed (`pushups` ≡ `push up`); typos tolerated; and a small
+  authored alias table for gym words the vendored catalog doesn't use (`pec
+  deck` → *Butterfly*, `ohp` → *shoulder press*). Measured against 149 real
+  queries from five years of the owner's own logging: substring search answered
+  84% of them with a blank screen, this answers 0%.
+  - Vector search was built and measured rather than assumed. Both of Apple's
+    on-device models are worse than the string matching here — they encode
+    topical relatedness, so `squat` lands nearer `deadlift` than any real
+    synonym pair, and the contextual model ranks *Pec Deck* → Butterfly 851st
+    of 873. The reasoning is in `ExerciseSearch`'s doc comment so it doesn't
+    get re-litigated from intuition.
+
 ## Profile
 - fine for now
 - ~~look up exercise info — we have it all, we might as well show it~~ — EXERCISE LIBRARY under `reference`: the whole vendored catalog, searchable, ordered by what you actually train. Each entry shows its tags, primary and secondary muscles (imported since the catalog landed and displayed nowhere until now), everything you've logged under it, and the catalog's own step-by-step instructions. Mid-workout the same screen is one tap away from any lift's `…` menu as "Exercise Info".

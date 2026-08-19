@@ -124,6 +124,17 @@ enum LaunchArguments {
         return arguments[next]
     }
 
+    /// `-searchExercises <query>` opens the picker with that already typed into
+    /// the search field.
+    ///
+    /// Search is the one thing about the picker a screenshot can't otherwise
+    /// reach: `simctl` can install, launch and screenshot, but it cannot type,
+    /// so every ranked result was invisible from the command line. Same stopgap
+    /// family as `-initialTab`, and it wants `-initialTab workout` beside it.
+    static var exerciseSearchQuery: String? {
+        value(for: "-searchExercises")
+    }
+
     /// `-openWorkoutDetail 0` pushes the detail screen of the nth most recent
     /// logged workout (0-based). Needs `-initialTab history` beside it — the
     /// flag is read where that tab is built.

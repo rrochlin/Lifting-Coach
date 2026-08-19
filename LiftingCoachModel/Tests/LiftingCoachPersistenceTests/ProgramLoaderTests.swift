@@ -139,14 +139,18 @@ struct ProgramLoaderTests {
         // the job (see `ProgramLoader`'s doc comment).
         let (database, _, _) = try loadBundled()
         let all = try ExerciseStore(database).fetchAll()
+        // Through the picker's own search rather than a substring test, so this
+        // asks what the chip actually does. It used to check `contains`, which
+        // has since stopped being how the picker searches — a guard that
+        // measures something the app no longer does can pass while the button
+        // it was written for is broken.
+        let index = ExerciseSearchIndex(all)
 
         var checked = 0
         for slot in all where slot.isOpenChoice {
             for suggestion in slot.suggestions ?? [] {
-                let matches = all.filter {
-                    $0.name.localizedCaseInsensitiveContains(suggestion)
-                }
-                #expect(!matches.isEmpty, "\(slot.name): '\(suggestion)' finds nothing")
+                #expect(!index.ranked(suggestion).isEmpty,
+                        "\(slot.name): '\(suggestion)' finds nothing")
                 checked += 1
             }
         }

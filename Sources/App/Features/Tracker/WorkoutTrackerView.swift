@@ -61,7 +61,8 @@ struct WorkoutTrackerView: View {
             // A beat before presenting, too: setting this in the same turn as
             // the view's first appearance lands before there's anything to
             // present from, and the sheet silently never opens.
-            if LaunchArguments.exercisePickerQuery != nil, !didOpenDebugPicker {
+            if LaunchArguments.exercisePickerQuery != nil
+                || LaunchArguments.exerciseSearchQuery != nil, !didOpenDebugPicker {
                 didOpenDebugPicker = true
                 try? await Task.sleep(for: .milliseconds(700))
                 isPickingExercise = true
@@ -72,7 +73,10 @@ struct WorkoutTrackerView: View {
         // case `.task` has long since run.
         .onChange(of: pendingStart?.id) { _, _ in consumePendingStart() }
         .sheet(isPresented: $isPickingExercise) {
-            ExercisePicker(initialDetailQuery: pickerDetailQuery) { exercise in
+            ExercisePicker(
+                initialQuery: debugSearchQuery,
+                initialDetailQuery: pickerDetailQuery
+            ) { exercise in
                 model?.addExercise(exercise, sets: 1)
             }
         }
@@ -84,6 +88,15 @@ struct WorkoutTrackerView: View {
         #if DEBUG
         let query = LaunchArguments.exercisePickerQuery
         return (query?.isEmpty ?? true) ? nil : query
+        #else
+        return nil
+        #endif
+    }
+
+    /// Under `-searchExercises`, what to type into the picker's search field.
+    private var debugSearchQuery: String? {
+        #if DEBUG
+        return LaunchArguments.exerciseSearchQuery
         #else
         return nil
         #endif

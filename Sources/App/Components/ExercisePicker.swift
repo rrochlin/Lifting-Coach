@@ -34,6 +34,9 @@ struct ExercisePicker: View {
     var initialEquipmentFilter: String?
     /// What the program suggested for this slot, if anything.
     var suggestions: [String] = []
+    /// DEBUG only: pre-fills the search field, so `-searchExercises` can
+    /// screenshot ranked results. `simctl` can't type. Nil in every real launch.
+    var initialQuery: String?
     /// DEBUG only: pushes the detail screen for the first exercise matching
     /// this name, so `-openExercisePicker "Bench"` can screenshot a surface
     /// that's otherwise two taps deep. Nil in every real launch.
@@ -45,6 +48,10 @@ struct ExercisePicker: View {
     private var isBrowsing: Bool { onPick == nil }
 
     @State private var exercises: [Exercise] = []
+    /// The catalog with its tokens already computed. Built once when the
+    /// exercises load rather than per keystroke — tokenizing 873 names is the
+    /// expensive half of a search, and the query is three words.
+    @State private var searchIndex = ExerciseSearchIndex([])
     @State private var stats: [Int: ExerciseStats] = [:]
     @State private var query = ""
     @State private var muscleFilter: String?
@@ -95,6 +102,8 @@ struct ExercisePicker: View {
 
     private func load() async {
         exercises = (try? environment.exercises.fetchAll()) ?? []
+        searchIndex = ExerciseSearchIndex(exercises)
+        if let initialQuery, query.isEmpty { query = initialQuery }
         if let userID = environment.currentUser?.id {
             stats = (try? environment.exerciseStats.stats(for: userID)) ?? [:]
         }
@@ -308,30 +317,51 @@ struct ExercisePicker: View {
         Array(Set(exercises.compactMap(\.equipment))).sorted()
     }
 
-    /// Filtered, then **ordered by how much the lifter actually uses each
-    /// lift**, most-performed first.
+    /// Filtered, then ordered — by match quality when there's a query, and by
+    /// how much the lifter actually uses each lift when there isn't.
     ///
-    /// Alphabetical order over ~870 catalog entries buries the twenty a person
-    /// trains under 850 they will never pick. Usage order applies inside a
-    /// search too: among the eleven entries matching "bench", the one done 200
-    /// times is the likely answer.
+    /// **Search is `ExerciseSearchIndex`, not a substring test.** The old
+    /// `name.contains(query)` needed the lifter to type a contiguous run of the
+    /// catalog's exact wording, which meant "Barbell incline press" found
+    /// nothing at all while *Barbell Incline Bench Press - Medium Grip* sat in
+    /// the catalog. Measured against five years of the owner's real queries,
+    /// that returned a blank screen for 84% of them.
     ///
-    /// Name breaks the tie, so the list is stable and everything unperformed
-    /// stays alphabetical rather than arbitrary.
+    /// **Usage still breaks ties.** Alphabetical order over ~870 entries buries
+    /// the twenty a person trains, and among several equally good matches for
+    /// "bench" the one done 200 times is the likely answer. It breaks ties
+    /// rather than leading, because a lift performed often is not thereby a
+    /// better match for what was typed.
     private var filtered: [Exercise] {
-        exercises
-            .filter { exercise in
-                if let muscleFilter, exercise.muscleGroup != muscleFilter { return false }
-                if let equipmentFilter, exercise.equipment != equipmentFilter { return false }
-                if !query.isEmpty, !exercise.name.localizedCaseInsensitiveContains(query) { return false }
-                return true
-            }
-            .sorted { a, b in
-                let ca = stats[a.id]?.sessionCount ?? 0
-                let cb = stats[b.id]?.sessionCount ?? 0
+        let matched: [Exercise]
+        if query.trimmingCharacters(in: .whitespaces).isEmpty {
+            matched = exercises.sorted { a, b in
+                let (ca, cb) = (sessionCount(a), sessionCount(b))
                 if ca != cb { return ca > cb }
                 return a.name.localizedCompare(b.name) == .orderedAscending
             }
+        } else {
+            matched = searchIndex.ranked(query)
+                .sorted { a, b in
+                    if a.score != b.score { return a.score > b.score }
+                    let (ca, cb) = (sessionCount(a.exercise), sessionCount(b.exercise))
+                    if ca != cb { return ca > cb }
+                    return a.exercise.name.localizedCompare(b.exercise.name) == .orderedAscending
+                }
+                .map(\.exercise)
+        }
+        // Applied after ranking rather than before, so the index is built once
+        // over the whole catalog instead of being rebuilt whenever a chip is
+        // tapped. The result is identical either way.
+        return matched.filter { exercise in
+            if let muscleFilter, exercise.muscleGroup != muscleFilter { return false }
+            if let equipmentFilter, exercise.equipment != equipmentFilter { return false }
+            return true
+        }
+    }
+
+    private func sessionCount(_ exercise: Exercise) -> Int {
+        stats[exercise.id]?.sessionCount ?? 0
     }
 }
 

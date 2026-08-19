@@ -461,4 +461,12 @@ The consequence for importing anything external (the owner's original spreadshee
 
 `Exercise.isOpenChoice` is load-bearing, not cosmetic: `AchievedMaxUpdate` refuses to record a max for an open-choice exercise, because a heavier weight logged under it than last time doesn't mean progress on the same lift — it might not be the same lift at all. Which is exactly why it's authored rather than guessed: an inferred flag would let a correctly-programmed lift with an unusual name silently stop tracking maxes.
 
-**"More advanced searching down the line" is about the exercise picker**, not about program loading. Picker search is substring-only over ~870 entries; if that needs to get smarter, it's embeddings or an LLM call. It has nothing to do with how a program names its exercises, which is now settled.
+**"More advanced searching down the line" is about the exercise picker**, not about program loading. It has nothing to do with how a program names its exercises, which is now settled.
+
+That searching is now built — `ExerciseSearch` — and the boundary between it and the deleted matcher is worth stating precisely, because on the surface both "read a name and find an exercise".
+
+**The difference is who decides.** The matcher's output *became* the answer: it wrote an identity into the data, and a wrong guess mislabeled logged history permanently with nobody in a position to notice. Search's output is a **ranked list of candidates a lifter then taps**. A wrong guess puts the right lift second. One is inference standing in for a decision that was always available to be recorded; the other is helping a person find something they are actively looking for.
+
+The practical test: **anything that consumes search output without a person choosing is the forbidden thing wearing a new name.** Program loading must never call it.
+
+The guess in the sentence this replaced — that better search would mean embeddings or an LLM — was measured and is wrong, which is worth keeping as a caution about answering this kind of question from intuition. Both of Apple's on-device embedding models are *worse* than string matching on this catalog: they encode topical relatedness rather than synonymy, so every gym word sits near every other one (`squat` is nearer `deadlift` than any true synonym pair), and the domain's actual vocabulary gaps — *pec deck* meaning *butterfly* — are exactly what a general English model doesn't know. What works is ordinary information retrieval (tokens, rare-word weighting, stemming, a fuzzy tier) plus a small **authored** alias table for the jargon, which is the same "record the judgment once" pattern as the rest of this section.
