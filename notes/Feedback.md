@@ -26,6 +26,19 @@ This document will be a thorough review of the current application state and iss
 - slide delete has the same issue as the workout tab
 - no confirmation to save changes on the plan, we should have that when modifying a day.
 - no where to set RPE's
+- ~~the block doesn't indicate that I've completed a workout tied to it~~ — the
+  planner showed one half of a block, the prescription, and nothing said a day
+  had been trained; six weeks of finished work looked identical to six weeks of
+  intentions. Three rollups now, from the same source: a trained day's panel
+  gets a cyan footer reading `✓ 12 / 14 SETS LOGGED`, a week header reads
+  `5/6d`, and the block header gains `TRAINED 12 / 69 days` beside its week
+  count.
+  - **Counts, not verdicts.** `Workout.blockId` is never written, so the join
+    is by calendar date — the same one Home's adherence already makes. That
+    can't tell an ad-hoc session on a programmed day from the programmed
+    session, so the screen reports logged sets against programmed sets and
+    leaves the reading to the lifter (Core Tenets §1) rather than stamping a
+    day "done".
 
 ## History
 - ~~calendar view~~ — `WorkoutCalendarView`: one month at a time, dots with no detail, a dialog on touch with an EDIT that opens the editor directly. The paged list is still there behind a toolbar toggle, because the two answer different questions.

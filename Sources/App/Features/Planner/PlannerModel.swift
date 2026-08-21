@@ -26,12 +26,25 @@ final class PlannerModel {
     /// unresolvable percentage displays as written (Core Tenets §10).
     var user: User?
 
+    /// Which of the selected block's programmed days have actually been
+    /// trained. Empty until `load()` runs, and empty for a block with nothing
+    /// programmed — there is nothing to have completed.
+    private(set) var completion = BlockCompletion()
+
     private let plans: PlanStore
+    private let workouts: WorkoutStore
     private let userID: UUID
     let calendar: Calendar
 
-    init(plans: PlanStore, userID: UUID, user: User? = nil, calendar: Calendar = .current) {
+    init(
+        plans: PlanStore,
+        workouts: WorkoutStore,
+        userID: UUID,
+        user: User? = nil,
+        calendar: Calendar = .current
+    ) {
         self.plans = plans
+        self.workouts = workouts
         self.userID = userID
         self.user = user
         self.calendar = calendar
@@ -114,6 +127,7 @@ final class PlannerModel {
                 selectedBlockID = plan.currentBlock(asOf: date, calendar: calendar)?.id
                     ?? plan.scheduledBlocks.last?.id
             }
+            completion = try loadCompletion()
             loadError = nil
         } catch {
             loadError = error.localizedDescription
@@ -122,6 +136,94 @@ final class PlannerModel {
 
     func select(blockID: UUID) {
         selectedBlockID = blockID
+        // The completion is per block, so it has to move when the selection
+        // does — otherwise the block you switched to wears the last one's
+        // trained days.
+        do {
+            completion = try loadCompletion()
+            loadError = nil
+        } catch {
+            loadError = error.localizedDescription
+        }
+    }
+
+    /// What was logged across the span the selected block programs.
+    ///
+    /// **Summaries, not workouts.** `PlanStore.attachingLoggedWorkouts` is the
+    /// other way to answer this and it fully hydrates every set of every
+    /// session in the block — thousands of queries to draw a screen that only
+    /// needs a date and a count. This is the same three bounded queries the
+    /// History calendar uses.
+    ///
+    /// Scoped to the programmed days rather than to `startDate...endDate`: a
+    /// block routinely runs past its planned end (that's why `endDate` is a
+    /// target, not a boundary), and days programmed past it still need their
+    /// marker.
+    ///
+    /// **Finished workouts only** — `fetchSummaries` filters on `endTime`.
+    /// A session still being logged belongs to the tracker, and counting it
+    /// here would tick today's day off while the lifter is stood over the bar
+    /// halfway through it. Home's adherence readout does include the live
+    /// session, which is right for a running set total and wrong for a
+    /// day-done marker.
+    private func loadCompletion() throws -> BlockCompletion {
+        let days = programmedDays
+        guard let first = days.first, let last = days.last else {
+            return BlockCompletion(calendar: calendar)
+        }
+        let summaries = try workouts.fetchSummaries(from: first, to: last)
+        return BlockCompletion(
+            sessions: summaries.compactMap { summary in
+                // A finished workout always has a start; one without a date
+                // can't be placed on a day, and inventing one would put it on
+                // an arbitrary square.
+                summary.startTime.map {
+                    BlockCompletion.Session(
+                        id: summary.id,
+                        startedAt: $0,
+                        setCount: summary.completedSetCount
+                    )
+                }
+            },
+            calendar: calendar
+        )
+    }
+
+    /// Completed sets logged on a programmed day, against what it prescribes.
+    ///
+    /// Both halves on screen is the point: the join is by date (see
+    /// `BlockCompletion`), so the app states what was logged that day and lets
+    /// the lifter read whether it was the programmed session.
+    func dayLog(on day: Date) -> DayLog? {
+        guard completion.wasTrained(on: day) else { return nil }
+        return DayLog(
+            sessions: completion.sessions(on: day).count,
+            loggedSets: completion.setCount(on: day),
+            plannedSets: plannedWorkouts(on: day).reduce(0) { $0 + $1.allSets.count }
+        )
+    }
+
+    /// How many of a week's programmed days were trained.
+    func trainedDays(in week: WorkoutBlock.ProgrammedWeek) -> Int {
+        completion.trainedDays(among: week.days)
+    }
+
+    /// The block-level rollup: trained days over programmed days.
+    ///
+    /// Counted over `programmedWeeks` rather than `programmedDays` so the
+    /// header and the week rows are summing the same set of days — the two
+    /// differ on a day whose workouts were all deleted, and a header that
+    /// doesn't add up to its own rows reads as a bug in both.
+    var blockTrainedDays: (trained: Int, programmed: Int) {
+        let days = programmedWeeks.flatMap(\.days)
+        return (completion.trainedDays(among: days), days.count)
+    }
+
+    /// What a programmed day has logged against it.
+    struct DayLog: Hashable {
+        var sessions: Int
+        var loggedSets: Int
+        var plannedSets: Int
     }
 
     // MARK: Structural editing

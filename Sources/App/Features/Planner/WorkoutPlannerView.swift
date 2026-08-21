@@ -41,7 +41,12 @@ struct WorkoutPlannerView: View {
             model?.load()
             return
         }
-        let model = PlannerModel(plans: environment.plans, userID: user.id, user: user)
+        let model = PlannerModel(
+            plans: environment.plans,
+            workouts: environment.workouts,
+            userID: user.id,
+            user: user
+        )
         model.load()
         self.model = model
     }
@@ -200,7 +205,11 @@ private struct BlockOverview: View {
             // entry point in the toolbar menu — that menu picks *which* block,
             // and one way to do one thing is the rule this app keeps applying.
             Button { isEditingBlock = true } label: {
-                BlockHeaderPanel(block: block, calendar: model.calendar)
+                BlockHeaderPanel(
+                    block: block,
+                    calendar: model.calendar,
+                    trained: model.blockTrainedDays
+                )
             }
             .buttonStyle(.plain)
             .panelRow()
@@ -225,6 +234,7 @@ private struct BlockOverview: View {
                 isCurrent: week.index == current,
                 isCollapsed: collapsedWeeks.contains(week.index),
                 setCount: setCount(in: week),
+                trainedDays: model.trainedDays(in: week),
                 onToggle: { toggle(week.index) }
             )
             .panelRow()
@@ -241,6 +251,7 @@ private struct BlockOverview: View {
     private func daySection(_ day: Date) -> some View {
         let workouts = model.plannedWorkouts(on: day)
         let isToday = model.calendar.isDateInToday(day)
+        let log = model.dayLog(on: day)
 
         ForEach(workouts) { workout in
             Button {
@@ -250,6 +261,12 @@ private struct BlockOverview: View {
                     workout: workout,
                     day: day,
                     isToday: isToday,
+                    // The log is a fact about the *day* — nothing writes
+                    // `Workout.blockId`, so a session can't be attributed to
+                    // one of a day's two planned workouts. Marking only the
+                    // first states it once rather than printing the same
+                    // count on both panels as if each had earned it.
+                    log: workout.id == workouts.first?.id ? log : nil,
                     resolve: { model.resolvedWeight(for: $0, exercise: $1) }
                 )
             }
@@ -301,6 +318,8 @@ private struct BlockOverview: View {
 private struct BlockHeaderPanel: View {
     let block: WorkoutBlock
     let calendar: Calendar
+    /// Programmed days that have been trained, over how many are programmed.
+    let trained: (trained: Int, programmed: Int)
 
     var body: some View {
         Panel {
@@ -330,6 +349,18 @@ private struct BlockHeaderPanel: View {
                         size: 17
                     )
                 }
+                // The block's other half. "Week 6 / 12" says where the
+                // calendar has got to; this says how much of the program has
+                // actually been done, which is the question a plan five weeks
+                // in is really being asked.
+                if trained.programmed > 0 {
+                    Readout(
+                        label: "trained",
+                        value: "\(trained.trained) / \(trained.programmed) days",
+                        accent: trained.trained > 0 ? Theme.signal : Theme.inkMuted,
+                        size: 14
+                    )
+                }
                 if let dates {
                     Readout(label: "dates", value: dates, accent: Theme.inkMuted, size: 14)
                 }
@@ -353,6 +384,7 @@ private struct WeekHeaderRow: View {
     let isCurrent: Bool
     let isCollapsed: Bool
     let setCount: Int
+    let trainedDays: Int
     let onToggle: () -> Void
 
     var body: some View {
@@ -373,7 +405,14 @@ private struct WeekHeaderRow: View {
                 Rectangle()
                     .fill(Theme.hairline)
                     .frame(height: 1)
-                Text("\(week.days.count)d · \(setCount) sets")
+                // A collapsed week is the common state, so its one line has
+                // to say whether it was trained — otherwise twelve identical
+                // rows give no sense of where the program actually is.
+                Text(trainedDays > 0 ? "\(trainedDays)/\(week.days.count)d" : "\(week.days.count)d")
+                    .font(Theme.data(12, weight: trainedDays > 0 ? .medium : .regular))
+                    .foregroundStyle(trainedDays > 0 ? Theme.signal : Theme.inkFaint)
+                    .fixedSize()
+                Text("· \(setCount) sets")
                     .font(Theme.data(12))
                     .foregroundStyle(Theme.inkFaint)
                     .fixedSize()
@@ -393,6 +432,10 @@ private struct PlannedDayPanel: View {
     let workout: PlannedWorkout
     let day: Date
     let isToday: Bool
+    /// What was logged on this day, or `nil` if nothing was. See
+    /// `BlockCompletion` for why this is a day-level fact rather than a
+    /// property of the planned workout itself.
+    let log: PlannerModel.DayLog?
     let resolve: (LoadPrescription, Exercise) -> Measurement<UnitMass>?
 
     var body: some View {
@@ -407,6 +450,9 @@ private struct PlannedDayPanel: View {
                     ForEach(exercises) { exercise in
                         PlannedExerciseLine(exercise: exercise, resolve: resolve)
                     }
+                }
+                if let log {
+                    TrainedMarker(log: log)
                 }
             }
         }
@@ -438,13 +484,74 @@ private struct PlannedDayPanel: View {
         }
     }
 
+    /// Today stays amber even once it's been trained — it is still the day
+    /// you're on, and the marker already says the work is done. A trained day
+    /// in the past brightens from the quiet programmed edge to a full one, so
+    /// scrolling a week reads as done/not-done before anything is parsed.
     private var accent: Color {
         if workout.skippedAt != nil { return Theme.hairline }
-        return isToday ? Theme.live.opacity(0.5) : Theme.signal.opacity(0.4)
+        if isToday { return Theme.live.opacity(0.5) }
+        return log != nil ? Theme.signal : Theme.signal.opacity(0.4)
     }
 
     private var exercises: [PlannedExercise] {
         (workout.exercises ?? []).flatMap { $0 }
+    }
+}
+
+/// "✓ 12 / 13 SETS LOGGED" — that this day was trained, and how much of it
+/// landed.
+///
+/// **A count rather than a verdict.** The join between a logged session and a
+/// programmed day is by date (see `BlockCompletion`), so the app is not in a
+/// position to declare a day "done" — a session cut short after two of five
+/// exercises would wear the same badge as a full one. Showing logged sets
+/// against programmed sets puts the fact on screen and leaves the reading to
+/// the lifter (Core Tenets §1). It's the same choice Home's adherence readout
+/// makes, and the same numbers.
+///
+/// **At the foot of the panel, not in its header.** As a chip beside the date
+/// it took ~110pt off the one flexible element on that row, and the program's
+/// own day labels put their content last ("Week 1 Mon - Bench+Squat"), so a
+/// trained day truncated to "Week 1 M…" — the marker was eating exactly the
+/// words that say what the day *is*. Down here it has the panel's full width,
+/// which is also why it can spell out what it's counting. Reading order comes
+/// out right too: what was prescribed, then what happened.
+///
+/// Cyan with a glyph, because done-ness must not be colour alone (WCAG §1.4.1)
+/// and cyan already means complete everywhere else — a finished rest period, a
+/// completed set.
+private struct TrainedMarker: View {
+    let log: PlannerModel.DayLog
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Rectangle()
+                .fill(Theme.hairline)
+                .frame(height: 1)
+            HStack(spacing: 5) {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 10, weight: .bold))
+                Text(text)
+                    .font(Theme.label)
+                    .tracking(1.4)
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(Theme.signal)
+        }
+        .padding(.top, 2)
+    }
+
+    /// A day with nothing prescribed still logged real sets — a recovery walk,
+    /// an ad-hoc session — and "14 / 0" would be nonsense, so the ratio drops
+    /// and the count stays.
+    private var text: String {
+        let sets = log.plannedSets > 0
+            ? "\(log.loggedSets) / \(log.plannedSets) SETS LOGGED"
+            : "\(log.loggedSets) SETS LOGGED"
+        // Two sessions on one day is rare and worth saying, since the count
+        // beside it is their total rather than any one session's.
+        return log.sessions > 1 ? "\(log.sessions) SESSIONS · \(sets)" : sets
     }
 }
 
