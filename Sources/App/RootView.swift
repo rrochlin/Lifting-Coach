@@ -108,6 +108,14 @@ enum LaunchArguments {
         value(for: "-restDemo").flatMap(Int.init)
     }
 
+    /// `-finishDemo` finishes the `-restDemo` workout the moment it's built,
+    /// which is the only way to see `WorkoutSummaryOverlay` from the command
+    /// line — it lives on the far side of a toolbar tap and a confirm dialog,
+    /// and simctl can tap neither. Pair with `-restDemo`.
+    static var finishesDemo: Bool {
+        ProcessInfo.processInfo.arguments.contains("-finishDemo")
+    }
+
     /// `-openExercisePicker` opens the tracker's exercise picker on launch, and
     /// `-openExercisePicker <name>` pushes straight through to the detail
     /// screen of the first exercise whose name contains that text.

@@ -18,6 +18,10 @@ struct WorkoutTrackerView: View {
     /// The current calendar week's plan — a lifter should be able to see (and
     /// start, or skip) more than just today.
     @State private var weekPlan: [PlannedWorkout] = []
+    /// What's already been logged this week, so a day the lifter has finished
+    /// doesn't sit here looking exactly like one they haven't started. Same
+    /// type and same date join the planner uses — see `BlockCompletion`.
+    @State private var weekCompletion = BlockCompletion()
     #if DEBUG
     /// Latches `-openExercisePicker` to a single presentation.
     @State private var didOpenDebugPicker = false
@@ -34,6 +38,19 @@ struct WorkoutTrackerView: View {
             }
             .navigationTitle("Workout")
             .toolbar { toolbar }
+            // Outside the `Group` branch on purpose: finishing clears the
+            // session, so by the time there's a summary to show the screen has
+            // already fallen back to the week view — which is exactly where it
+            // should appear, over the day it just filled in.
+            .overlay {
+                if let model { summaryOverlay(model) }
+            }
+            .animation(.easeOut(duration: 0.25), value: model?.justFinished?.id)
+        }
+        .onChange(of: model?.justFinished?.id) { _, id in
+            // The week view's trained markers are now a session out of date.
+            guard id != nil else { return }
+            loadWeek()
         }
         .task {
             if model == nil, let userID = environment.currentUser?.id {
@@ -120,6 +137,7 @@ struct WorkoutTrackerView: View {
     /// target comes from the prescription and an ad-hoc set has none.
     private func startRestDemoIfRequested(_ model: TrackerModel) {
         guard let seconds = LaunchArguments.restDemoSeconds, !model.isActive else { return }
+        defer { if LaunchArguments.finishesDemo { model.finish() } }
         let catalog = (try? environment.exercises.fetchAll()) ?? []
         guard let first = catalog.first else { return }
 
@@ -206,11 +224,23 @@ struct WorkoutTrackerView: View {
         }
         .panelRow()
 
-        ForEach(workouts(on: day)) { workout in
+        let dayWorkouts = workouts(on: day)
+        let log = weekCompletion.log(
+            on: day,
+            plannedSets: dayWorkouts.reduce(0) { $0 + $1.allSets.count }
+        )
+
+        ForEach(dayWorkouts) { workout in
             Button {
                 if workout.skippedAt == nil { start(workout) }
             } label: {
-                PlannedSummaryRow(workout: workout, isToday: isToday)
+                PlannedSummaryRow(
+                    workout: workout,
+                    isToday: isToday,
+                    // A day-level fact, so it's stated once — the same reason
+                    // the planner marks only a day's first panel.
+                    log: workout.id == dayWorkouts.first?.id ? log : nil
+                )
             }
             .buttonStyle(.plain)
             .panelRow()
@@ -251,6 +281,24 @@ struct WorkoutTrackerView: View {
         // so step back a day to land on this week's actual last day.
         let lastDay = calendar.date(byAdding: .day, value: -1, to: week.end) ?? week.end
         weekPlan = (try? environment.plans.fetchPlanned(from: week.start, to: lastDay)) ?? []
+
+        // Summaries, not hydrated workouts: this needs a date and a count, and
+        // a week of sessions is thousands of queries to hydrate.
+        let summaries = (try? environment.workouts.fetchSummaries(
+            from: week.start, to: lastDay
+        )) ?? []
+        weekCompletion = BlockCompletion(
+            sessions: summaries.compactMap { summary in
+                summary.startTime.map {
+                    BlockCompletion.Session(
+                        id: summary.id,
+                        startedAt: $0,
+                        setCount: summary.completedSetCount
+                    )
+                }
+            },
+            calendar: calendar
+        )
     }
 
     private func skip(_ workout: PlannedWorkout) {
@@ -321,6 +369,18 @@ struct WorkoutTrackerView: View {
             cancelLabel: "Keep Going",
             onConfirm: { model.discard() }
         )
+    }
+
+    /// What just happened, once. An overlay rather than a sheet, matching
+    /// `themedConfirm`: it's about the workout behind it, and it's dismissed by
+    /// the one button on it.
+    @ViewBuilder
+    private func summaryOverlay(_ model: TrackerModel) -> some View {
+        if let workout = model.justFinished {
+            WorkoutSummaryOverlay(workout: workout, unit: environment.weightUnit) {
+                model.dismissSummary()
+            }
+        }
     }
 
     /// Say what's about to be dropped rather than letting it be discovered later.
@@ -440,7 +500,37 @@ private struct ActiveWorkoutList: View {
     /// one screen is the sort of clutter this control keeps being pruned of.
     @State private var expandedRest: UUID?
 
+    /// Whether the running rest's own line is on screen. Drives the sticky bar
+    /// below — see `restBar`.
+    @State private var restLineVisible = false
+
     var body: some View {
+        ScrollViewReader { proxy in
+            list
+                // The lift you're about to do should be the lift you're looking
+                // at. Finishing an exercise used to leave the screen exactly
+                // where it was, with the next lift somewhere below the fold —
+                // "once a block's complete the transition to the next one is
+                // really jarring". Keyed on the *exercise*, not the set, so it
+                // doesn't yank the screen after every set of the one you're on.
+                .onChange(of: activeExerciseID) { _, id in
+                    guard let id, !isReordering else { return }
+                    withAnimation(.easeInOut(duration: 0.35)) {
+                        proxy.scrollTo(id, anchor: .top)
+                    }
+                }
+                // Tapping the sticky bar goes back to the set that's resting.
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    restBar { id in
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            proxy.scrollTo(id, anchor: .center)
+                        }
+                    }
+                }
+        }
+    }
+
+    private var list: some View {
         List {
             if isReordering {
                 reorderBanner
@@ -470,26 +560,16 @@ private struct ActiveWorkoutList: View {
         // sits above the bar and lifts the list instead of covering its last row.
         .safeAreaInset(edge: .bottom, spacing: 0) { achievedMaxBanner }
         .animation(.easeOut(duration: 0.22), value: model.newAchievedMax?.max.date)
-        // The lifter who *is* watching the screen still deserves to be told,
-        // and a phone on the bench is felt before it's read. The notification
-        // covers the case where the app isn't on screen at all.
-        .onChange(of: model.rest?.hasExpired) { _, expired in
-            guard expired == true else { return }
-            // Sound and haptic, and *not* a panel. Expiry used to open the rest
-            // editor so there'd be a DONE to press — which turned the end of
-            // every rest period into a two-tap chore for a fact the lifter
-            // already knew, and put a panel on screen they hadn't asked for.
-            // The line says REST COMPLETE and one tap on it clears; checking
-            // off the next set clears it too, which is what actually happens
-            // next.
-            RestChime.play()
-        }
         // Rest moved to a different set — or ended. An editor left open on the
         // set it used to belong to is the "rest timer modifier is frequently
         // open, I don't think I'm trying to open it" report: it was opened by
         // the *previous* set's expiry and then stranded there when the timer
         // moved on.
         .onChange(of: model.rest?.setID) { previous, _ in
+            // Assume the new rest's line is off screen until it says otherwise:
+            // a stale `true` from the last set's line would suppress the bar
+            // for the whole of the next rest period.
+            restLineVisible = false
             guard let previous, expandedRest == previous else { return }
             expandedRest = nil
         }
@@ -514,6 +594,78 @@ private struct ActiveWorkoutList: View {
                 // tracking reference something specific rather than a goal.
                 model.updateExercise(id: target.id) { $0.exercise = picked }
             }
+        }
+    }
+
+    /// The exercise the next unlogged set belongs to — what "where you are"
+    /// means, and what the screen follows.
+    private var activeExerciseID: UUID? {
+        guard let session = model.session, let next = session.nextSet else { return nil }
+        return session.exercise(containingSetID: next.id)?.id
+    }
+
+    /// A running rest clock pinned to the top of the screen — but **only while
+    /// its own line is scrolled out of sight**.
+    ///
+    /// "Need a visible running timer on the workout. Maybe even a sticky header
+    /// for it." The clock lives on a line under the set that started it, which
+    /// is right (rest is per set, and per set is where it's tuned) and which
+    /// also means it's gone the moment you scroll to look at anything else.
+    ///
+    /// **It is a readout, not a fourth rest control.** This app has had three
+    /// surfaces for editing rest on screen at once before and pruned them down
+    /// to one; adding another would undo that. There is nothing here to press
+    /// but the bar itself, and pressing it takes you back to the line that
+    /// *does* edit it.
+    ///
+    /// Hiding it while that line is visible is what keeps the count of clocks
+    /// on screen at one. `onScrollVisibilityChange` is doing the work, attached
+    /// to the running line itself.
+    @ViewBuilder
+    private func restBar(scrollTo: @escaping (UUID) -> Void) -> some View {
+        if let timer = model.rest, !restLineVisible, !isReordering {
+            Button { scrollTo(timer.setID) } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: timer.hasExpired ? "checkmark.circle.fill" : "timer")
+                        .font(.system(size: 13, weight: .semibold))
+                    Text(timer.exerciseName.uppercased())
+                        .font(Theme.label)
+                        .tracking(1.4)
+                        .lineLimit(1)
+                    Spacer(minLength: 8)
+                    if timer.hasExpired {
+                        Text("REST COMPLETE")
+                            .font(Theme.label)
+                            .tracking(1.4)
+                            .fixedSize()
+                    } else {
+                        // Only the clock is inside the timeline — redrawing the
+                        // label and the glyph once a second is a phone warming
+                        // up to say nothing.
+                        TimelineView(.periodic(from: timer.startedAt, by: 1)) { context in
+                            // Rounded up for the same reason the inline clock
+                            // does it: a bar showing 1:00 has a full minute
+                            // left rather than flicking to 0:59 on arrival.
+                            Text(Int(timer.remaining(at: context.date).rounded(.up)).restClockDescription)
+                                .font(Theme.data(19, weight: .medium))
+                                .monospacedDigit()
+                                .fixedSize()
+                        }
+                    }
+                }
+                .foregroundStyle(timer.hasExpired ? Theme.signal : Theme.live)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .frame(maxWidth: .infinity)
+                .background(Theme.panel)
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill((timer.hasExpired ? Theme.signal : Theme.live).opacity(0.5))
+                        .frame(height: 1)
+                }
+            }
+            .buttonStyle(.plain)
+            .transition(.move(edge: .top).combined(with: .opacity))
         }
     }
 
@@ -691,6 +843,7 @@ private struct ActiveWorkoutList: View {
             }
         )
         .panelGroupRow(expanded ? .top : .single, accent: accent)
+        .id(exercise.id)
 
         if expanded {
             // Ramp-up sets belong above the prescription, not appended after
@@ -746,7 +899,16 @@ private struct ActiveWorkoutList: View {
                     // the one running, that same line *is* the countdown.
                     restLine(for: set, timer: restingHere ? restTimer : nil)
                         .padding(.top, 8)
+                        // Only the line that's actually running reports in —
+                        // every other set's line is a prescription, and there
+                        // are a dozen of them on screen.
+                        .onScrollVisibilityChange(threshold: 0.4) { visible in
+                            guard restingHere else { return }
+                            restLineVisible = visible
+                        }
                 }
+                // The anchor the sticky bar scrolls back to.
+                .id(set.id)
                 .panelGroupRow(.middle, accent: restingHere ? Theme.live : accent)
                 .swipeActions(edge: .trailing) {
                     Button("Delete", systemImage: "trash", role: .destructive) {
@@ -1010,6 +1172,8 @@ private enum NoteEditorTarget: Identifiable {
 private struct PlannedSummaryRow: View {
     let workout: PlannedWorkout
     let isToday: Bool
+    /// What was logged on this day, if anything.
+    let log: BlockCompletion.DayLog?
 
     var body: some View {
         Panel(accent: accent) {
@@ -1042,6 +1206,9 @@ private struct PlannedSummaryRow: View {
                     .font(Theme.label)
                     .tracking(1.4)
                     .foregroundStyle(workout.skippedAt != nil ? Theme.inkFaint : Theme.signal)
+                if let log {
+                    TrainedMarker(log: log)
+                }
             }
         }
         // Skipped stays visible, per Core Tenets §10 — dimmed, not hidden.
@@ -1050,7 +1217,8 @@ private struct PlannedSummaryRow: View {
 
     private var accent: Color {
         if workout.skippedAt != nil { return Theme.hairline }
-        return isToday ? Theme.live.opacity(0.5) : Theme.signal.opacity(0.45)
+        if isToday { return Theme.live.opacity(0.5) }
+        return log != nil ? Theme.signal : Theme.signal.opacity(0.45)
     }
 
     /// The plan's day label, falling back to the exercise list for an ad-hoc
@@ -1467,12 +1635,18 @@ private struct SetRow: View {
             }
         } label: {
             Text(badgeText)
-                .font(Theme.data(13, weight: setType == .working ? .regular : .medium))
+                .font(Theme.data(13, weight: .medium))
                 .foregroundStyle(badgeInk)
-                .frame(minWidth: 24)
+                .frame(minWidth: 30, minHeight: 26)
                 // Never let the index be the thing that gets truncated.
                 .fixedSize()
-                .padding(.vertical, 3)
+                .padding(.horizontal, 5)
+                .background(badgeFill)
+                .clipShape(RoundedRectangle(cornerRadius: 5))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 5)
+                        .strokeBorder(badgeEdge, lineWidth: 1)
+                )
                 .contentShape(.rect)
         }
         .buttonStyle(.plain)
@@ -1488,12 +1662,40 @@ private struct SetRow: View {
         }
     }
 
+    /// **Three tiers of prominence, not three hues.** The report was that set
+    /// classification is "too subtle", and it was: the badge was bare text in
+    /// two shades of grey, sitting in a row where every other control wears an
+    /// outlined box. Two things were wrong — it didn't look editable (it opens
+    /// a menu), and it didn't separate the kinds.
+    ///
+    /// It's a box now, like everything else the lifter can change, and the
+    /// three kinds differ by *brightness* rather than by colour: a working set
+    /// reads brightest because it's the work, a warmup recedes, and a drop
+    /// takes the app's cyan because it's a departure from the prescription.
+    /// Deliberately no new palette entry — a fourth hue would have to be
+    /// learned, and the letter is still the channel that carries the meaning
+    /// (WCAG §1.4.1) with the tint only reinforcing it.
     private var badgeInk: Color {
         switch setType {
-        case .warmup: Theme.inkFaint
-        case .working: Theme.inkMuted
-        case .drop: Theme.signal.opacity(0.8)
+        case .warmup: Theme.inkMuted
+        case .working: Theme.ink
+        case .drop: Theme.signal
         }
+    }
+
+    private var badgeEdge: Color {
+        switch setType {
+        case .warmup: Theme.hairline
+        case .working: Theme.fieldEdge
+        case .drop: Theme.signal.opacity(0.55)
+        }
+    }
+
+    /// Only the working set is filled. A ramp of five warmups above one working
+    /// set should not be five filled boxes and one — the fill is what makes the
+    /// prescribed work findable while scrolling.
+    private var badgeFill: Color {
+        setType == .working ? Theme.panelRaised : .clear
     }
 
     /// Unit, note, delete. Set type used to be in here too and has moved to the

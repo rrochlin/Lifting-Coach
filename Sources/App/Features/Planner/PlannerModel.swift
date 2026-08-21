@@ -194,11 +194,9 @@ final class PlannerModel {
     /// Both halves on screen is the point: the join is by date (see
     /// `BlockCompletion`), so the app states what was logged that day and lets
     /// the lifter read whether it was the programmed session.
-    func dayLog(on day: Date) -> DayLog? {
-        guard completion.wasTrained(on: day) else { return nil }
-        return DayLog(
-            sessions: completion.sessions(on: day).count,
-            loggedSets: completion.setCount(on: day),
+    func dayLog(on day: Date) -> BlockCompletion.DayLog? {
+        completion.log(
+            on: day,
             plannedSets: plannedWorkouts(on: day).reduce(0) { $0 + $1.allSets.count }
         )
     }
@@ -217,13 +215,6 @@ final class PlannerModel {
     var blockTrainedDays: (trained: Int, programmed: Int) {
         let days = programmedWeeks.flatMap(\.days)
         return (completion.trainedDays(among: days), days.count)
-    }
-
-    /// What a programmed day has logged against it.
-    struct DayLog: Hashable {
-        var sessions: Int
-        var loggedSets: Int
-        var plannedSets: Int
     }
 
     // MARK: Structural editing

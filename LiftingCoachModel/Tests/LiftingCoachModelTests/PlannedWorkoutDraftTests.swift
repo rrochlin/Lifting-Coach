@@ -266,3 +266,121 @@ struct PlannedWorkoutDraftTests {
         #expect(draft.workout.notes == nil)
     }
 }
+
+// MARK: - Bulk set authoring
+
+/// "4×5 @ 225" written in one statement rather than four rows.
+@Suite("Planned draft — sets × reps × weight")
+struct PlannedWorkoutDraftBulkSetTests {
+
+    private func exercise(_ sets: [PlannedSet]) -> PlannedExercise {
+        PlannedExercise(
+            exercise: Exercise(id: 1, name: "Barbell Squat", muscleGroup: "Quadriceps"),
+            sets: sets
+        )
+    }
+
+    private func draft(_ exercise: PlannedExercise) -> PlannedWorkoutDraft {
+        PlannedWorkoutDraft(PlannedWorkout(exercises: [[exercise]]))
+    }
+
+    private func pounds(_ value: Double) -> LoadPrescription {
+        .absolute(Measurement(value: value, unit: .pounds))
+    }
+
+    @Test("Writes the whole prescription at once")
+    func writesEveryWorkingSet() {
+        var draft = draft(exercise([PlannedSet(reps: 8, type: .working)]))
+        let id = draft.workout.exercises![0][0].id
+
+        draft.setWorkingSets(count: 4, reps: 5, load: pounds(225), toExerciseWith: id)
+
+        let sets = draft.workout.exercises![0][0].sets ?? []
+        #expect(sets.count == 4)
+        #expect(sets.allSatisfy { $0.reps == 5 })
+        #expect(sets.allSatisfy { $0.load == pounds(225) })
+    }
+
+    @Test("Warmups and drops are left exactly where they were")
+    func leavesOtherTypesAlone() {
+        var draft = draft(exercise([
+            PlannedSet(reps: 5, type: .warmup),
+            PlannedSet(reps: 8, type: .working),
+            PlannedSet(reps: 12, type: .drop),
+        ]))
+        let id = draft.workout.exercises![0][0].id
+
+        draft.setWorkingSets(count: 3, reps: 5, load: pounds(225), toExerciseWith: id)
+
+        let sets = draft.workout.exercises![0][0].sets ?? []
+        // Warmup first, three working, drop last — a bulk prescription is never
+        // an instruction to delete a ramp.
+        #expect(sets.map { $0.type ?? .working } == [.warmup, .working, .working, .working, .drop])
+        #expect(sets.first?.reps == 5)
+        #expect(sets.last?.reps == 12)
+        #expect(sets.last?.type == .drop)
+    }
+
+    @Test("Growing keeps the sets that already existed")
+    func growingPreservesIdentity() {
+        var draft = draft(exercise([
+            PlannedSet(reps: 5, type: .working, effort: EffortTarget(rpe: 7)),
+            PlannedSet(reps: 5, type: .working),
+        ]))
+        let id = draft.workout.exercises![0][0].id
+        let firstID = draft.workout.exercises![0][0].sets![0].id
+
+        draft.setWorkingSets(count: 4, reps: 3, load: pounds(315), toExerciseWith: id)
+
+        let sets = draft.workout.exercises![0][0].sets ?? []
+        #expect(sets.count == 4)
+        #expect(sets[0].id == firstID)
+        // A per-set RPE the author wrote survives a change of reps and weight.
+        #expect(sets[0].effort?.rpe == 7)
+        // New sets inherit it, which is what "a fourth set of the same thing"
+        // means.
+        #expect(sets[3].effort?.rpe == 7)
+    }
+
+    @Test("Trimming removes from the end")
+    func trimmingDropsTheLast() {
+        var draft = draft(exercise([
+            PlannedSet(reps: 5, type: .working),
+            PlannedSet(reps: 5, type: .working),
+            PlannedSet(reps: 5, type: .working),
+        ]))
+        let id = draft.workout.exercises![0][0].id
+        let firstID = draft.workout.exercises![0][0].sets![0].id
+
+        draft.setWorkingSets(count: 1, reps: 5, load: nil, toExerciseWith: id)
+
+        let sets = draft.workout.exercises![0][0].sets ?? []
+        #expect(sets.count == 1)
+        #expect(sets[0].id == firstID)
+    }
+
+    @Test("An exercise with no working sets gains them after its warmups")
+    func addsToAWarmupOnlyExercise() {
+        var draft = draft(exercise([PlannedSet(reps: 5, type: .warmup)]))
+        let id = draft.workout.exercises![0][0].id
+
+        draft.setWorkingSets(count: 2, reps: 5, load: pounds(135), toExerciseWith: id)
+
+        let sets = draft.workout.exercises![0][0].sets ?? []
+        #expect(sets.map { $0.type ?? .working } == [.warmup, .working, .working])
+    }
+
+    @Test("Zero working sets is a legal thing to write")
+    func zeroClearsWorkingSets() {
+        var draft = draft(exercise([
+            PlannedSet(reps: 5, type: .warmup),
+            PlannedSet(reps: 5, type: .working),
+        ]))
+        let id = draft.workout.exercises![0][0].id
+
+        draft.setWorkingSets(count: 0, reps: 5, load: nil, toExerciseWith: id)
+
+        let sets = draft.workout.exercises![0][0].sets ?? []
+        #expect(sets.map { $0.type ?? .working } == [.warmup])
+    }
+}

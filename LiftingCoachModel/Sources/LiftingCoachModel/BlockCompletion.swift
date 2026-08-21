@@ -68,6 +68,34 @@ public struct BlockCompletion: Hashable, Sendable {
         (byDay[calendar.startOfDay(for: day)] ?? []).reduce(0) { $0 + $1.setCount }
     }
 
+    /// What a programmed day has logged against it, or `nil` if nothing was.
+    ///
+    /// `plannedSets` comes from the caller because this type deliberately
+    /// doesn't know about programs — the planner counts a `PlannedWorkout`'s
+    /// sets, the tracker's week view counts the same, and neither has to hand
+    /// this a plan to get an answer.
+    public func log(on day: Date, plannedSets: Int) -> DayLog? {
+        guard wasTrained(on: day) else { return nil }
+        return DayLog(
+            sessions: sessions(on: day).count,
+            loggedSets: setCount(on: day),
+            plannedSets: plannedSets
+        )
+    }
+
+    /// One day's training, as the screens report it.
+    public struct DayLog: Hashable, Sendable {
+        public var sessions: Int
+        public var loggedSets: Int
+        public var plannedSets: Int
+
+        public init(sessions: Int, loggedSets: Int, plannedSets: Int) {
+            self.sessions = sessions
+            self.loggedSets = loggedSets
+            self.plannedSets = plannedSets
+        }
+    }
+
     /// How many of `days` were trained — the week and block rollups.
     ///
     /// Counts *days*, not sessions, so a Saturday with a morning and an evening
