@@ -650,6 +650,15 @@ out of SSM, add it back scoped to the subpath it actually reads.
 > secrets belonging to an IAM user that predates the per-app split and is
 > managed outside that repo. Two different principals, and §3.2's SSM
 > requirement lands on the second one.
+>
+> **That split is intended, not drift**, and it was checked rather than assumed:
+> `terraform-infrastructure`'s workflow declares neither `id-token: write` nor
+> `aws-actions/configure-aws-credentials`, so it is structurally incapable of
+> assuming an OIDC role — the federation was never wired, which is different
+> from a role sitting unused. `An-Amazing-Adventure`'s own deploy workflows do
+> use exactly that pattern, and `ONBOARDING.md` is scoped correctly throughout
+> ("**your app's** deploy CI"). So there is nothing to reconcile here; the only
+> live item is the static user's grant, which is §11 step 2.
 
 Output `github_actions_deploy_role_arn` and set it as a repo secret in
 `Lifting-Coach`, for a `deploy-server.yml` that zips
