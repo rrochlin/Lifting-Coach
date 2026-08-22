@@ -126,6 +126,12 @@ final class TrackerModel {
             startRest(
                 for: exercise,
                 afterSetWith: id,
+                // What the lifter walks to when this rest is up. Read *after*
+                // the set was completed, so it's the genuinely next unlogged
+                // set rather than the one just finished.
+                upNext: session.nextSet.flatMap {
+                    session.exercise(containingSetID: $0.id)?.displayName
+                },
                 seconds: session.restTarget(afterSetWith: id),
                 from: date
             )
@@ -304,6 +310,7 @@ final class TrackerModel {
     func startRest(
         for exercise: WorkoutExercise,
         afterSetWith setID: UUID,
+        upNext: String? = nil,
         seconds: Int,
         from date: Date = Date()
     ) {
@@ -311,6 +318,7 @@ final class TrackerModel {
             exerciseID: exercise.id,
             setID: setID,
             exerciseName: exercise.displayName,
+            upNext: upNext,
             seconds: seconds,
             from: date
         )
@@ -357,6 +365,13 @@ final class TrackerModel {
     /// still clears it immediately, and so does checking off the next set.
     static let expiredLinger: Duration = .seconds(2)
 
+    /// How late an expiry can fire and still count as happening *now*.
+    ///
+    /// The in-app path fires within milliseconds of `endsAt`; anything beyond
+    /// this arrived because the app was suspended and has just come back. Three
+    /// seconds is far outside the first case and far inside the second.
+    private static let staleExpiry: TimeInterval = 3
+
     /// Arms both the on-screen expiry and the notification for a timer's end.
     private func scheduleExpiry(for timer: RestTimer, now: Date = Date()) {
         restExpiryTask?.cancel()
@@ -364,7 +379,7 @@ final class TrackerModel {
         // about to clear it.
         restDismissTask?.cancel()
         restDismissTask = nil
-        notifier.schedule(at: timer.endsAt, exerciseName: timer.exerciseName, now: now)
+        notifier.schedule(at: timer.endsAt, upNext: timer.upNext, now: now)
 
         let interval = timer.endsAt.timeIntervalSince(now)
         guard interval > 0 else {
@@ -388,10 +403,23 @@ final class TrackerModel {
     /// another tab — or whose list had been torn down for any other reason —
     /// got the notification and no sound. Expiry is a fact about the session,
     /// and the session is here.
-    private func markRestExpired(timerID: UUID) {
+    private func markRestExpired(timerID: UUID, now: Date = Date()) {
         guard var timer = rest, timer.id == timerID else { return }
         timer.hasExpired = true
         rest = timer
+
+        // **A late expiry is a stale one, and it must not make a sound.**
+        // `Task.sleep` doesn't run while the app is suspended, so a rest that
+        // ended in the lifter's pocket fires the instant they reopen the app —
+        // "if I'm not on the app I don't get the sound, but when I open the app
+        // the sound plays". The notification already announced it at the right
+        // moment; chiming now is announcing something that finished minutes
+        // ago. Checking elapsed time rather than the app's state is what makes
+        // this work, because on reopen the app *is* active.
+        guard now.timeIntervalSince(timer.endsAt) < Self.staleExpiry else {
+            dismissRest()
+            return
+        }
         RestChime.play()
 
         restDismissTask?.cancel()

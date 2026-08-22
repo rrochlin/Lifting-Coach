@@ -58,7 +58,15 @@ final class RestNotifier {
     ///
     /// A `date` already past schedules nothing and clears what's pending: the
     /// timer is over, and an alert about it would arrive as a lie.
-    func schedule(at date: Date, exerciseName: String?, now: Date = Date()) {
+    /// `upNext` is the lift the **next** set belongs to, not the one this rest
+    /// followed. That distinction is the whole of a gym-floor report: finishing
+    /// the last set of deadlifts announced "Next set — Deadlift" while the
+    /// lifter was already walking to the squat rack. A notification is read
+    /// alone, with no screen around it to correct it, so it has to name the
+    /// thing it is actually a countdown toward. `nil` means there is no next
+    /// set — the last set of the workout — and the alert says so rather than
+    /// inventing one.
+    func schedule(at date: Date, upNext: String?, now: Date = Date()) {
         guard let center else { return }
         cancel()
 
@@ -67,8 +75,19 @@ final class RestNotifier {
 
         let content = UNMutableNotificationContent()
         content.title = "Rest complete"
-        content.body = exerciseName.map { "Next set — \($0)" } ?? "Next set"
-        content.sound = .default
+        content.body = upNext.map { "Up next — \($0)" } ?? "Last set done"
+        // The same three beeps the in-app chime plays, so rest sounds like rest
+        // whether or not the app is on screen — `.default` was a generic ding
+        // indistinguishable from every other app's.
+        //
+        // **This still obeys the ring/silent switch**, and nothing here can
+        // change that: notification sound is delivered by the system, so the
+        // `.playback` trick that makes `RestChime` audible on a silenced phone
+        // does not apply. Bypassing silent from the background needs Apple's
+        // Critical Alerts entitlement, which is granted by application and for
+        // a much narrower class of app than this. Worth knowing before anyone
+        // "fixes" this again.
+        content.sound = UNNotificationSound(named: UNNotificationSoundName("rest-complete.wav"))
         // Breaks through a Focus, and through the lock screen's summary. This is
         // the rare alert that earns it: rest ending is worthless a minute late,
         // the lifter is standing at the rack waiting for it, and a gym is
@@ -127,7 +146,11 @@ final class RestNotifier {
             _ center: UNUserNotificationCenter,
             willPresent notification: UNNotification
         ) async -> UNNotificationPresentationOptions {
-            [.banner, .sound]
+            // Banner only. `RestChime` is already playing at this exact moment
+            // and plays the same three beeps, so asking for `.sound` here would
+            // double them — and the chime is the better of the two, because it
+            // goes through the silent switch and this wouldn't.
+            [.banner]
         }
     }
 }

@@ -1259,135 +1259,142 @@ private struct ExerciseHeaderRow: View {
     let onChooseExercise: () -> Void
 
     var body: some View {
-        HStack(spacing: 8) {
-            Button(action: onToggleExpanded) {
-                HStack(spacing: 8) {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(Theme.inkFaint)
-                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(exercise.displayName)
-                            .font(Theme.heading)
-                            .foregroundStyle(Theme.ink)
-                            // Two lines rather than one: program exercise names are
-                            // long and descriptive ("Deadlift — heavy (straight
-                            // bar)"), and a single line truncates the part that
-                            // distinguishes it from the other three deadlift days.
-                            .lineLimit(2)
-                            .multilineTextAlignment(.leading)
-                            .fixedSize(horizontal: false, vertical: true)
-                        // The catalog lift underneath the plan's wording —
-                        // which is what a logged max is recorded against, so
-                        // it shouldn't be invisible while lifting.
-                        if exercise.variant != nil {
-                            Text(exercise.exercise.name)
-                                .font(Theme.caption)
-                                .foregroundStyle(Theme.inkFaint)
-                                .lineLimit(1)
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 8) {
+                Button(action: onToggleExpanded) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Theme.inkFaint)
+                            .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(exercise.displayName)
+                                .font(Theme.heading)
+                                .foregroundStyle(Theme.ink)
+                                // Two lines rather than one: program exercise names are
+                                // long and descriptive ("Deadlift — heavy (straight
+                                // bar)"), and a single line truncates the part that
+                                // distinguishes it from the other three deadlift days.
+                                .lineLimit(2)
+                                .multilineTextAlignment(.leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                            // The catalog lift underneath the plan's wording —
+                            // which is what a logged max is recorded against, so
+                            // it shouldn't be invisible while lifting.
+                            if exercise.variant != nil {
+                                Text(exercise.exercise.name)
+                                    .font(Theme.caption)
+                                    .foregroundStyle(Theme.inkFaint)
+                                    .lineLimit(1)
+                            }
+                        }
+                        if isActive {
+                            Chip(text: "active", color: Theme.live)
                         }
                     }
-                    if isActive {
-                        Chip(text: "active", color: Theme.live)
-                    }
-                }
-                .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
-
-            // The coach specified a goal, not a movement — and this is the
-            // control that resolves it, not a caption about it.
-            //
-            // It used to be a plain `Chip` *inside* the expand button, so the
-            // one thing on the row that names an unmade decision did nothing
-            // when tapped except fold the exercise shut. Choosing was only
-            // reachable through the `…` menu, which is where it was reported
-            // from the gym floor as "the selector did not open on interaction".
-            // The obvious affordance is now the real one; the menu entry stays
-            // for the swap case.
-            if exercise.exercise.isOpenChoice {
-                Button(action: onChooseExercise) {
-                    HStack(spacing: 4) {
-                        Text("YOUR CHOICE")
-                            .font(Theme.label)
-                            .tracking(1.2)
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 9, weight: .semibold))
-                    }
-                    .foregroundStyle(Theme.signal)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 4)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 3)
-                            .strokeBorder(Theme.signal.opacity(0.6), lineWidth: 1)
-                    )
-                    .fixedSize()
                     .contentShape(.rect)
                 }
-                // A `List` row runs its own tap through every plain button in
-                // it unless each says otherwise; without this, tapping the chip
-                // also toggled the expansion behind it.
                 .buttonStyle(.plain)
-            }
 
-            Spacer(minLength: 8)
+                // The coach specified a goal, not a movement — and this is the
+                // control that resolves it, not a caption about it.
+                //
+                // It used to be a plain `Chip` *inside* the expand button, so the
+                // one thing on the row that names an unmade decision did nothing
+                // when tapped except fold the exercise shut. Choosing was only
+                // reachable through the `…` menu, which is where it was reported
+                // from the gym floor as "the selector did not open on interaction".
+                // The obvious affordance is now the real one; the menu entry stays
+                // for the swap case.
+                if exercise.exercise.isOpenChoice {
+                    Button(action: onChooseExercise) {
+                        HStack(spacing: 4) {
+                            Text("YOUR CHOICE")
+                                .font(Theme.label)
+                                .tracking(1.2)
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 9, weight: .semibold))
+                        }
+                        .foregroundStyle(Theme.signal)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 4)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 3)
+                                .strokeBorder(Theme.signal.opacity(0.6), lineWidth: 1)
+                        )
+                        .fixedSize()
+                        .contentShape(.rect)
+                    }
+                    // A `List` row runs its own tap through every plain button in
+                    // it unless each says otherwise; without this, tapping the chip
+                    // also toggled the expansion behind it.
+                    .buttonStyle(.plain)
+                }
 
-            if !isExpanded {
-                Text(collapsedProgress)
-                    .font(Theme.data(14))
-                    .foregroundStyle(Theme.inkMuted)
-            }
+                Spacer(minLength: 8)
 
-            if let notes = exercise.usernotes, !notes.isEmpty {
-                Image(systemName: "note.text")
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.signal)
-            }
+                if !isExpanded {
+                    Text(collapsedProgress)
+                        .font(Theme.data(14))
+                        .foregroundStyle(Theme.inkMuted)
+                }
 
-            Menu {
-                // An open-choice slot names a goal, not a movement — recording
-                // which exercise actually filled it is the whole point, so it
-                // leads the menu while unresolved.
-                Button(
-                    exercise.exercise.isOpenChoice ? "Choose Exercise" : "Swap Exercise",
-                    systemImage: "arrow.triangle.2.circlepath",
-                    action: onChooseExercise
-                )
-                // Sticky, and the menu says so — a control that silently
-                // changes every future session is worse than one that doesn't.
-                // Pairing is a decision made at the rack, not something that
-                // can only arrive from a plan.
-                if isSupersetted {
-                    Button("Remove From Superset", systemImage: "arrow.up.and.down.and.arrow.left.and.right", action: onUngroup)
-                } else if !supersetCandidates.isEmpty {
-                    Menu("Superset With", systemImage: "arrow.triangle.merge") {
-                        ForEach(supersetCandidates, id: \.id) { candidate in
-                            Button(candidate.name) { onSuperset(candidate.id) }
+
+                Menu {
+                    // An open-choice slot names a goal, not a movement — recording
+                    // which exercise actually filled it is the whole point, so it
+                    // leads the menu while unresolved.
+                    Button(
+                        exercise.exercise.isOpenChoice ? "Choose Exercise" : "Swap Exercise",
+                        systemImage: "arrow.triangle.2.circlepath",
+                        action: onChooseExercise
+                    )
+                    // Sticky, and the menu says so — a control that silently
+                    // changes every future session is worse than one that doesn't.
+                    // Pairing is a decision made at the rack, not something that
+                    // can only arrive from a plan.
+                    if isSupersetted {
+                        Button("Remove From Superset", systemImage: "arrow.up.and.down.and.arrow.left.and.right", action: onUngroup)
+                    } else if !supersetCandidates.isEmpty {
+                        Menu("Superset With", systemImage: "arrow.triangle.merge") {
+                            ForEach(supersetCandidates, id: \.id) { candidate in
+                                Button(candidate.name) { onSuperset(candidate.id) }
+                            }
                         }
                     }
-                }
-                // The catalog knows what this lift works and how it's
-                // performed; until now the only way to read any of it was to go
-                // and *choose* an exercise, which is the wrong verb for a lift
-                // you're already three sets into.
-                Button("Exercise Info", systemImage: "info.circle", action: onShowInfo)
-                Button("Add Drop Set", systemImage: "arrow.down.right", action: onAddDropSet)
-                Button("Reorder Exercises", systemImage: "arrow.up.arrow.down", action: onReorder)
-                Menu("Unit — \(unit.symbol)", systemImage: "scalemass") {
-                    Picker("Unit", selection: unitSelection) {
-                        ForEach(WeightUnit.allCases, id: \.self) { option in
-                            Text(option == .pounds ? "Pounds (lb)" : "Kilograms (kg)")
-                                .tag(Optional(option))
+                    // The catalog knows what this lift works and how it's
+                    // performed; until now the only way to read any of it was to go
+                    // and *choose* an exercise, which is the wrong verb for a lift
+                    // you're already three sets into.
+                    Button("Exercise Info", systemImage: "info.circle", action: onShowInfo)
+                    Button("Add Drop Set", systemImage: "arrow.down.right", action: onAddDropSet)
+                    Button("Reorder Exercises", systemImage: "arrow.up.arrow.down", action: onReorder)
+                    Menu("Unit — \(unit.symbol)", systemImage: "scalemass") {
+                        Picker("Unit", selection: unitSelection) {
+                            ForEach(WeightUnit.allCases, id: \.self) { option in
+                                Text(option == .pounds ? "Pounds (lb)" : "Kilograms (kg)")
+                                    .tag(Optional(option))
+                            }
                         }
+                        Button("Use App Default") { onSetUnit(nil) }
                     }
-                    Button("Use App Default") { onSetUnit(nil) }
+                    Button("Edit Note", systemImage: "note.text", action: onEditNote)
+                    Button("Delete Exercise", systemImage: "trash", role: .destructive, action: onDelete)
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.system(size: 16))
+                        .foregroundStyle(Theme.inkMuted)
                 }
-                Button("Edit Note", systemImage: "note.text", action: onEditNote)
-                Button("Delete Exercise", systemImage: "trash", role: .destructive, action: onDelete)
-            } label: {
-                Image(systemName: "ellipsis.circle")
-                    .font(.system(size: 16))
-                    .foregroundStyle(Theme.inkMuted)
+            }
+
+            // Under the row rather than beside it: a note is prose and needs
+            // the panel's width, and there is nothing else on this row that can
+            // afford to give it up.
+            if let programmed = exercise.notes, !programmed.isEmpty {
+                NoteLine(text: programmed, isProgrammed: true, lineLimit: isExpanded ? 4 : 1)
+            }
+            if let mine = exercise.usernotes, !mine.isEmpty {
+                NoteLine(text: mine, lineLimit: isExpanded ? 4 : 1)
             }
         }
     }
@@ -1403,6 +1410,43 @@ private struct ExerciseHeaderRow: View {
         guard !sets.isEmpty else { return "0 SETS" }
         let done = sets.filter { $0.complete == true }.count
         return "\(done)/\(sets.count)"
+    }
+}
+
+/// A note, shown where it was written rather than behind a tap.
+///
+/// **Notes existed and were invisible.** Both kinds were signalled by a small
+/// `note.text` glyph and nothing else — the text itself was only reachable by
+/// opening the editor, which is not a thing anyone does mid-set. Reported as
+/// "notes aren't visible from the workout. If something's written I need to be
+/// able to see it", and that's the whole of it: a note you have to go and find
+/// is a note that doesn't exist.
+///
+/// **Two kinds, told apart, because they aren't the same claim.** A programmed
+/// note is what the coach wrote and the lifter can't change (it lives in the
+/// `plannedFrom` snapshot, or on the `PlannedExercise`); a lifter's note is
+/// their own. Rendering them identically would let "2s pause at the chest" and
+/// "shoulder felt off today" read as the same kind of instruction. The glyph
+/// and the ink both carry the difference, never colour alone (WCAG §1.4.1).
+private struct NoteLine: View {
+    let text: String
+    /// `true` for the program's own words, `false` for the lifter's.
+    var isProgrammed = false
+    var lineLimit = 3
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 5) {
+            Image(systemName: isProgrammed ? "text.quote" : "note.text")
+                .font(.system(size: 11))
+                .foregroundStyle(isProgrammed ? Theme.inkFaint : Theme.signal)
+                .fixedSize()
+            Text(text)
+                .font(Theme.caption)
+                .foregroundStyle(isProgrammed ? Theme.inkMuted : Theme.ink)
+                .lineLimit(lineLimit)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
     }
 }
 
@@ -1512,6 +1556,17 @@ private struct SetRow: View {
             quantities
             if hasAnnotations {
                 annotations
+            }
+            // A set's note is prose and gets its own line, for the same reason
+            // the exercise's does — it was a glyph on the `…` button and
+            // nothing else, which is not a way to read anything.
+            if let programmed = self.set.plannedFrom?.notes, !programmed.isEmpty {
+                NoteLine(text: programmed, isProgrammed: true, lineLimit: 2)
+                    .padding(.leading, 38)
+            }
+            if let mine = self.set.usernotes, !mine.isEmpty {
+                NoteLine(text: mine, lineLimit: 2)
+                    .padding(.leading, 38)
             }
         }
         .padding(.vertical, 2)

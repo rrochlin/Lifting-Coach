@@ -89,7 +89,44 @@ Raw, in the order it was reported. Struck through as each is closed.
   change**; that's an edit to the program. It is easier now: the planner's new
   bulk row writes the working sets in one go, and a set's type menu makes the
   rows above them warmups. Authoring a *ramp* (45/95/135/185) is still row by
-  row — the generated warmup block in `## Backlog` is what fixes that properly.
+  row — the generated warmup block in `## 21-08-26 — from build 68
+From `notes/Workout App/Mid lift thoughts.md`.
+
+- ~~Notes aren't visible from the workout. If something's written I need to be
+  able to see it.~~ — they were signalled by a small `note.text` glyph and
+  nothing else, so the text was only reachable by opening the editor, which is
+  not a thing anyone does mid-set. Both kinds now render as a line where they
+  were written — on the exercise header and under the set — and they're told
+  apart: the program's own words are muted with a quote glyph, the lifter's are
+  bright with a note glyph. A collapsed exercise gets one line, the lift being
+  worked gets four.
+- ~~The alert for rest completion should be the next set in order, not the
+  current set that triggered the rest.~~ — `RestTimer.upNext` carries the lift
+  the *next* set belongs to, read after the triggering set was logged. The
+  notification reads "Up next — Squat", or "Last set done" where there is no
+  next set rather than inventing one. The sticky bar deliberately still names
+  the lift the rest *follows*, because tapping it scrolls to that set.
+- ~~After a rest time is over if I'm not on the app I don't get the sound, but
+  when I open the app the sound plays.~~ — two halves.
+  - The late chime is fixed: `Task.sleep` doesn't run while the app is
+    suspended, so a rest that ended in a pocket fired the instant the app
+    reopened. An expiry more than 3s late is treated as stale — no chime, and
+    the timer clears. Checking elapsed time rather than app state is what makes
+    that work, since on reopen the app *is* active.
+  - The notification now plays the same three beeps as the in-app chime instead
+    of `.default`. **It still obeys the ring/silent switch and nothing in the
+    app can change that** — notification audio is delivered by the system, so
+    the `.playback` trick that makes `RestChime` audible on a silenced phone
+    doesn't apply to it. Bypassing silent from the background needs Apple's
+    Critical Alerts entitlement, which is granted by application. If the phone
+    is on silent and the app is backgrounded, the haptic and the banner are
+    what's left.
+  - Fixed in passing: with the app in the foreground both the chime *and* the
+    notification's sound were playing. The foreground presenter asks for
+    `.banner` only now — the chime is the better of the two, because it goes
+    through the silent switch.
+
+## Backlog` is what fixes that properly.
 - ~~After the timer sound effect happened my music audio was quiet until the
   timer got dismissed in the panel~~ — `.duckOthers` ducks for as long as the
   audio session is *active*, and `RestChime` activated once and never let go,

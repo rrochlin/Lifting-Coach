@@ -33,16 +33,29 @@ public struct RestTimer: Identifiable, Equatable, Sendable {
     /// (haptic) rather than on every tick afterwards.
     public var hasExpired = false
 
+    /// The lift the *next* set belongs to — what this rest is a countdown
+    /// toward. `nil` at the end of the workout, where there is no next set.
+    ///
+    /// Separate from `exerciseName`, which is the lift this rest *follows*, and
+    /// the two genuinely differ on the last set of every exercise. The
+    /// notification was built from the wrong one: finishing the last set of
+    /// deadlifts announced "Next set — Deadlift" while the lifter was walking
+    /// to the squat rack. Each surface uses the one it actually points at —
+    /// see `RestNotifier` and the tracker's sticky bar.
+    public var upNext: String?
+
     public init(
         exerciseID: UUID,
         setID: UUID,
         exerciseName: String,
+        upNext: String? = nil,
         startedAt: Date,
         endsAt: Date
     ) {
         self.exerciseID = exerciseID
         self.setID = setID
         self.exerciseName = exerciseName
+        self.upNext = upNext
         self.startedAt = startedAt
         self.endsAt = endsAt
     }
@@ -50,11 +63,19 @@ public struct RestTimer: Identifiable, Equatable, Sendable {
     /// Starts a rest period of the given length. A negative or zero length lands
     /// already finished rather than being rejected — "no rest prescribed here"
     /// is a legitimate thing for a plan to say.
-    public init(exerciseID: UUID, setID: UUID, exerciseName: String, seconds: Int, from date: Date) {
+    public init(
+        exerciseID: UUID,
+        setID: UUID,
+        exerciseName: String,
+        upNext: String? = nil,
+        seconds: Int,
+        from date: Date
+    ) {
         self.init(
             exerciseID: exerciseID,
             setID: setID,
             exerciseName: exerciseName,
+            upNext: upNext,
             startedAt: date,
             endsAt: date.addingTimeInterval(TimeInterval(max(0, seconds)))
         )
