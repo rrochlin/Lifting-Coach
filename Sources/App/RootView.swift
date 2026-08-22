@@ -138,6 +138,25 @@ enum LaunchArguments {
         ProcessInfo.processInfo.arguments.contains("-openBlockSettings")
     }
 
+    /// `-reorderMode` puts the tracker's list straight into reorder mode.
+    /// Pair it with `-restDemo`, which is what creates a workout to reorder.
+    ///
+    /// Reorder mode is behind a tap in an exercise's `…` menu, so it's in the
+    /// same family as the rest of these.
+    static var opensReorderMode: Bool {
+        ProcessInfo.processInfo.arguments.contains("-reorderMode")
+    }
+
+    /// `-openCalendarDay 18` opens History's calendar dialog on that day of the
+    /// displayed month. Needs `-initialTab history`.
+    ///
+    /// The dialog is behind a tap on a grid cell, which is the one interaction
+    /// `Features/Workout History.md` is most specific about and the one nothing
+    /// on the command line can reach.
+    static var calendarDay: Int? {
+        value(for: "-openCalendarDay").flatMap(Int.init)
+    }
+
     /// `-editWorkout` opens that detail screen straight into edit mode.
     ///
     /// Edit mode is behind a toolbar tap, which puts it in the same category as

@@ -12,7 +12,7 @@ This document will be a thorough review of the current application state and iss
 - In the program we have blocks where we want to do a specific workout, i.e. bench press or deadlift. There are other blocks where we want to do bench press, but heavy/paused. Those are both bench press not two different exercises.
 - Slide to delete action, slide happens on the enclosing block for each exercise instead of the individual rows for the workout. The rows for each set should have the slide delete on them. deleting an entire exercise should be done from a settings menu on the workout block itself
 - Sets don't have anywhere to input and track weight/rpe, only a box to check off their completion. Everything should be modifiable and adjustable. if we can't change the reps/weight and log RPE we're missing a huge piece of the required function.
-we should have the ability to drag to reorder the sets and whole exercises.
+~~we should have the ability to drag to reorder the sets and whole exercises.~~ — sets drag inline; exercises have a reorder mode (any exercise's `…` menu) that collapses every lift to one row. The mode isn't cosmetic: `List` maps a drag onto a `ForEach` element, and an expanded exercise is many rows, which is why the old drag animated and landed nowhere.
 - the popup dialog warning about unfinished sets on a finished workout looks out of place and theme.
 - Before a workout is started the only option is to start he programmed "today" workout or a blank one. I'd like to see a local view of the programmed lifts and be able to start another one if needed. the current days workout should be highlighted. We should be able to skip a workout too if needed.
 - no notes
@@ -28,6 +28,7 @@ we should have the ability to drag to reorder the sets and whole exercises.
 - no where to set RPE's
 
 ## History
+- ~~calendar view~~ — `WorkoutCalendarView`: one month at a time, dots with no detail, a dialog on touch with an EDIT that opens the editor directly. The paged list is still there behind a toolbar toggle, because the two answer different questions.
 - ~~no interaction on completed sets~~ — tapping a workout opens `WorkoutDetailView`.
 - ~~should be able to update them, i.e. fix mislogged sets, see incomplete sets, and update start/stop times.~~ — EDIT on the detail screen: reps, weight, RPE, set type, notes, add/delete sets and exercises, title, and both start/stop times. Draft-based, saved on an explicit SAVE.
   - "See incomplete sets" is the one part with nothing to show: finishing a workout deletes its incomplete sets, so none survive into history. If they should survive instead, that's a change to `WorkoutSession.finish`, not to this screen.
@@ -35,6 +36,7 @@ we should have the ability to drag to reorder the sets and whole exercises.
 
 ## Profile
 - fine for now
+- ~~data export~~ — EXPORT DATA writes the whole local database as one JSON archive and hands it to the share sheet. Import stays out by direction; the screen says so rather than leaving the section half-empty.
 
 ## Backlog
 Not broken — wanted, and bigger than a fix.
