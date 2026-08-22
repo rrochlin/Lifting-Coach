@@ -363,9 +363,25 @@ regresses: the app **had no icon** (`Tools/make-app-icon.swift` renders one from
 `Theme.swift`'s own palette literals; App Store Connect rejects a build without a
 1024×1024 opaque marketing icon), `ITSAppUsesNonExemptEncryption` is declared so
 uploads don't stop to ask, and `PrivacyInfo.xcprivacy` states the honest answers
-for a local-only app — **all three need revisiting when the phase 2 backend
-lands**, because a training log leaving the phone changes the encryption answer
-and every line of the privacy manifest.
+for a local-only app.
+
+**Only one of those three moves when the backend lands, and it isn't the
+encryption one.** `ITSAppUsesNonExemptEncryption: false` means *no non-exempt*
+encryption, and standard HTTPS/TLS is exempt; SSE-KMS is server-side and never
+in the binary. So `project.yml`'s `false` stays right, and only adding crypto of
+our own on top of TLS would change it. This file previously claimed the cloud
+changes that answer — it was inherited caution rather than a checked fact.
+**The privacy manifest is the one that really changes**, and `server/INFRA-SPEC.md`
+§9 holds the exact entries plus the rest of the App Store list (the
+questionnaire, the policy URL, account deletion, and the versioned-bucket trap
+underneath it).
+
+**A user-facing export is not collection.** Profile's data export hands a file to
+the share sheet, and Apple's definition of *collect* turns on whether **we**
+receive it — not on whether bytes leave the phone. The system delivers it
+wherever the lifter picks; the app makes no network call. So the manifest stayed
+empty when export shipped, and Cognito plus the bucket are the first thing that
+changes it.
 
 ## Working conventions from this project
 - The notes docs are living working files, not archives — once a design conversation converges on a direction, implement it directly in the relevant `.md` (or, going forward, the actual Swift code). Don't leave agreed decisions sitting only in chat.

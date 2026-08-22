@@ -7,8 +7,11 @@ carries the reason it's shaped that way.
 
 Scope is phase 2.1 only: identity, one object per user, and a record of what
 that object turned out to contain. The chat (2.2) and the query tools (2.3) get
-their own resources later; §9 sketches them so the module layout doesn't have
-to be reorganized to accept them.
+their own resources later; §9.1 sketches them so the module layout doesn't have
+to be reorganized to accept them. **§9.2–9.5 are not sketches** — they are the
+App Store compliance work that the first cloud build cannot ship without, and
+they are specified here because every one of them is a consequence of a
+resource in this document.
 
 Read alongside:
 - `notes/Workout App/Backend/Overview.md` — why the design is snapshot-and-draft.
@@ -643,7 +646,9 @@ building the flow around it.
 
 ---
 
-## 9. Deliberately not in this pass
+## 9. Not in this pass — and what has to be true before it ships
+
+### 9.1 Later phases
 
 Named so the module layout anticipates them, not built:
 
@@ -657,16 +662,119 @@ Named so the module layout anticipates them, not built:
 - **2.3 — the coach's output.** A `${prefix}-draft-plans` table, and `/tmp`
   snapshot caching keyed by ETag, which is a memory and timeout change on the
   chat function rather than a new resource.
-- **Account deletion.** App Review requires an in-app path once accounts exist.
-  Small — `cognito-idp:AdminDeleteUser`, a `DeleteItem`, and an S3 delete — but
-  there's a real trap: **on a versioned bucket, deleting an object leaves every
-  noncurrent version in place.** A deletion path that means what it says has to
-  enumerate and delete versions, or §4's 30 days has to be accepted as the
-  actual deletion window and stated honestly in the privacy manifest. Decide it
-  when it's built, not during review.
+- **Account deletion.** Specified in §9.4 below — it is a compliance
+  requirement rather than a nice-to-have, so it has its own section.
 - **Budget alarm.** An `aws_budgets_budget` at ~$25/month with an email
   notification. Not phase-specific, but the first thing in this design that can
   run away is Bedrock in 2.2, and it's easier to add now than to wish for later.
+
+### 9.2 The privacy manifest
+
+`Sources/App/Resources/PrivacyInfo.xcprivacy` currently declares an empty
+`NSPrivacyCollectedDataTypes`, and **that is correct today and stays correct
+until the first real upload.** Apple's definition of *collect* is transmitting
+data off the device in a way that lets **us** or our partners access it beyond
+servicing the request — it turns on who receives the data, not on whether bytes
+leave the phone. Profile's data export hands a file to the share sheet, the
+system delivers it wherever the lifter chose, and we never see it. Cognito and
+this bucket are the first thing in the app's history that changes the answer.
+
+**Do not pre-declare.** A manifest listing health data in a build that uploads
+nothing produces a nutrition label that misdescribes the app. These entries land
+in the same commit as the upload path, not before it:
+
+```xml
+<key>NSPrivacyCollectedDataTypes</key>
+<array>
+    <dict>
+        <key>NSPrivacyCollectedDataType</key>
+        <string>NSPrivacyCollectedDataTypeFitness</string>
+        <key>NSPrivacyCollectedDataTypeLinked</key><true/>
+        <key>NSPrivacyCollectedDataTypeTracking</key><false/>
+        <key>NSPrivacyCollectedDataTypePurposes</key>
+        <array><string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string></array>
+    </dict>
+    <!-- …the same dict shape for: NSPrivacyCollectedDataTypeHealth (bodyweight),
+         NSPrivacyCollectedDataTypeEmailAddress and
+         NSPrivacyCollectedDataTypeUserID (both from Cognito). -->
+</array>
+```
+
+Four types, and each one is `Linked = true` because **every one of them is keyed
+by `sub`** — that is the design, not an accident to be minimised. Workouts and
+loads are Fitness; bodyweight is Health, which covers user-provided health data.
+Tracking is `false` throughout: nothing here is joined to third-party data or
+used for advertising.
+
+Verify the key spellings against Apple's current documentation before shipping.
+They are exact-match strings and a typo fails validation rather than degrading
+quietly.
+
+**`ITSAppUsesNonExemptEncryption` does *not* change.** It means *no non-exempt*
+encryption, and standard HTTPS/TLS is exempt; SSE-KMS (§4) is server-side and
+never enters the binary. `project.yml`'s `false` stays right unless the app adds
+crypto of its own on top of TLS. Recorded here because `CLAUDE.md` claimed
+otherwise for a while, and re-deriving a corrected fact is how it gets
+un-corrected.
+
+### 9.3 The two forms outside the repo
+
+Neither is a code change, and both block the first cloud build:
+
+- **The App Store Connect App Privacy questionnaire** is separate from the
+  manifest and must agree with it. The manifest is the code-level declaration;
+  the questionnaire generates the nutrition label.
+- **A privacy policy URL.** Already required for any app, but it currently has
+  nothing true to say. Once §9.2 is non-empty it has to state what is collected,
+  why, how long it is kept, and how to delete it — and the retention answer has
+  to match §4's lifecycle and §9.4's behaviour rather than be written
+  aspirationally.
+
+### 9.4 Account deletion
+
+App Review requires an in-app path once accounts exist (Guideline 5.1.1(v)), and
+it must *delete* rather than deactivate. Mechanically small — `AdminDeleteUser`,
+a `DeleteItem`, and an S3 delete — with one trap underneath it.
+
+**On a versioned bucket, deleting an object deletes nothing.** It writes a
+delete marker; every prior version stays readable, and §4's lifecycle then holds
+them for 30 more days. A deletion path built the obvious way would report
+success while a complete copy of the lifter's training remained recoverable.
+
+**Decided: enumerate and delete versions.** `ListObjectVersions` over
+`users/{sub}/`, then `DeleteObjects` on every version id including the delete
+markers. The alternative — accepting §4's 30 days as the real window and saying
+so in the policy — is defensible and is the wrong trade here: "deleted" that
+means "in 30 days" is the kind of true-on-a-technicality that this project keeps
+refusing elsewhere, and the honest version costs one extra API call.
+
+This needs `s3:ListBucketVersions` on the bucket and `s3:DeleteObjectVersion` on
+the prefix, on the **deletion function's** role — deliberately not on the
+phone's role (§3.4), which still has no delete permission of any kind. Deletion
+is an account operation, not something a device credential should be able to do.
+
+Everything the account touches has to be in the list, which is why this is
+specified now rather than during review: the S3 prefix and all its versions, the
+`snapshotMeta` item, the Cognito user, and — once 2.2 and 2.3 exist —
+`conversations` and `draft-plans`.
+
+### 9.5 Health data has extra rules
+
+Guideline 5.1.3 forbids using health and fitness data for advertising or
+use-based data mining. Nothing in this design does, and nothing here should
+start.
+
+The place it becomes a live question is **2.2**, where a training log goes into
+a Bedrock prompt. In our own AWS account, with a model that does not train on
+inputs, that is processing rather than disclosure — but it is worth being
+deliberate about, and it gets sharper if HealthKit integration ever lands, since
+HealthKit-sourced data carries its own restrictions on sharing beyond the app.
+Decide it when the chat is built; do not let it arrive as a side effect.
+
+**Scope, honestly:** all of §9.2–9.5 is Apple's rules, and they apply at one
+user. GDPR/CCPA largely do not engage while the owner is the only person whose
+data is in the bucket — that changes the day an external tester's log is in
+there.
 
 ---
 

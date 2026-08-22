@@ -122,5 +122,9 @@ snapshot is reported at the wrong version.
 - **`server/infra/`** — the Terraform, via `git subtree` against
   `terraform-infrastructure`. `INFRA-SPEC.md` is the spec for it.
 - **The chat and the query tools** (2.2, 2.3).
-- **Account deletion.** App Review requires an in-app path once accounts exist:
-  the S3 prefix — including every noncurrent version — and the DynamoDB item.
+- **Account deletion.** App Review requires an in-app path once accounts exist,
+  and on a versioned bucket the obvious implementation deletes nothing — it
+  writes a delete marker over versions that stay readable. `INFRA-SPEC.md` §9.4
+  settles it: enumerate the versions and delete them, plus the `snapshotMeta`
+  item and the Cognito user. §9.2–9.5 hold the rest of the compliance work the
+  first cloud build can't ship without.
