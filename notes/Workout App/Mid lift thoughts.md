@@ -1,3 +1,7 @@
+21-08-26
+Notes aren’t visible from the workout. If something’s written I need to be able to see it. Also the alert for the rest timer completion should be the next set in order, not the current set that triggered the rest. When I do my last set of deadlifts the notification popup doesn’t say I’m doing squats now. 
+After a rest time is over if I’m not on the app I don’t get the sound, but when I open the app the sound plays.
+
 18-08-26
 Entering weight in the warmup set I’d like an enter button to take me to the next input field. Also I have to enter all the warmup sets I want if I don’t have warmup sets. Should be a warmup block at the start of every lift building down???
 No sound on rest completion. Should receive an auditory notification
