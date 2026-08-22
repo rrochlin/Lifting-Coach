@@ -36,9 +36,14 @@ public struct SnapshotExporter: Sendable {
         /// SHA-256 of the compressed bytes, lowercase hex — what the receiver
         /// checks the upload against.
         public let sha256: String
-        /// The last applied migration identifier, e.g. `v13_setDurationDistance`.
-        /// The server refuses a version it doesn't know, the same discipline
-        /// `liftimport` applies in the other direction.
+        /// The last applied migration identifier, e.g. `v14_cognitoSub`.
+        ///
+        /// Sent as advisory metadata on the upload, and **not** what the server
+        /// records: it opens the object and reads `grdb_migrations` itself, so
+        /// the index describes the bytes rather than the claim. This stays on
+        /// the export because it is what makes the two comparable — a version
+        /// here that disagrees with the one derived there means the file in the
+        /// bucket is not the file this phone thinks it sent.
         public let schemaVersion: String
         /// Row count per user table, name-keyed. Cheap, and it makes "the
         /// upload succeeded but the file is wrong" a detectable state.

@@ -36,11 +36,13 @@ public protocol BackendClient: Sendable {
 
     /// Uploads the exported snapshot and returns what the server now holds.
     ///
-    /// Throws `.signedInElsewhere` if this device no longer holds the lease, and
-    /// `.unsupportedSchemaVersion` if the server doesn't know the schema the
-    /// file was written at — the same refusal `liftimport` makes in the other
-    /// direction, for the same reason: a half-understood database is worse than
-    /// no database.
+    /// The phone writes to S3 itself, with temporary credentials from a Cognito
+    /// identity pool scoped to its own `users/{sub}/` prefix — there is no
+    /// service in front of the bucket to ask permission from. Nothing here can
+    /// be refused for *what the file contains*: the server records the schema
+    /// version by opening the object, so a snapshot from a newer build is
+    /// stored and flagged rather than rejected, and a backup is never lost to a
+    /// Lambda that hasn't been redeployed yet.
     @discardableResult
     func uploadSnapshot(_ snapshot: SnapshotExporter.Snapshot) async throws -> SnapshotDescriptor
 
@@ -152,23 +154,11 @@ public enum BackendError: LocalizedError, Equatable {
     /// Phase 1: there is no backend. Not a failure to retry or report as an
     /// outage — the feature genuinely does not exist yet.
     case notImplementedUntilPhase2
-    /// Another device took the lease. Multiple sessions are refused rather than
-    /// reconciled: merging two divergent copies of a training log is a problem
-    /// this design exists to not have. The lifter signs in again here, or
-    /// carries on where they signed in last.
-    case signedInElsewhere
-    /// The server doesn't recognize the schema the snapshot was written at —
-    /// usually an app newer than the deployed Lambda.
-    case unsupportedSchemaVersion(String)
 
     public var errorDescription: String? {
         switch self {
         case .notImplementedUntilPhase2:
             return "This feature needs the server backend, which isn't built yet."
-        case .signedInElsewhere:
-            return "This account was signed in on another device. Sign in again to use it here."
-        case .unsupportedSchemaVersion(let version):
-            return "The server doesn't understand this app's data format yet (\(version))."
         }
     }
 }

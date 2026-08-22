@@ -1,266 +1,220 @@
-"""The routes: who is let in, in what order they're refused, and what lands."""
+"""The indexer, end to end against a real file in a fake bucket."""
 
 from __future__ import annotations
 
-import json
+import gzip
+from pathlib import Path
 
-from conftest import SHA, body_of, request
+import pytest
+from conftest import FakeObjects, build_snapshot, event_for
 
-from liftcoach_server import handlers
+from liftcoach_server import handlers, schema
+from liftcoach_server.errors import MalformedKey
 from liftcoach_server.snapshots import object_key
 
 
-def sign_in(deps: handlers.Deps, subject: str = "sub-abc", device: str = "phone-1") -> None:
-    handlers.claim_lease(request(subject, deviceId=device, deviceName="a phone"), None)
+def stored(objects: FakeObjects, tmp_path: Path, subject: str = "sub-abc", **kwargs) -> None:
+    """Puts a real snapshot in the fake bucket under `subject`'s prefix."""
+    archive = build_snapshot(tmp_path / "snapshot.sqlite.gz", **kwargs)
+    objects.put(object_key(subject), archive.read_bytes(), metadata={"device-id": "phone-1"})
 
 
-def upload_request(subject: str = "sub-abc", device: str = "phone-1", **overrides: object):
-    body: dict[str, object] = {
-        "deviceId": device,
-        "schemaVersion": "v14_cognitoSub",
-        "sha256": SHA,
-        "rowCounts": {"workout": 840},
-    }
-    body.update(overrides)
-    return request(subject, **body)
+def test_it_records_what_the_file_says(
+    deps: handlers.Deps, objects: FakeObjects, tmp_path: Path
+) -> None:
+    stored(objects, tmp_path, workouts=840)
+
+    assert handlers.index_snapshot(event_for()) == {"indexed": 1, "unreadable": 0}
+
+    meta = deps.meta.read("sub-abc")
+    assert meta is not None
+    assert meta.schema_version == schema.KNOWN_MIGRATIONS[-1]
+    assert meta.row_counts["workout"] == 840
+    assert meta.readable
 
 
-# MARK: identity
-
-
-def test_a_request_without_a_verified_identity_is_refused(deps: handlers.Deps) -> None:
-    """The subject builds the S3 prefix, so accepting a caller-supplied one
-    would let any signed-in account write into another's snapshot."""
-    response = handlers.upload_url(request(subject=None, deviceId="phone-1"), None)
-    assert response["statusCode"] == 401
-
-
-def test_the_subject_is_never_taken_from_the_body(deps: handlers.Deps) -> None:
-    sign_in(deps, subject="sub-abc")
-    event = upload_request()
-    json_body = json.loads(str(event["body"]))
-    json_body["sub"] = "sub-someone-else"
-    event["body"] = json.dumps(json_body)
-
-    handlers.upload_url(event, None)
-    assert deps.objects.puts[0]["key"] == object_key("sub-abc")
-
-
-def test_the_rest_api_claims_shape_is_read_too(deps: handlers.Deps) -> None:
-    handlers.claim_lease(
-        {
-            "requestContext": {"authorizer": {"claims": {"sub": "sub-abc"}}},
-            "body": json.dumps({"deviceId": "phone-1"}),
-        },
-        None,
+def test_the_recorded_version_comes_from_the_file_not_the_metadata(
+    deps: handlers.Deps, objects: FakeObjects, tmp_path: Path
+) -> None:
+    """**The claim the whole redesign rests on.** The phone writes its own
+    metadata with its own credentials and no signature covers it, so the object
+    says one thing and the file says another. The index must follow the file.
+    """
+    archive = build_snapshot(tmp_path / "snapshot.sqlite.gz")
+    objects.put(
+        object_key("sub-abc"),
+        archive.read_bytes(),
+        metadata={"schema-version": "v1_core", "row-counts": '{"workout": 99999}'},
     )
-    assert deps.leases.read("sub-abc") is not None
+
+    handlers.index_snapshot(event_for())
+
+    meta = deps.meta.read("sub-abc")
+    assert meta is not None
+    assert meta.schema_version == schema.KNOWN_MIGRATIONS[-1]
+    assert meta.row_counts["workout"] == 3
 
 
-# MARK: upload
-
-
-def test_a_signed_in_device_gets_a_url(deps: handlers.Deps) -> None:
-    sign_in(deps)
-    response = handlers.upload_url(upload_request(), None)
-
-    assert response["statusCode"] == 200
-    body = body_of(response)
-    assert body["method"] == "PUT"
-    assert body["key"] == object_key("sub-abc")
-    assert body["headers"]["x-amz-meta-schema-version"] == "v14_cognitoSub"
-
-
-def test_a_device_that_lost_the_lease_is_refused(deps: handlers.Deps) -> None:
-    sign_in(deps, device="phone-1")
-    sign_in(deps, device="phone-2")
-
-    response = handlers.upload_url(upload_request(device="phone-1"), None)
-    assert response["statusCode"] == 409
-    assert body_of(response)["error"] == "signedInElsewhere"
-
-
-def test_an_old_schema_is_refused_before_a_url_exists(deps: handlers.Deps) -> None:
-    """The refusal that would otherwise cost a megabyte of cellular. Nothing
-    is signed, so there is no URL for a rejected phone to have tried."""
-    sign_in(deps)
-    response = handlers.upload_url(upload_request(schemaVersion="v1_core"), None)
-
-    assert response["statusCode"] == 400
-    assert body_of(response)["error"] == "unsupportedSchemaVersion"
-    assert deps.objects.puts == []
-
-
-def test_the_lease_is_checked_before_the_schema(deps: handlers.Deps) -> None:
-    """Order matters: a device that lost the lease should be told that, not
-    told its schema is wrong. Both are true; only one is the lifter's answer."""
-    sign_in(deps, device="phone-2")
-    response = handlers.upload_url(
-        upload_request(device="phone-1", schemaVersion="v1_core"), None
-    )
-    assert body_of(response)["error"] == "signedInElsewhere"
-
-
-def test_a_malformed_digest_is_refused(deps: handlers.Deps) -> None:
-    sign_in(deps)
-    response = handlers.upload_url(upload_request(sha256="not-a-digest"), None)
-    assert response["statusCode"] == 400
-    assert deps.objects.puts == []
-
-
-def test_a_missing_field_is_a_sentence_not_a_stack_trace(deps: handlers.Deps) -> None:
-    sign_in(deps)
-    event = request("sub-abc", deviceId="phone-1")
-    response = handlers.upload_url(event, None)
-    assert response["statusCode"] == 400
-    assert "schemaVersion" in str(body_of(response)["message"])
-
-
-# MARK: indexing
-
-
-def test_the_object_landing_is_what_records_it(deps: handlers.Deps) -> None:
-    """No commit call. A phone that dies between the PUT and a report is
-    ordinary on a cellular link, and there is nothing here for that to leave
-    inconsistent."""
-    sign_in(deps)
-    handlers.upload_url(upload_request(), None)
-
+def test_it_reads_the_version_the_event_named(
+    deps: handlers.Deps, objects: FakeObjects, tmp_path: Path
+) -> None:
+    """Two uploads a minute apart — a finished workout and a plan save — put
+    two versions in the bucket. The event for the first must not read the
+    second, or the record carries one object's contents under another's etag.
+    """
+    first = build_snapshot(tmp_path / "first.sqlite.gz", workouts=10)
+    second = build_snapshot(tmp_path / "second.sqlite.gz", workouts=20)
     key = object_key("sub-abc")
-    result = handlers.index_snapshot(
-        {
-            "Records": [
-                {
-                    "eventTime": "2026-08-19T12:00:00Z",
-                    "s3": {"object": {"key": key, "eTag": '"etag-1"', "size": 1_270_000}},
-                }
-            ]
-        }
-    )
+    objects.put(key, first.read_bytes(), version_id="v1")
+    objects.put(key, second.read_bytes(), version_id="v2")
 
-    assert result == {"indexed": 1}
-    stored = deps.meta.read("sub-abc")
-    assert stored is not None
-    assert stored.etag == "etag-1"
-    assert stored.byte_count == 1_270_000
-    assert stored.schema_version == "v14_cognitoSub"
-    assert stored.row_counts == {"workout": 840}
-    assert stored.device_id == "phone-1"
+    handlers.index_snapshot(event_for(version_id="v1"))
+
+    meta = deps.meta.read("sub-abc")
+    assert meta is not None
+    assert meta.row_counts["workout"] == 10
+    assert meta.version_id == "v1"
+    assert objects.downloads == [(key, "v1")]
 
 
-def test_something_else_in_the_bucket_is_not_indexed(deps: handlers.Deps) -> None:
-    result = handlers.index_snapshot(
-        {"Records": [{"s3": {"object": {"key": "users/sub-abc/notes.txt", "size": 1}}}]}
-    )
-    assert result == {"indexed": 0}
-
-
-def test_reindexing_the_same_object_is_harmless(deps: handlers.Deps) -> None:
-    """S3 may redeliver, so the write has to be idempotent — same key, same
-    content — rather than guarded by a dedup table."""
-    sign_in(deps)
-    handlers.upload_url(upload_request(), None)
-    event = {
-        "Records": [
-            {"s3": {"object": {"key": object_key("sub-abc"), "eTag": "e", "size": 10}}}
-        ]
-    }
-    handlers.index_snapshot(event)
-    handlers.index_snapshot(event)
-
-    stored = deps.meta.read("sub-abc")
-    assert stored is not None and stored.byte_count == 10
-
-
-# MARK: reading and restoring
-
-
-def test_a_fresh_account_holds_nothing(deps: handlers.Deps) -> None:
-    sign_in(deps)
-    assert handlers.latest_snapshot(request("sub-abc"), None)["statusCode"] == 404
-
-
-def test_latest_needs_no_lease(deps: handlers.Deps) -> None:
-    """Reading your own metadata isn't a whole-file decision, and the device
-    that just lost the lease is the one that most wants to see the state."""
-    sign_in(deps, device="phone-1")
-    handlers.upload_url(upload_request(), None)
-    handlers.index_snapshot(
-        {"Records": [{"s3": {"object": {"key": object_key("sub-abc"), "eTag": "e", "size": 9}}}]}
-    )
-    sign_in(deps, device="phone-2")
-
-    response = handlers.latest_snapshot(request("sub-abc"), None)
-    assert response["statusCode"] == 200
-    assert body_of(response)["byteCount"] == 9
-
-
-def test_restoring_from_nothing_is_a_404_not_a_dead_url(deps: handlers.Deps) -> None:
-    sign_in(deps)
-    response = handlers.download_url(request("sub-abc", deviceId="phone-1"), None)
-    assert response["statusCode"] == 404
-    assert deps.objects.gets == []
-
-
-def test_a_restore_gets_a_url_once_something_is_stored(deps: handlers.Deps) -> None:
-    sign_in(deps)
-    handlers.upload_url(upload_request(), None)
-    handlers.index_snapshot(
-        {"Records": [{"s3": {"object": {"key": object_key("sub-abc"), "eTag": "e", "size": 9}}}]}
-    )
-
-    response = handlers.download_url(request("sub-abc", deviceId="phone-1"), None)
-    assert response["statusCode"] == 200
-    assert body_of(response)["method"] == "GET"
-
-
-def test_a_restore_is_lease_checked(deps: handlers.Deps) -> None:
-    sign_in(deps, device="phone-1")
-    sign_in(deps, device="phone-2")
-    response = handlers.download_url(request("sub-abc", deviceId="phone-1"), None)
-    assert response["statusCode"] == 409
-
-
-# MARK: sign-out
-
-
-def test_signing_out_releases_the_lease(deps: handlers.Deps) -> None:
-    sign_in(deps, device="phone-1")
-    response = handlers.release_lease(request("sub-abc", deviceId="phone-1"), None)
-    assert body_of(response)["released"] is True
-    assert deps.leases.read("sub-abc") is None
-
-
-def test_signing_out_on_a_stale_device_reports_success_and_changes_nothing(
-    deps: handlers.Deps,
+def test_an_unreadable_file_is_recorded_rather_than_retried(
+    deps: handlers.Deps, objects: FakeObjects
 ) -> None:
-    """There is nothing the lifter could do about it, and the message would be
-    describing somebody else's phone."""
-    sign_in(deps, device="phone-1")
-    sign_in(deps, device="phone-2")
+    objects.put(object_key("sub-abc"), b"not a gzip at all")
 
-    response = handlers.release_lease(request("sub-abc", deviceId="phone-1"), None)
-    assert response["statusCode"] == 200
-    assert body_of(response)["released"] is False
-    held = deps.leases.read("sub-abc")
-    assert held is not None and held.device_id == "phone-2"
+    assert handlers.index_snapshot(event_for()) == {"indexed": 0, "unreadable": 1}
+
+    meta = deps.meta.read("sub-abc")
+    assert meta is not None
+    assert not meta.readable
+    assert meta.problem
+    # Still a record. An empty index is indistinguishable from an upload that
+    # never happened, which is the state that reads as "nothing is wrong."
+    assert meta.etag == "abc123"
+    assert meta.uploaded_at == "2026-08-21T10:00:00.000Z"
 
 
-# MARK: the boundary
-
-
-def test_an_unexpected_failure_says_nothing_useful_to_an_attacker(
-    deps: handlers.Deps, monkeypatch
+def test_a_newer_schema_is_recorded_with_its_marker(
+    deps: handlers.Deps, objects: FakeObjects, tmp_path: Path
 ) -> None:
-    """A `ServiceError` is deliberate and safe to describe. Anything else could
-    carry a bucket name or a table name into the response."""
+    stored(objects, tmp_path, migrations=schema.KNOWN_MIGRATIONS + ("v15_futureThing",))
 
-    def explode(*_args: object, **_kwargs: object) -> None:
-        raise RuntimeError("bucket liftcoach-snapshots-prod is on fire")
+    handlers.index_snapshot(event_for())
 
-    monkeypatch.setattr(deps.objects, "presign_put", explode)
-    sign_in(deps)
+    meta = deps.meta.read("sub-abc")
+    assert meta is not None
+    assert meta.newer_than_server
+    assert meta.unrecognized_migrations == ("v15_futureThing",)
 
-    response = handlers.upload_url(upload_request(), None)
-    assert response["statusCode"] == 500
-    assert "liftcoach-snapshots-prod" not in str(response["body"])
+
+def test_the_subject_comes_from_the_prefix(
+    deps: handlers.Deps, objects: FakeObjects, tmp_path: Path
+) -> None:
+    stored(objects, tmp_path, subject="sub-xyz")
+
+    handlers.index_snapshot(event_for(subject="sub-xyz"))
+
+    assert deps.meta.read("sub-xyz") is not None
+    assert deps.meta.read("sub-abc") is None
+
+
+def test_something_else_in_the_bucket_is_ignored(
+    deps: handlers.Deps, objects: FakeObjects
+) -> None:
+    result = handlers.index_snapshot(event_for(key="users/sub-abc/notes.txt"))
+
+    assert result == {"indexed": 0, "unreadable": 0}
+    assert deps.meta.read("sub-abc") is None
+
+
+def test_a_key_outside_the_user_prefix_is_refused(
+    deps: handlers.Deps, objects: FakeObjects, tmp_path: Path
+) -> None:
+    """Unreachable through the event filter, and it raises rather than being
+    quietly skipped: a snapshot at an unexpected path means the bucket layout
+    or the IAM policy has changed under this code, which is worth a failed
+    invocation and an alarm."""
+    archive = build_snapshot(tmp_path / "snapshot.sqlite.gz")
+    objects.put("stray/snapshot.sqlite.gz", archive.read_bytes())
+
+    with pytest.raises(MalformedKey):
+        handlers.index_snapshot(event_for(key="stray/snapshot.sqlite.gz"))
+
+
+def test_indexing_is_idempotent(
+    deps: handlers.Deps, objects: FakeObjects, tmp_path: Path
+) -> None:
+    """S3 can redeliver a record. Same key, same version, same derived content
+    — so a duplicate costs a write and nothing else."""
+    stored(objects, tmp_path)
+
+    handlers.index_snapshot(event_for())
+    first = deps.meta.read("sub-abc")
+    handlers.index_snapshot(event_for())
+    second = deps.meta.read("sub-abc")
+
+    assert first == second
+
+
+def test_a_transient_failure_escapes_so_s3_retries(
+    deps: handlers.Deps, objects: FakeObjects
+) -> None:
+    """The other half of the `errors.py` boundary. A file that can't be opened
+    is recorded; a bucket that can't be reached is raised, because the retry is
+    the thing that fixes it."""
+
+    def unavailable(*args: object, **kwargs: object) -> None:
+        raise TimeoutError("S3 is having a moment")
+
+    objects.download = unavailable  # type: ignore[assignment]
+
+    with pytest.raises(TimeoutError):
+        handlers.index_snapshot(event_for())
+
+    assert deps.meta.read("sub-abc") is None
+
+
+def test_a_recovered_upload_replaces_a_recorded_problem(
+    deps: handlers.Deps, objects: FakeObjects, tmp_path: Path
+) -> None:
+    """A bad upload followed by a good one must leave the good one. The record
+    is derived, so it can be stale but must never be stuck."""
+    key = object_key("sub-abc")
+    objects.put(key, b"truncated", version_id="v1")
+    handlers.index_snapshot(event_for(version_id="v1"))
+    assert deps.meta.read("sub-abc").readable is False
+
+    archive = build_snapshot(tmp_path / "snapshot.sqlite.gz")
+    objects.put(key, archive.read_bytes(), version_id="v2")
+    handlers.index_snapshot(event_for(version_id="v2"))
+
+    meta = deps.meta.read("sub-abc")
+    assert meta is not None
+    assert meta.readable
+    assert meta.problem == ""
+
+
+def test_the_device_id_is_carried_but_only_as_a_note(
+    deps: handlers.Deps, objects: FakeObjects, tmp_path: Path
+) -> None:
+    stored(objects, tmp_path)
+
+    handlers.index_snapshot(event_for())
+
+    assert deps.meta.read("sub-abc").device_id == "phone-1"
+
+
+def test_gzip_that_expands_absurdly_is_refused(
+    deps: handlers.Deps, objects: FakeObjects, tmp_path: Path
+) -> None:
+    """A gzip bomb is a small object that fills `/tmp`. This is a bound, not a
+    quota — a real five-year snapshot is ~10 MB uncompressed."""
+    from liftcoach_server import inspection
+
+    archive = tmp_path / "bomb.gz"
+    with gzip.open(archive, "wb") as sink:
+        sink.write(b"\0" * (inspection.MAX_UNCOMPRESSED_BYTES + 1))
+    objects.put(object_key("sub-abc"), archive.read_bytes())
+
+    assert handlers.index_snapshot(event_for()) == {"indexed": 0, "unreadable": 1}
+    assert deps.meta.read("sub-abc").readable is False

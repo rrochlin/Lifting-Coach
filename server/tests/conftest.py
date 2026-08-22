@@ -1,14 +1,20 @@
-"""Fakes for the three seams, and the event shapes API Gateway sends.
+"""Fakes for the two seams, and a real snapshot to feed them.
 
-Nothing here mocks boto3. Every protocol in this package is narrow enough to
-implement honestly in a few lines, which is the point of them being narrow —
-a test that patched a client would be asserting what boto3 was called with
-rather than what this service decided.
+Nothing here mocks boto3. Both protocols in this package are narrow enough to
+implement honestly in a few lines, which is the point of them being narrow — a
+test that patched a client would be asserting what boto3 was called with rather
+than what this service decided.
+
+The snapshot builder is deliberately *not* a fake. Since the redesign, what the
+indexer records comes from opening the file, so a test that handed it a
+pre-baked answer would be testing nothing at all. These build a real gzipped
+SQLite database with a real `grdb_migrations` table.
 """
 
 from __future__ import annotations
 
-import json
+import gzip
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -16,80 +22,113 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
-from liftcoach_server import handlers  # noqa: E402
-from liftcoach_server.lease import InMemoryLeaseStore  # noqa: E402
-from liftcoach_server.snapshots import InMemoryMetaStore  # noqa: E402
+from liftcoach_server import handlers, schema  # noqa: E402
+from liftcoach_server.snapshots import InMemoryMetaStore, object_key  # noqa: E402
 
-#: The repo this package lives in, used by the tests that pin a Python copy of
+#: The repo this package lives in, used by the test that pins a Python copy of
 #: something Swift owns.
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
+def build_snapshot(
+    path: Path,
+    migrations: tuple[str, ...] = schema.KNOWN_MIGRATIONS,
+    workouts: int = 3,
+) -> Path:
+    """Writes a gzipped SQLite file shaped like a real snapshot.
+
+    Only the parts the indexer reads are real: `grdb_migrations`, and enough
+    user tables to count. That's the whole surface — this service never looks
+    at a column of training data, which is worth noticing as a property rather
+    than only as a convenience here.
+    """
+    raw = path.with_suffix(".sqlite")
+    connection = sqlite3.connect(raw)
+    with connection:
+        connection.execute("CREATE TABLE grdb_migrations (identifier TEXT NOT NULL PRIMARY KEY)")
+        connection.executemany(
+            "INSERT INTO grdb_migrations (identifier) VALUES (?)",
+            [(identifier,) for identifier in migrations],
+        )
+        connection.execute("CREATE TABLE workout (id TEXT PRIMARY KEY)")
+        connection.execute("CREATE TABLE exercise (id TEXT PRIMARY KEY)")
+        connection.executemany(
+            "INSERT INTO workout (id) VALUES (?)", [(str(n),) for n in range(workouts)]
+        )
+    connection.close()
+
+    with raw.open("rb") as source, gzip.open(path, "wb") as sink:
+        sink.write(source.read())
+    raw.unlink()
+    return path
+
+
 class FakeObjects:
-    """An S3 that records what it was asked to sign."""
+    """A bucket holding bytes, and the metadata that came with them.
+
+    Keyed by `(key, version_id)` rather than by key alone, so a test can put
+    two versions of an object in and prove the indexer reads the one the event
+    named. That distinction is the whole reason `version_id` is threaded
+    through, so a fake that collapsed it would quietly make the bug untestable.
+    """
 
     def __init__(self) -> None:
-        self.puts: list[dict[str, object]] = []
-        self.gets: list[str] = []
-        #: What a later HEAD will report, keyed by object key. A test that
-        #: exercises the indexer sets this to whatever the presign recorded,
-        #: which is exactly what S3 would do.
-        self.stored_metadata: dict[str, dict[str, str]] = {}
+        self.objects: dict[tuple[str, str], bytes] = {}
+        self.stored_metadata: dict[tuple[str, str], dict[str, str]] = {}
+        self.downloads: list[tuple[str, str]] = []
 
-    def presign_put(
+    def put(
         self,
         key: str,
-        metadata: dict[str, str],
-        checksum_sha256: str,
-        expires_in: int,
-    ) -> str:
-        self.puts.append(
-            {
-                "key": key,
-                "metadata": metadata,
-                "checksum": checksum_sha256,
-                "expires_in": expires_in,
-            }
-        )
-        self.stored_metadata[key] = dict(metadata)
-        return f"https://s3.example/{key}?signed=put"
+        body: bytes,
+        version_id: str = "v1",
+        metadata: dict[str, str] | None = None,
+    ) -> None:
+        self.objects[(key, version_id)] = body
+        self.stored_metadata[(key, version_id)] = dict(metadata or {})
 
-    def presign_get(self, key: str, expires_in: int) -> str:
-        self.gets.append(key)
-        return f"https://s3.example/{key}?signed=get"
+    def download(self, key: str, version_id: str, destination: Path) -> None:
+        self.downloads.append((key, version_id))
+        destination.write_bytes(self.objects[(key, version_id)])
 
-    def head_metadata(self, key: str) -> dict[str, str]:
-        return dict(self.stored_metadata.get(key, {}))
+    def metadata(self, key: str, version_id: str) -> dict[str, str]:
+        return dict(self.stored_metadata.get((key, version_id), {}))
 
 
 @pytest.fixture
-def deps() -> handlers.Deps:
-    installed = handlers.Deps(
-        objects=FakeObjects(),
-        leases=InMemoryLeaseStore(),
-        meta=InMemoryMetaStore(),
-    )
+def objects() -> FakeObjects:
+    return FakeObjects()
+
+
+@pytest.fixture
+def deps(objects: FakeObjects) -> handlers.Deps:
+    installed = handlers.Deps(objects=objects, meta=InMemoryMetaStore())
     handlers.configure(installed)
     yield installed
     handlers.configure(None)
 
 
-def request(subject: str | None = "sub-abc", **body: object) -> dict[str, object]:
-    """An API Gateway proxy event with a validated identity on it.
-
-    `subject=None` is the shape of a request that reached a handler without
-    passing an authorizer — which shouldn't be reachable, and is tested anyway
-    because "shouldn't be reachable" is how the interesting ones start.
-    """
-    event: dict[str, object] = {"body": json.dumps(body)}
-    if subject is not None:
-        event["requestContext"] = {"authorizer": {"jwt": {"claims": {"sub": subject}}}}
-    return event
-
-
-def body_of(response: dict[str, object]) -> dict[str, object]:
-    return json.loads(str(response["body"]))
-
-
-#: A real SHA-256, so the checksum conversion is exercised rather than stubbed.
-SHA = "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+def event_for(
+    subject: str = "sub-abc",
+    version_id: str = "v1",
+    etag: str = '"abc123"',
+    size: int = 2048,
+    event_time: str = "2026-08-21T10:00:00.000Z",
+    key: str | None = None,
+) -> dict[str, object]:
+    """One S3 `ObjectCreated` record, shaped as S3 sends it."""
+    return {
+        "Records": [
+            {
+                "eventTime": event_time,
+                "s3": {
+                    "object": {
+                        "key": key if key is not None else object_key(subject),
+                        "versionId": version_id,
+                        "eTag": etag,
+                        "size": size,
+                    }
+                },
+            }
+        ]
+    }
