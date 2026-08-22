@@ -189,9 +189,27 @@ aws ssm put-parameter --name /lift-coach-prod/apple/signin-key \
   --type SecureString --value file://AuthKey_XXXXXXXX.p8
 ```
 
-read back with `data "aws_ssm_parameter"` (`with_decryption = true`). CI's
-credentials need `ssm:GetParameter` and `kms:Decrypt` on the SSM default key for
-the plan to work.
+read back with `data "aws_ssm_parameter"` (`with_decryption = true`).
+
+**Which credentials need what, precisely**, because there are two principals and
+only one of them matters here. The `terraform-infrastructure` workflow runs
+`plan` and `apply` as a **static IAM user** held in repo secrets — not §7's
+OIDC role, which belongs to the app repo and only pushes Lambda code. That IAM
+user is the one needing `ssm:GetParameter` on both parameters and `kms:Decrypt`
+on the SSM default key, and `plan` reads the data source, so a missing grant
+fails before anything is applied.
+
+It is managed outside the Terraform, so **this cannot be granted by the code in
+this spec** — it's a console check, listed in §11. Expect it to be the first
+failure: the plan stops at the data source with an `AccessDenied` naming the
+parameter, which reads like a parameter that was never created rather than one
+that can't be decrypted.
+
+Grant `kms:Decrypt` with a `kms:ViaService` condition pinned to
+`ssm.${region}.amazonaws.com` rather than bare. Decryption is only ever wanted
+as part of an SSM read here, and the condition means a leak of those static keys
+doesn't also hand over the ability to decrypt arbitrary ciphertext by other
+routes.
 
 **The Key ID goes into SSM too, beside it** — `/lift-coach-prod/apple/key-id`,
 a plain `String` rather than a SecureString, since a Key ID isn't secret:
@@ -232,7 +250,10 @@ data**. A directory whose plan is never clean is a directory where a real
 unintended change hides in the noise.
 
 The cost is that rotating the Apple key by updating SSM will not apply on its
-own — it needs `terraform apply -replace=aws_cognito_identity_provider.apple`.
+own — it needs `terraform apply -replace=module.cognito.aws_cognito_identity_provider.apple`
+— module-qualified, since Terraform runs from `lift-coach/` and the resource is
+inside the module. The bare address errors with "no matching resources" at
+precisely the moment someone is mid-rotation.
 Rare, survivable, and worth a comment on the resource itself rather than only
 here, because the person who needs it will be reading the Terraform.
 
@@ -608,9 +629,27 @@ branch shouldn't be able to deploy code.
 
 Permissions: `lambda:UpdateFunctionCode`, `lambda:GetFunction`,
 `lambda:GetFunctionConfiguration` on
-`arn:aws:lambda:${region}:${account}:function:${local.prefix}-*`, plus
-`ssm:GetParameter(s)` on `/${local.prefix}/*`. No S3 and no CloudFront — there's
-no web client to sync and no distribution to invalidate.
+`arn:aws:lambda:${region}:${account}:function:${local.prefix}-*`. No S3 and no
+CloudFront — there's no web client to sync and no distribution to invalidate.
+
+**No SSM.** An earlier draft granted this role `ssm:GetParameter(s)` on
+`/${local.prefix}/*` for no stated reason, and §3.2 then put Apple's signing key
+under exactly that path. This role's entire job is pushing a zip at a Lambda
+from the app repo; giving a code-deploy credential read over the path holding
+the authentication credential is a grant nobody asked for and nobody would have
+noticed. It can only fetch the key as ciphertext — it has no `kms:Decrypt` — but
+"only ciphertext" is a mitigation, not a reason to hold it.
+
+Dropped rather than narrowed. If the deploy workflow later needs configuration
+out of SSM, add it back scoped to the subpath it actually reads.
+
+> **This role is not what runs Terraform.** It is assumed by a workflow in the
+> **`Lifting-Coach`** repo to deploy Lambda code. `terraform plan` and `apply`
+> for this directory run in **`terraform-infrastructure`**, whose workflow
+> authenticates with static `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` repo
+> secrets belonging to an IAM user that predates the per-app split and is
+> managed outside that repo. Two different principals, and §3.2's SSM
+> requirement lands on the second one.
 
 Output `github_actions_deploy_role_arn` and set it as a repo secret in
 `Lifting-Coach`, for a `deploy-server.yml` that zips
@@ -898,37 +937,43 @@ watch that would be empty except when it matters and nobody is looking.
 
 1. `terraform fmt -check -recursive` and `terraform validate` in `lift-coach/` —
    the CI's first two steps, so failing them locally is free.
-2. **Confirm the plan reaches CI.** Open the PR and check the plan comment is
+2. **Check the static IAM user can read both SSM parameters**, before opening a
+   PR. It's the principal that runs `plan` (§3.2), it's managed outside the
+   Terraform, and the failure surfaces as an `AccessDenied` naming the parameter
+   — which reads like a parameter that was never created. Confirm
+   `ssm:GetParameter` on `/lift-coach-prod/apple/*` and `kms:Decrypt` on the SSM
+   default key. A console check; nothing in this spec can grant it.
+3. **Confirm the plan reaches CI.** Open the PR and check the plan comment is
    headed ``#### App: `lift-coach` `` — a directory absent from `matrix.app`
    produces no comment at all, which reads as a passing build.
-3. After apply: create a user in the pool, sign in, exchange for credentials,
+4. After apply: create a user in the pool, sign in, exchange for credentials,
    and **print the caller identity** (`sts:GetCallerIdentity`). Confirm the
    assumed role is `${prefix}-authenticated`. Cheapest possible check that the
    identity pool and the role attachment are wired.
-4. **The test that matters most:** with those credentials, attempt a PUT to
+5. **The test that matters most:** with those credentials, attempt a PUT to
    `users/<some-other-uuid>/snapshot.sqlite.gz`. It must 403. Then PUT to the
    caller's own `sub` prefix — it must succeed. One passing and one failing, in
    that order, is what proves the principal tag is populated and the policy
    variable resolved; a policy where the tag came out empty tends to deny
    *everything*, which looks identical to a working deny if you only test the
    negative case.
-5. PUT a real gzipped snapshot exported from the app, with
+6. PUT a real gzipped snapshot exported from the app, with
    `x-amz-checksum-sha256` set. S3 verifies the body against it — that property
    survives the redesign intact, and it's what makes a corrupted upload
    impossible rather than detectable afterwards. A 403 here rather than at step
-   4 means the §3.4 KMS grants.
-6. Read the `snapshotMeta` item and confirm `schemaVersion` and `rowCounts`
+   5 means the §3.4 KMS grants.
+7. Read the `snapshotMeta` item and confirm `schemaVersion` and `rowCounts`
    match what `SnapshotExporter` reported for that same file — **and that they
    were derived, not copied.** Prove it by uploading again with a deliberately
    wrong `x-amz-meta-schema-version`: the index must still record the true
    version out of `grdb_migrations`. That single check is the design's central
    claim, and it's the one that replaced a signature.
-7. Upload a file that isn't a SQLite database at all. The index must record
+8. Upload a file that isn't a SQLite database at all. The index must record
    `readable = false` with a reason, and the function must not retry.
-8. **Sign in with Apple end to end on the phone**, and confirm the `sub` it
+9. **Sign in with Apple end to end on the phone**, and confirm the `sub` it
    yields is what the S3 prefix uses. This is the step that catches a Services
    ID whose Return URL doesn't match the Cognito domain, which fails at Apple's
    end with an error that says nothing useful about why.
-9. Re-upload twice with `If-Match` set to a stale etag. The second must 412.
+10. Re-upload twice with `If-Match` set to a stale etag. The second must 412.
    That's §8's single-writer signal, and it's worth confirming against real S3
    once before any app code is built on it.
