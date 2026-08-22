@@ -161,7 +161,7 @@ struct HomeView: View {
                                     .foregroundStyle(Theme.inkMuted)
                                     .multilineTextAlignment(.leading)
                                     .lineLimit(2)
-                                Text("\(workout.allSets.count) SETS")
+                                Text("\(workout.plannedSetCount) SETS")
                                     .font(Theme.label)
                                     .tracking(1.4)
                                     .foregroundStyle(Theme.signal)
@@ -339,7 +339,7 @@ struct HomeView: View {
 
         let planned = (hydrated.program ?? [:]).values
             .flatMap { $0 }
-            .reduce(0) { $0 + $1.allSets.count }
+            .reduce(0) { $0 + $1.plannedSetCount }
         let completed = (hydrated.workouts ?? [:]).values
             .flatMap { $0 }
             .reduce(0) { $0 + $1.allSets.filter { $0.complete == true }.count }

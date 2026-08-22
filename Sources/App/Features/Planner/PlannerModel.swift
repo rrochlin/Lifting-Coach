@@ -197,7 +197,7 @@ final class PlannerModel {
     func dayLog(on day: Date) -> BlockCompletion.DayLog? {
         completion.log(
             on: day,
-            plannedSets: plannedWorkouts(on: day).reduce(0) { $0 + $1.allSets.count }
+            plannedSets: plannedWorkouts(on: day).reduce(0) { $0 + $1.plannedSetCount }
         )
     }
 

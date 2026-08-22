@@ -55,10 +55,19 @@ struct ProgramLoaderTests {
         #expect(loaded != nil)
         #expect(loaded?.startDate == blockStart)
 
+        // SUM, not COUNT. A row prescribes `setCount` sets — the program is
+        // written "3x5 @ 72.5%" and stored that way — so 698 sets live in 209
+        // rows. Counting rows here would be asserting how the file happens to
+        // be punctuated rather than how much work it prescribes.
         let persistedSets = try database.writer.read { db in
-            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM plannedSet")
+            try Int.fetchOne(db, sql: "SELECT SUM(setCount) FROM plannedSet")
         }
         #expect(persistedSets == 698)
+
+        let persistedRows = try database.writer.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM plannedSet")
+        }
+        #expect(persistedRows == 209)
     }
 
     @Test("The program's maxes load as goals against the lifts they govern")

@@ -308,7 +308,7 @@ private struct BlockOverview: View {
 
     private func setCount(in week: WorkoutBlock.ProgrammedWeek) -> Int {
         week.days.reduce(0) { total, day in
-            total + model.plannedWorkouts(on: day).reduce(0) { $0 + $1.allSets.count }
+            total + model.plannedWorkouts(on: day).reduce(0) { $0 + $1.plannedSetCount }
         }
     }
 }

@@ -34,6 +34,37 @@ struct WorkoutSessionStartTests {
         #expect(session.workout.startTime == noon)
     }
 
+    @Test("A row prescribing four sets becomes four logged sets")
+    func expandsSetCounts() {
+        let prescribed = PlannedSet(
+            count: 4,
+            reps: 5,
+            type: .working,
+            load: .absolute(Measurement(value: 225, unit: .pounds))
+        )
+        let session = WorkoutSession.start(from: plannedWorkout([(squat, [prescribed])]), at: noon)
+
+        let logged = session.workout.allSets
+        #expect(logged.count == 4)
+        #expect(logged.allSatisfy { $0.reps == 5 })
+        #expect(logged.allSatisfy { $0.weight?.value == 225 })
+        // Each one is its own set, with its own id to log against.
+        #expect(Set(logged.map(\.id)).count == 4)
+    }
+
+    @Test("A snapshot describes the one set it travels with")
+    func snapshotCountIsNormalized() {
+        // The row said four; this logged set is one of them. A snapshot still
+        // reading `count: 4` would say, on a single set, that four were asked
+        // for there — and planned and actual are compared per set.
+        let session = WorkoutSession.start(
+            from: plannedWorkout([(squat, [PlannedSet(count: 4, reps: 5, type: .working)])]),
+            at: noon
+        )
+
+        #expect(session.workout.allSets.allSatisfy { $0.plannedFrom?.count == 1 })
+    }
+
     @Test("A goal-percentage prescription resolves against the goal max")
     func resolvesPercentOfMax() {
         let user = User(

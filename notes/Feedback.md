@@ -86,9 +86,8 @@ Raw, in the order it was reported. Struck through as each is closed.
   proposes it, greyed, into every blank set below it, and checking one off
   commits it.
 - Probably should just add the warm up sets to my plan also — **not an app
-  change**; that's an edit to the program. It is easier now: the planner's new
-  bulk row writes the working sets in one go, and a set's type menu makes the
-  rows above them warmups. Authoring a *ramp* (45/95/135/185) is still row by
+  change**; that's an edit to the program. It is easier now: a planned row says
+  how many sets it is, and a set's type menu makes the rows above them warmups. Authoring a *ramp* (45/95/135/185) is still row by
   row — the generated warmup block in `## 21-08-26 — from build 68
 From `notes/Workout App/Mid lift thoughts.md`.
 
@@ -171,13 +170,19 @@ From `notes/Workout App/Mid lift thoughts.md`.
   workout.~~ — the week view's day cards carry the same `TrainedMarker` the
   planner does, from the same `BlockCompletion`.
 - ~~In the planner we should be able to program sets x weight x reps to make
-  writing easier if we're doing the same weight for multiple sets.~~ — an
-  `ALL 4 × 5 · 77.5 % → APPLY` row under each exercise's header. Seeded from
-  the sets that already exist, so it reads as the current prescription rather
-  than as blanks, and it carries the load *mode* they're written in. Working
-  sets only (`PlannedWorkoutDraft.setWorkingSets`) — a bulk prescription is
-  never an instruction to delete a warmup ramp. The per-set rows stay
-  authoritative for anything non-uniform.
+  writing easier if we're doing the same weight for multiple sets.~~ — every
+  planned set row carries a **set count** (`PlannedSet.count`, migration
+  `v14_plannedSetCount`), so a row reads `4 × 5 × 225 lb @7` and one row is the
+  whole prescription. Defaults to 1 on a new row.
+
+  **Done twice.** The first answer was a separate `ALL 4 × 5 → APPLY` bar above
+  the rows, which wrote them in bulk. It worked and it was the wrong shape: it
+  was a second control saying the same thing as the rows beneath it, having to
+  be kept seeded and in agreement with them, and it still left four rows behind
+  once pressed. Corrected on the owner's call — "this is a much more standard
+  way to write a program" — and it is: sets × reps × weight is the notation
+  every program on paper is written in. The bar and
+  `PlannedWorkoutDraft.setWorkingSets` are both gone.
 
 ## Backlog
 Not broken — wanted, and bigger than a fix.

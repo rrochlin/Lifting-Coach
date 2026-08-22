@@ -97,6 +97,9 @@ public struct PlannedWorkoutDraft: Equatable, Sendable {
     /// New sets carry reps but no load and no effort: an exercise just added
     /// hasn't been prescribed yet, and pre-filling a percentage would put a
     /// number in the plan that nobody chose.
+    ///
+    /// One row of `sets`, not `sets` rows of one — "3×5" is one instruction,
+    /// and that's the shape a `PlannedSet` can now hold.
     @discardableResult
     public mutating func addExercise(
         _ exercise: Exercise,
@@ -105,7 +108,7 @@ public struct PlannedWorkoutDraft: Equatable, Sendable {
     ) -> UUID {
         let new = PlannedExercise(
             exercise: exercise,
-            sets: (0..<sets).map { _ in PlannedSet(reps: reps, type: .working) }
+            sets: [PlannedSet(count: sets, reps: reps, type: .working)]
         )
         workout.exercises = (workout.exercises ?? []) + [[new]]
         return new.id
@@ -163,18 +166,25 @@ public struct PlannedWorkoutDraft: Equatable, Sendable {
 
     // MARK: - Set editing
 
-    /// Appends a set, copying the shape of the exercise's last set.
+    /// Appends a set row, copying the shape of the exercise's last one.
     ///
-    /// Programming is repetitive by nature — a fourth set of the same thing
+    /// Programming is repetitive by nature — a back-off after a top single
     /// shouldn't mean re-entering the prescription. Unlike the tracker's
     /// equivalent there's nothing to deliberately drop: a planned set copied
     /// from a planned set is still entirely plan.
+    ///
+    /// **`count` is the one thing not copied.** It starts at 1. Adding a row is
+    /// how you say "and then something else" — a back-off, a top single, an
+    /// AMRAP — whereas "and then three more of the same" is the row's own `#`
+    /// field. Carrying a 4 across would silently double the prescription every
+    /// time the button was pressed.
     @discardableResult
     public mutating func addSet(toExerciseWith exerciseID: UUID) -> UUID? {
         var newID: UUID?
         updateExercise(id: exerciseID) { exercise in
             let template = exercise.sets?.last
             let new = PlannedSet(
+                count: 1,
                 reps: template?.reps ?? 5,
                 type: template?.type ?? .working,
                 load: template?.load,
@@ -185,84 +195,6 @@ public struct PlannedWorkoutDraft: Equatable, Sendable {
             exercise.sets = (exercise.sets ?? []) + [new]
         }
         return newID
-    }
-
-    /// Writes an exercise's working sets in one statement: `count` sets, all at
-    /// `reps` and `load`.
-    ///
-    /// Programming is written as "4×5 @ 225", and authoring it one row at a
-    /// time was the complaint — "we should be able to program sets x weight x
-    /// reps to make writing easier if we're doing the same weight for multiple
-    /// sets". The block overview has always *read* the plan back this way
-    /// (`PlannedExercise.setGroups` collapses identical sets into "4×5 · 225
-    /// lb"); this is the same shape on the way in.
-    ///
-    /// **Working sets only.** Warmups and drops are a different kind, and "4×5
-    /// @ 225" is never an instruction to delete a ramp — so they stay exactly
-    /// where they are, in their existing order relative to the working sets.
-    ///
-    /// **Resizes rather than replaces.** Surviving sets keep their identity and
-    /// their own effort and rest, so raising a 3×5 to 4×5 doesn't silently drop
-    /// a per-set RPE the author had written; new sets inherit both from the
-    /// first working set, which is what a fourth set of the same thing means.
-    /// Trimming removes from the end.
-    public mutating func setWorkingSets(
-        count: Int,
-        reps: Int?,
-        load: LoadPrescription?,
-        toExerciseWith exerciseID: UUID
-    ) {
-        guard count >= 0 else { return }
-        updateExercise(id: exerciseID) { exercise in
-            let existing = exercise.sets ?? []
-            let working = existing.filter { ($0.type ?? .working) == .working }
-            let template = working.first
-
-            var rebuilt: [PlannedSet] = []
-            for index in 0..<count {
-                if index < working.count {
-                    var set = working[index]
-                    set.reps = reps
-                    set.load = load
-                    rebuilt.append(set)
-                } else {
-                    rebuilt.append(PlannedSet(
-                        reps: reps,
-                        type: .working,
-                        load: load,
-                        effort: template?.effort,
-                        restTime: template?.restTime
-                    ))
-                }
-            }
-
-            // Rebuilt working sets are dealt back into the positions working
-            // sets already occupied, so a warmup written above them stays above
-            // them. Anything left over lands where the last working set was —
-            // or at the end, for an exercise that had none.
-            var result: [PlannedSet] = []
-            var next = rebuilt.makeIterator()
-            var placedAll = false
-            for set in existing {
-                if (set.type ?? .working) == .working {
-                    if let replacement = next.next() {
-                        result.append(replacement)
-                    }
-                    // The last original working set is where any additional
-                    // sets go, rather than after a trailing drop set.
-                    if set.id == working.last?.id {
-                        while let extra = next.next() { result.append(extra) }
-                        placedAll = true
-                    }
-                } else {
-                    result.append(set)
-                }
-            }
-            if !placedAll {
-                while let extra = next.next() { result.append(extra) }
-            }
-            exercise.sets = result
-        }
     }
 
     @discardableResult

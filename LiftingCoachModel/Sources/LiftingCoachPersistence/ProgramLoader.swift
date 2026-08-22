@@ -85,8 +85,12 @@ public struct ProgramLoader {
                 for entry in group {
                     let exercise = try resolve(entry, openSlots: openSlots, in: exercises)
                     let sets = entry.sets.map { set -> PlannedSet in
-                        setCount += 1
+                        // Sets prescribed, not rows written — a `count: 4` row
+                        // is four sets, and the count this reports is checked
+                        // against the source spreadsheet.
+                        setCount += set.count ?? 1
                         return PlannedSet(
+                            count: set.count ?? 1,
                             reps: set.reps,
                             type: set.type.flatMap(SetType.init(rawValue:)),
                             load: load(set.load),
@@ -312,6 +316,9 @@ private struct ProgramFile: Decodable {
     }
 
     struct Set: Decodable {
+        /// How many identical sets this row prescribes. Absent means one, so a
+        /// program written a row at a time still loads unchanged.
+        var count: Int?
         var reps: Int?
         var type: String?
         var load: Load?

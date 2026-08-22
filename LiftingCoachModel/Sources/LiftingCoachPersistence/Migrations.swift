@@ -475,6 +475,27 @@ extension AppDatabase {
             }
         }
 
+        // A planned set row prescribes N identical sets — the "4" in "4x5 @
+        // 225", which is how a program is actually written. Before this the
+        // planner made you author each of the four separately.
+        //
+        // Additive, with a default, so every existing row keeps meaning exactly
+        // what it meant: one set. **Nothing collapses existing rows**, and that
+        // is deliberate — four consecutive identical rows *look* like a 4x5,
+        // but merging them would be the app deciding what the author meant, and
+        // it would take four set ids down to one (Core Tenets §1). Programs
+        // already on the phone stay written a row at a time; `setGroups` has
+        // always rendered them as "4x5" anyway.
+        //
+        // Named `setCount` rather than `count`: `count` is a SQL function, and
+        // a column sharing its name is a bare-word ambiguity waiting for the
+        // first hand-written query.
+        migrator.registerMigration("v14_plannedSetCount") { db in
+            try db.alter(table: "plannedSet") { t in
+                t.add(column: "setCount", .integer).notNull().defaults(to: 1)
+            }
+        }
+
         return migrator
     }
 }

@@ -227,7 +227,7 @@ struct WorkoutTrackerView: View {
         let dayWorkouts = workouts(on: day)
         let log = weekCompletion.log(
             on: day,
-            plannedSets: dayWorkouts.reduce(0) { $0 + $1.allSets.count }
+            plannedSets: dayWorkouts.reduce(0) { $0 + $1.plannedSetCount }
         )
 
         ForEach(dayWorkouts) { workout in
@@ -1202,7 +1202,7 @@ private struct PlannedSummaryRow: View {
                         .foregroundStyle(Theme.inkMuted)
                         .lineLimit(2)
                 }
-                Text("\(workout.allSets.count) SETS")
+                Text("\(workout.plannedSetCount) SETS")
                     .font(Theme.label)
                     .tracking(1.4)
                     .foregroundStyle(workout.skippedAt != nil ? Theme.inkFaint : Theme.signal)

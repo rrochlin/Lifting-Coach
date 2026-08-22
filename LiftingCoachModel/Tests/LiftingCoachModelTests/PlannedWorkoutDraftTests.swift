@@ -84,7 +84,9 @@ struct PlannedWorkoutDraftTests {
         let id = draft.addExercise(bench, sets: 4, reps: 3)
 
         let added = try #require(draft.exercise(id: id))
-        #expect(added.sets?.count == 4)
+        // One row prescribing four sets — "4x3" is one instruction.
+        #expect(added.sets?.count == 1)
+        #expect(added.sets?.first?.count == 4)
         #expect(added.sets?.allSatisfy { $0.reps == 3 } == true)
         // An exercise just added hasn't been prescribed — a pre-filled
         // percentage would put a number in the plan nobody chose.
@@ -267,120 +269,117 @@ struct PlannedWorkoutDraftTests {
     }
 }
 
-// MARK: - Bulk set authoring
+// MARK: - Set counts
 
-/// "4×5 @ 225" written in one statement rather than four rows.
-@Suite("Planned draft — sets × reps × weight")
-struct PlannedWorkoutDraftBulkSetTests {
+/// `PlannedSet.count` — "4 sets of 225 for 5", the notation a program is
+/// written in.
+@Suite("Planned draft — set counts")
+struct PlannedSetCountTests {
 
-    private func exercise(_ sets: [PlannedSet]) -> PlannedExercise {
-        PlannedExercise(
-            exercise: Exercise(id: 1, name: "Barbell Squat", muscleGroup: "Quadriceps"),
-            sets: sets
-        )
+    private func draft(_ sets: [PlannedSet]) -> PlannedWorkoutDraft {
+        PlannedWorkoutDraft(PlannedWorkout(exercises: [[
+            PlannedExercise(exercise: squat, sets: sets)
+        ]]))
     }
 
-    private func draft(_ exercise: PlannedExercise) -> PlannedWorkoutDraft {
-        PlannedWorkoutDraft(PlannedWorkout(exercises: [[exercise]]))
+    @Test("A row prescribes one set unless it says otherwise")
+    func defaultsToOne() {
+        #expect(PlannedSet().count == 1)
+        #expect(PlannedSet(count: 4).count == 4)
     }
 
-    private func pounds(_ value: Double) -> LoadPrescription {
-        .absolute(Measurement(value: value, unit: .pounds))
+    @Test("A row can never prescribe fewer than one set")
+    func clampsAtOne() {
+        // Zero sets is a row that should have been deleted. Clamped rather than
+        // validated, on the way in and on assignment, so no caller carries the
+        // rule.
+        #expect(PlannedSet(count: 0).count == 1)
+        #expect(PlannedSet(count: -3).count == 1)
+
+        var set = PlannedSet(count: 4)
+        set.count = 0
+        #expect(set.count == 1)
     }
 
-    @Test("Writes the whole prescription at once")
-    func writesEveryWorkingSet() {
-        var draft = draft(exercise([PlannedSet(reps: 8, type: .working)]))
-        let id = draft.workout.exercises![0][0].id
+    @Test("A new exercise is one row of three sets, not three rows")
+    func addExerciseWritesOneRow() throws {
+        var draft = PlannedWorkoutDraft(PlannedWorkout(exercises: []))
+        draft.addExercise(bench, sets: 3, reps: 5)
 
-        draft.setWorkingSets(count: 4, reps: 5, load: pounds(225), toExerciseWith: id)
-
-        let sets = draft.workout.exercises![0][0].sets ?? []
-        #expect(sets.count == 4)
-        #expect(sets.allSatisfy { $0.reps == 5 })
-        #expect(sets.allSatisfy { $0.load == pounds(225) })
-    }
-
-    @Test("Warmups and drops are left exactly where they were")
-    func leavesOtherTypesAlone() {
-        var draft = draft(exercise([
-            PlannedSet(reps: 5, type: .warmup),
-            PlannedSet(reps: 8, type: .working),
-            PlannedSet(reps: 12, type: .drop),
-        ]))
-        let id = draft.workout.exercises![0][0].id
-
-        draft.setWorkingSets(count: 3, reps: 5, load: pounds(225), toExerciseWith: id)
-
-        let sets = draft.workout.exercises![0][0].sets ?? []
-        // Warmup first, three working, drop last — a bulk prescription is never
-        // an instruction to delete a ramp.
-        #expect(sets.map { $0.type ?? .working } == [.warmup, .working, .working, .working, .drop])
-        #expect(sets.first?.reps == 5)
-        #expect(sets.last?.reps == 12)
-        #expect(sets.last?.type == .drop)
-    }
-
-    @Test("Growing keeps the sets that already existed")
-    func growingPreservesIdentity() {
-        var draft = draft(exercise([
-            PlannedSet(reps: 5, type: .working, effort: EffortTarget(rpe: 7)),
-            PlannedSet(reps: 5, type: .working),
-        ]))
-        let id = draft.workout.exercises![0][0].id
-        let firstID = draft.workout.exercises![0][0].sets![0].id
-
-        draft.setWorkingSets(count: 4, reps: 3, load: pounds(315), toExerciseWith: id)
-
-        let sets = draft.workout.exercises![0][0].sets ?? []
-        #expect(sets.count == 4)
-        #expect(sets[0].id == firstID)
-        // A per-set RPE the author wrote survives a change of reps and weight.
-        #expect(sets[0].effort?.rpe == 7)
-        // New sets inherit it, which is what "a fourth set of the same thing"
-        // means.
-        #expect(sets[3].effort?.rpe == 7)
-    }
-
-    @Test("Trimming removes from the end")
-    func trimmingDropsTheLast() {
-        var draft = draft(exercise([
-            PlannedSet(reps: 5, type: .working),
-            PlannedSet(reps: 5, type: .working),
-            PlannedSet(reps: 5, type: .working),
-        ]))
-        let id = draft.workout.exercises![0][0].id
-        let firstID = draft.workout.exercises![0][0].sets![0].id
-
-        draft.setWorkingSets(count: 1, reps: 5, load: nil, toExerciseWith: id)
-
-        let sets = draft.workout.exercises![0][0].sets ?? []
+        let sets = try #require(draft.exerciseGroups.first?.first?.sets)
         #expect(sets.count == 1)
-        #expect(sets[0].id == firstID)
+        #expect(sets[0].count == 3)
+        #expect(sets[0].reps == 5)
     }
 
-    @Test("An exercise with no working sets gains them after its warmups")
-    func addsToAWarmupOnlyExercise() {
-        var draft = draft(exercise([PlannedSet(reps: 5, type: .warmup)]))
-        let id = draft.workout.exercises![0][0].id
+    @Test("Adding a row starts at one set, whatever it copied")
+    func addSetDoesNotCopyCount() throws {
+        // Otherwise pressing Add Set under a 4x5 writes another four, and the
+        // prescription doubles every time the button is pressed.
+        var draft = draft([PlannedSet(count: 4, reps: 5, type: .working)])
+        let exerciseID = try #require(draft.exerciseGroups.first?.first?.id)
 
-        draft.setWorkingSets(count: 2, reps: 5, load: pounds(135), toExerciseWith: id)
-
-        let sets = draft.workout.exercises![0][0].sets ?? []
-        #expect(sets.map { $0.type ?? .working } == [.warmup, .working, .working])
+        let appended: UUID? = draft.addSet(toExerciseWith: exerciseID)
+        let newID = try #require(appended)
+        let added = try #require(draft.set(id: newID))
+        #expect(added.count == 1)
+        #expect(added.reps == 5)
     }
 
-    @Test("Zero working sets is a legal thing to write")
-    func zeroClearsWorkingSets() {
-        var draft = draft(exercise([
-            PlannedSet(reps: 5, type: .warmup),
-            PlannedSet(reps: 5, type: .working),
-        ]))
-        let id = draft.workout.exercises![0][0].id
+    @Test("A day's set total sums counts rather than counting rows")
+    func plannedSetCountSums() {
+        let draft = draft([
+            PlannedSet(count: 3, reps: 5, type: .working),
+            PlannedSet(count: 1, reps: 3, type: .working),
+        ])
+        #expect(draft.workout.allSets.count == 2)
+        #expect(draft.workout.plannedSetCount == 4)
+    }
 
-        draft.setWorkingSets(count: 0, reps: 5, load: nil, toExerciseWith: id)
+    @Test("Adjacent rows with the same prescription read as one group")
+    func setGroupsSumCounts() throws {
+        // A row is itself a run now, so two rows saying 2x5 @ 225 are one 4x5
+        // on the block overview — the same collapse that has always applied to
+        // two rows of one.
+        let draft = draft([
+            PlannedSet(count: 2, reps: 5, type: .working),
+            PlannedSet(count: 2, reps: 5, type: .working),
+        ])
+        let exercise = try #require(draft.exerciseGroups.first?.first)
 
-        let sets = draft.workout.exercises![0][0].sets ?? []
-        #expect(sets.map { $0.type ?? .working } == [.warmup])
+        #expect(exercise.setGroups.count == 1)
+        #expect(exercise.setGroups[0].count == 4)
+    }
+
+    @Test("A differing row still starts its own group")
+    func setGroupsStillSplit() throws {
+        let draft = draft([
+            PlannedSet(count: 3, reps: 5, type: .working),
+            PlannedSet(count: 1, reps: 1, type: .working),
+        ])
+        let exercise = try #require(draft.exerciseGroups.first?.first)
+
+        #expect(exercise.setGroups.map(\.count) == [3, 1])
+        #expect(exercise.setGroups.map(\.reps) == [5, 1])
+    }
+
+    @Test("A snapshot written before counts existed decodes as one set")
+    func decodesWithoutCount() throws {
+        // Every logged set on disk carries a `plannedFrom` JSON snapshot with
+        // no `count` key, and a non-optional Int would refuse all of them —
+        // which for `plannedFrom` means a workout that no longer loads.
+        let json = #"{"id":"F1B0B1E2-0000-0000-0000-000000000001","reps":5}"#
+        let set = try JSONDecoder().decode(PlannedSet.self, from: Data(json.utf8))
+        #expect(set.count == 1)
+        #expect(set.reps == 5)
+    }
+
+    @Test("A count round-trips through Codable")
+    func encodesCount() throws {
+        let original = PlannedSet(count: 4, reps: 5, type: .working)
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(PlannedSet.self, from: data)
+        #expect(decoded == original)
+        #expect(decoded.count == 4)
     }
 }

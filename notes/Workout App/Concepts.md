@@ -175,6 +175,10 @@ struct EffortTarget {
 }
 
 struct PlannedSet {
+	// How many identical sets this row prescribes — the "4" in "4x5 @ 225".
+	// Always at least 1; clamped rather than validated. See "A planned set row
+	// prescribes N sets" below.
+	var count: Int
 	var reps: Int?
 	var type: SetType?
 	var load: LoadPrescription?
@@ -190,6 +194,18 @@ struct PlannedSet {
 }
 
 ```
+
+## A planned set row prescribes N sets
+
+`PlannedSet.count` is the "4" in "4x5 @ 225" — sets x reps x weight, which is the notation every program on paper is written in. One row is the whole prescription for a uniform exercise, and a row added in the planner starts at 1.
+
+**A row is a prescription, not a collapsed run.** Nothing regroups sets by value. "5, 3, 5" stays three rows because it is three instructions, and `PlannedExercise.setGroups` — which collapses *consecutive* identical rows for display — is unchanged apart from summing their counts, so two rows of 2x5 read as one 4x5 the same way two rows of 1x5 always did.
+
+**It expands at `WorkoutSession.start`**, one #WorkoutSet per set, and the snapshot each logged set carries is normalized to `count: 1`. Planned and actual are compared per set (Core Tenets §6), so a snapshot still reading 4 would claim, on the single set it's attached to, that four had been asked for there. Sets expanded from one row share a `plannedFrom.id`, which is harmless because the snapshot is a value and not a foreign key.
+
+**Counting prescribed sets means summing counts, not counting rows.** `PlannedWorkout.plannedSetCount` is the property that answers it; `allSets` is a list of rows. Every adherence and progress readout in the app asks the first question.
+
+**Existing rows are never collapsed.** Four consecutive identical rows look like a 4x5 and merging them would be the app deciding what an author meant — and would take four set ids down to one (Core Tenets §1). A program already written a set at a time stays that way and reads identically.
 
 ## Set completion is stamped; a set is still an instant, not an interval
 #WorkoutSet `timeComplete` records when a set was checked off, to the millisecond, and is kept precise on purpose: it's the anchor anything else on the same clock — a heart rate series, sleep, HRV — would be lined up against later.
