@@ -153,6 +153,8 @@ apply fails at the identity provider:
    be finished. Pick `lift-coach-prod` and use it in both places.
 3. A **Sign in with Apple key**, downloaded once as a `.p8`. Yields a Key ID;
    the Team ID is `33G44VZ97Z`, the same one `Tools/testflight.sh` signs with.
+4. **Two SSM parameters**, put by hand — the `.p8` as a SecureString and the Key
+   ID beside it. Commands and reasoning below.
 
 **`aws_cognito_user_pool_domain`** — `domain = "lift-coach-prod"`, prefix domain
 rather than custom. A custom domain needs an ACM certificate in us-east-1 and a
@@ -190,6 +192,49 @@ aws ssm put-parameter --name /lift-coach-prod/apple/signin-key \
 read back with `data "aws_ssm_parameter"` (`with_decryption = true`). CI's
 credentials need `ssm:GetParameter` and `kms:Decrypt` on the SSM default key for
 the plan to work.
+
+**The Key ID goes into SSM too, beside it** — `/lift-coach-prod/apple/key-id`,
+a plain `String` rather than a SecureString, since a Key ID isn't secret:
+
+```sh
+aws ssm put-parameter --name /lift-coach-prod/apple/key-id \
+  --type String --value XXXXXXXXXX
+```
+
+Not because it needs protecting, but because **`key_id` and `private_key` are
+one credential pair**: Apple issues them together and they rotate together. A
+Key ID committed as a variable default while the key lives in SSM lets the two
+drift, and the failure mode is Sign in with Apple rejecting every
+authentication with an error that names neither half. Keeping them in one place
+makes the pair atomic and gives the owner one prerequisite step instead of two.
+
+It also fails better. A data source pointed at a parameter that doesn't exist
+yet stops the plan naming the missing parameter; a required variable with no
+default stops it saying "No value for required variable", which is true and
+tells you nothing about Apple. And nothing has to be threaded through CI —
+`.github/workflows/terraform.yml` passes no `-var` and the matrix has no tfvars
+mechanism, so a variable without a default would break `plan` for this
+directory permanently.
+
+Team ID and Services ID stay as variables **with defaults**, and the asymmetry
+is deliberate: both are public constants that already exist and are written in
+this document. The Key ID does not exist until the owner creates the key.
+
+**`ignore_changes = [provider_details["private_key"]]` on the identity
+provider.** Cognito does not return the private key on read, so without this
+every plan shows a diff forever and CI's auto-apply on `main` re-sends the key
+on every run.
+
+That perpetual diff is the worse outcome, and not merely because it's noisy: it
+would mean "empty plan" stops being a usable signal **in the one directory that
+holds the identity pool and the IAM role granting access to every lifter's
+data**. A directory whose plan is never clean is a directory where a real
+unintended change hides in the noise.
+
+The cost is that rotating the Apple key by updating SSM will not apply on its
+own — it needs `terraform apply -replace=aws_cognito_identity_provider.apple`.
+Rare, survivable, and worth a comment on the resource itself rather than only
+here, because the person who needs it will be reading the Terraform.
 
 > ### One account per person, and the app enforces it
 >
