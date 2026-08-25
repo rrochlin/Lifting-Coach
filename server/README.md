@@ -114,13 +114,28 @@ relative to a registration order. `KNOWN_MIGRATIONS` **is** that order. Get it
 wrong — sort it alphabetically, say, where `v9` follows `v14` — and every
 snapshot is reported at the wrong version.
 
+## Built, and what it means for this package
+
+**The infrastructure is live** — `INFRA-SPEC.md` §12 has the resource ids. It
+lives in `terraform-infrastructure/lift-coach/` and is deliberately *not*
+mirrored here (§2): that repo owns every resource definition, this one owns the
+function's code and ships it with `.github/workflows/deploy-server.yml`.
+
+Two things were proved against the real account rather than by reading policy,
+and both matter to code in this directory:
+
+- **The prefix keys on the user pool `sub`**, not the identity pool's identity
+  id. Those are different values and the object landed under the right one, so
+  `subject_from_key` recovers the same identifier the app signs in with.
+- **`If-Match` with a stale etag really does return 412**, so §8's single-writer
+  signal is S3 behaviour rather than a plan.
+
 ## Not built yet
 
-- **Cognito itself.** `INFRA-SPEC.md` §3 specifies the user pool, the identity
-  pool and the principal-tag mapping that makes the S3 prefix work. None of it
-  is created, and nothing in this package touches auth.
-- **`server/infra/`** — the Terraform, via `git subtree` against
-  `terraform-infrastructure`. `INFRA-SPEC.md` is the spec for it.
+- **Nothing has run this code in AWS.** The function exists but still holds a
+  placeholder that fails at import, so no `snapshotMeta` item has ever been
+  written by the real handler. Until the first deploy lands, every property here
+  is proved by tests and none by production.
 - **The chat and the query tools** (2.2, 2.3).
 - **Account deletion.** App Review requires an in-app path once accounts exist,
   and on a versioned bucket the obvious implementation deletes nothing — it

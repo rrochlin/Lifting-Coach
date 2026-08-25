@@ -15,8 +15,9 @@ resource in this document.
 
 Read alongside:
 - `notes/Workout App/Backend/Overview.md` — why the design is snapshot-and-draft.
-- `terraform-infrastructure/ONBOARDING.md` — the subtree link, the placeholder
-  Lambda pattern, the CI matrix. All three rules are load-bearing here.
+- `terraform-infrastructure/ONBOARDING.md` — the placeholder Lambda pattern and
+  the CI matrix, both load-bearing here. Its subtree step is deliberately not
+  followed; §2 says why.
 
 > **Decisions are settled.** §10 records the six that were open, what was chosen
 > and why, including two where the reasoning behind the question turned out to
@@ -68,7 +69,26 @@ the log.
 | Provider | `hashicorp/aws ~> 5.0`, `required_version >= 1.5.0` |
 | Prefix | `local.prefix = "${var.app_name}-${var.environment}"` → `lift-coach-prod` |
 | Tags | `local.common_tags = { App, Environment, ManagedBy = "terraform" }` |
-| Subtree prefix in this repo | `server/infra` |
+
+**There is no subtree link, and that's a decision.** An earlier draft mirrored
+`terraform-infrastructure` into `server/infra/` per `ONBOARDING.md`'s pattern.
+Dropped on the owner's call, in favour of a clean ownership split:
+
+- **`terraform-infrastructure` owns every resource definition** — the function's
+  runtime, memory, timeout, architecture, handler, environment and its S3
+  trigger, along with Cognito, the bucket, the key and the table.
+- **This repo owns the function's code**, and ships it with
+  `.github/workflows/deploy-server.yml`.
+
+The seam is `update-function-code`, which by construction can only replace code
+— so the boundary is enforced by the API rather than by remembering it. The
+Terraform side carries `ignore_changes = [filename, source_code_hash]` (§5) so a
+deploy from here never reads as drift there, and the workflow calls
+`update-function-code` with no configuration flags at all, so a field with one
+owner never acquires a second.
+
+A subtree would have put a copy of the Terraform here that nothing in this repo
+plans or applies, which is a copy that can only go stale.
 
 Note the GitHub repo is `Lifting-Coach` while the app name here is
 `lift-coach` — so §7's OIDC subject pattern says `repo:rrochlin/Lifting-Coach`
