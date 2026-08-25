@@ -199,6 +199,16 @@ user is the one needing `ssm:GetParameter` on both parameters and `kms:Decrypt`
 on the SSM default key, and `plan` reads the data source, so a missing grant
 fails before anything is applied.
 
+**That list is the minimum for `plan`, and it is not enough for the first
+`apply`** — confirmed the hard way. §4 creates a customer-managed key, so the
+same user also needs `kms:CreateKey`, `kms:CreateAlias`, `kms:TagResource` and
+the ability to write the key policy. Missing those fails **midway through an
+apply** rather than at plan: the KMS-dependent resources — the key, the alias,
+the bucket's SSE configuration and both IAM role policies interpolating the key
+ARN — are left uncreated while everything else is already live. Grant the whole
+set before the first apply rather than discovering it against a half-built
+stack.
+
 It is managed outside the Terraform, so **this cannot be granted by the code in
 this spec** — it's a console check, listed in §11. Expect it to be the first
 failure: the plan stops at the data source with an `AccessDenied` naming the
@@ -238,10 +248,31 @@ Team ID and Services ID stay as variables **with defaults**, and the asymmetry
 is deliberate: both are public constants that already exist and are written in
 this document. The Key ID does not exist until the owner creates the key.
 
-**`ignore_changes = [provider_details["private_key"]]` on the identity
-provider.** Cognito does not return the private key on read, so without this
-every plan shows a diff forever and CI's auto-apply on `main` re-sends the key
-on every run.
+**`ignore_changes` on the identity provider, and `private_key` is not the only
+key that needs it.** Cognito does not return the private key on read, so
+without it every plan shows a diff forever and an auto-apply re-sends the key on
+every run.
+
+**Confirmed at apply time, and the first list was too short.** Cognito populates
+further `provider_details` after creation and reports them back: `authorize_url`,
+`token_url`, `oidc_issuer`, `token_request_method` and
+`attributes_url_add_attributes`. None are in config, so Terraform plans to
+delete them and Cognito re-adds them, forever — the first apply came out
+"5 added, 1 changed" where nothing should have changed at all. Name the
+server-populated keys **individually** rather than ignoring `provider_details`
+wholesale, so `client_id`, `team_id`, `key_id` and `authorize_scopes` still
+apply when they change.
+
+> **Ignore only what cannot be stated; state everything that can.** Those keys
+> and the private key qualify because none of them can be written truthfully in
+> config — the key is never readable back and the URLs are Cognito's to derive.
+> `attribute_mapping` is the opposite case: Cognito adds `username = "sub"` on
+> its own, and that is a stable, meaningful value, so it should be **declared**
+> next to `email = "email"` rather than ignored. `ignore_changes` buys a clean
+> plan by making the config silent about a real value, and it hides future drift
+> in that value along with the noise. Declare it, then confirm the following
+> plan is clean; if Cognito reports it back in some other form, ignoring is the
+> fallback rather than the first move.
 
 That perpetual diff is the worse outcome, and not merely because it's noisy: it
 would mean "empty plan" stops being a usable signal **in the one directory that
@@ -952,37 +983,84 @@ watch that would be empty except when it matters and nobody is looking.
    — which reads like a parameter that was never created. Confirm
    `ssm:GetParameter` on `/lift-coach-prod/apple/*` and `kms:Decrypt` on the SSM
    default key. A console check; nothing in this spec can grant it.
-3. **Confirm the plan reaches CI.** Open the PR and check the plan comment is
-   headed ``#### App: `lift-coach` `` — a directory absent from `matrix.app`
-   produces no comment at all, which reads as a passing build.
-4. After apply: create a user in the pool, sign in, exchange for credentials,
+3. **Confirm the plan comment contains a plan**, not just a heading. A
+   directory absent from `matrix.app` produces no comment at all, which reads as
+   a passing build — but checking only for the ``#### App: `lift-coach` ``
+   heading is a check that passes on nothing. It did: the workflow read
+   `steps.plan.outputs.stdout`, which only exists when `setup-terraform` wraps
+   the binary, and `terraform_wrapper` is false. **Every plan comment in that
+   repo since its initial commit was a heading and four green checkmarks.**
+   Confirm a real diff and a `Plan: N to add` line.
+4. **Apply is a separate, deliberate step.** Merging does not apply — the owner
+   wanted a gate between reading a plan and running it, so apply is
+   `workflow_dispatch`: `gh workflow run terraform.yml -f app=lift-coach`.
+   Without this step a merged PR reads as done while nothing has been created.
+   (GitHub Environments with required reviewers was the better mechanism and is
+   unavailable: the API rejects every billing-gated protection rule on that repo
+   even though the account reports plan "pro". Revisit if that's ever fixed.)
+5. After apply: create a user in the pool, sign in, exchange for credentials,
    and **print the caller identity** (`sts:GetCallerIdentity`). Confirm the
    assumed role is `${prefix}-authenticated`. Cheapest possible check that the
    identity pool and the role attachment are wired.
-5. **The test that matters most:** with those credentials, attempt a PUT to
+6. **The test that matters most:** with those credentials, attempt a PUT to
    `users/<some-other-uuid>/snapshot.sqlite.gz`. It must 403. Then PUT to the
    caller's own `sub` prefix — it must succeed. One passing and one failing, in
    that order, is what proves the principal tag is populated and the policy
    variable resolved; a policy where the tag came out empty tends to deny
    *everything*, which looks identical to a working deny if you only test the
    negative case.
-6. PUT a real gzipped snapshot exported from the app, with
+7. PUT a real gzipped snapshot exported from the app, with
    `x-amz-checksum-sha256` set. S3 verifies the body against it — that property
    survives the redesign intact, and it's what makes a corrupted upload
    impossible rather than detectable afterwards. A 403 here rather than at step
-   5 means the §3.4 KMS grants.
-7. Read the `snapshotMeta` item and confirm `schemaVersion` and `rowCounts`
+   6 means the §3.4 KMS grants.
+8. Read the `snapshotMeta` item and confirm `schemaVersion` and `rowCounts`
    match what `SnapshotExporter` reported for that same file — **and that they
    were derived, not copied.** Prove it by uploading again with a deliberately
    wrong `x-amz-meta-schema-version`: the index must still record the true
    version out of `grdb_migrations`. That single check is the design's central
    claim, and it's the one that replaced a signature.
-8. Upload a file that isn't a SQLite database at all. The index must record
+9. Upload a file that isn't a SQLite database at all. The index must record
    `readable = false` with a reason, and the function must not retry.
-9. **Sign in with Apple end to end on the phone**, and confirm the `sub` it
+10. **Sign in with Apple end to end on the phone**, and confirm the `sub` it
    yields is what the S3 prefix uses. This is the step that catches a Services
    ID whose Return URL doesn't match the Cognito domain, which fails at Apple's
    end with an error that says nothing useful about why.
-10. Re-upload twice with `If-Match` set to a stale etag. The second must 412.
+11. Re-upload twice with `If-Match` set to a stale etag. The second must 412.
    That's §8's single-writer signal, and it's worth confirming against real S3
    once before any app code is built on it.
+
+---
+
+## 12. Deployed
+
+Applied 2026-08-24, account `292826404083`, `us-west-2`. Neither global
+namespace collided, so §3.2's Services ID Return URL stands as written.
+
+| | |
+| --- | --- |
+| user pool | `us-west-2_IdjBHNPTi` |
+| app client | `7b21re969qgped3sfqtit9e5c7` |
+| identity pool | `us-west-2:4ceed955-559e-4395-9537-9672249ceeb6` |
+| authenticated role | `arn:aws:iam::292826404083:role/lift-coach-prod-authenticated` |
+| bucket | `lift-coach-prod-snapshots` |
+| KMS key | `…:key/6a920cd3-4fc8-414b-b681-955278c28c28` |
+| meta table | `lift-coach-prod-snapshot-meta` |
+| Lambda | `lift-coach-prod-index-snapshot` |
+| deploy role | `arn:aws:iam::292826404083:role/github-actions-lift-coach` |
+
+None of these are secrets — every one of them ships inside the app's Amplify
+configuration and is readable by anyone holding the binary. Access is the
+identity pool's job, not the obscurity of an id.
+
+**§11 steps 6–11 are outstanding, and step 6 is the one that matters.** The
+plan could not prove the principal tag resolved: `aws_iam_role_policy` for the
+authenticated role renders as `(known after apply)` because it interpolates the
+bucket ARN, so nothing has yet confirmed the prefix keys on the **user pool
+`sub`** rather than the identity pool's own identity id.
+
+Both wrong outcomes deny rather than allow, so this is not a hole standing open
+— but the failure that would be expensive is the third one: a tag resolving to
+something *shared* would let one account write another's prefix, and would look
+like a working system until there were two accounts. Run the 403/200 pair
+before any app code is built against the bucket.
