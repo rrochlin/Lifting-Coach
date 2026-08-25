@@ -76,6 +76,70 @@ jobs:
           role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
+      # Runs only when something above it failed, which in practice means the
+      # assume-role step. On the happy path it prints nothing and stays out of
+      # every successful run's log, so it can't become noise people learn to
+      # skim past.
+      #
+      # It exists because every way this can break — a renamed default branch, a
+      # new repo, someone adding `environment:` to this job, a tag-triggered run
+      # — produces the same generic "Not authorized to perform
+      # sts:AssumeRoleWithWebIdentity", and sends the next person through the
+      # same elimination by hand. The `sub` claim answers all of them at once.
+      #
+      # **It prints four claims and never the token.** That JWT is a bearer
+      # credential: anyone holding it inside its validity window can assume any
+      # role in any account whose trust policy accepts that subject, and Actions
+      # logs are readable by anyone with repo read and persist afterwards. Do
+      # not "improve" this by echoing the raw value.
+      - name: Explain an OIDC failure
+        if: failure()
+        env:
+          GH_REF: ${{ github.ref }}
+          GH_EVENT: ${{ github.event_name }}
+        run: |
+          set -uo pipefail
+
+          # Minted here rather than reused: configure-aws-credentials has
+          # already failed by this point and exported nothing.
+          if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
+            echo "::error::No OIDC token endpoint in the environment."
+            echo "That means this job lacks 'permissions: id-token: write' —"
+            echo "which is the one failure this step would otherwise mis-explain."
+            exit 0
+          fi
+
+          token="$(curl -sS \
+            -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sts.amazonaws.com" \
+            | jq -r '.value')"
+
+          if [ -z "$token" ] || [ "$token" = "null" ]; then
+            echo "::error::Could not mint an OIDC token to inspect."
+            exit 0
+          fi
+
+          # base64url -> base64, then pad to a multiple of four.
+          payload="$(printf '%s' "$token" | cut -d. -f2 | tr '_-' '/+')"
+          while [ $(( ${#payload} % 4 )) -ne 0 ]; do payload="${payload}="; done
+          claims="$(printf '%s' "$payload" | base64 -d 2>/dev/null)"
+
+          echo "The role assumption failed. These are the claims GitHub sent:"
+          # Bracketed so a trailing newline or a stray space in a pasted value
+          # is visible rather than invisible — exactly the class of typo that
+          # survives every other check.
+          printf '  sub   [%s]\n' "$(printf '%s' "$claims" | jq -r '.sub')"
+          printf '  aud   [%s]\n' "$(printf '%s' "$claims" | jq -r '.aud')"
+          printf '  ref   [%s]\n' "$GH_REF"
+          printf '  event [%s]\n' "$GH_EVENT"
+          echo
+          echo "The trust policy that must accept 'sub' is"
+          echo "allowed_subject_patterns in terraform-infrastructure/lift-coach/main.tf"
+          echo "— see server/INFRA-SPEC.md §7."
+          echo
+          echo "If 'sub' does match that pattern, then the ARN in the"
+          echo "AWS_DEPLOY_ROLE_ARN secret points at a different role."
+
       - name: Build the package
         working-directory: server/src
         run: |
