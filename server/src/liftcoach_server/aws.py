@@ -2,9 +2,14 @@
 
 Everything else in this package takes a protocol — `SnapshotObjects`,
 `MetaStore` — so the policy is testable without credentials, a network, or a
-mocking library. This is where those protocols meet boto3, and deliberately
-holds no decisions: if a rule can be stated here or in `inspection.py`, it
-belongs in `inspection.py`.
+mocking library. This is where those protocols meet boto3.
+
+**Almost no decisions live here**: if a rule can be stated here or in
+`inspection.py`, it belongs in `inspection.py`. The one exception is the
+conditional write in `DynamoMetaStore.write`, and it earns its place because
+concurrency is a property of the storage rather than of the policy — the rule
+itself is stated on the `MetaStore` protocol and `InMemoryMetaStore` implements
+the same semantics, so a test proves the behaviour without proving boto3.
 
 `boto3` is imported at call time rather than at module scope so the rest of the
 package imports cleanly in an environment that doesn't have it.
@@ -99,6 +104,15 @@ class DynamoMetaStore:
         return self._table
 
     def read(self, subject: str) -> SnapshotMeta | None:
+        """Not reachable from the indexer, deliberately.
+
+        The index function's role holds `dynamodb:PutItem` and nothing else, so
+        calling this there fails with `AccessDenied`. That's correct rather than
+        an oversight: the indexer derives everything it writes from the object
+        it was handed, so a read would only tempt something into deciding based
+        on what's already recorded. It exists for 2.2 and 2.3, which run as
+        different functions with their own roles.
+        """
         item = self.table.get_item(Key={"pk": _partition_key(subject)}).get("Item")
         if not item:
             return None
@@ -123,23 +137,45 @@ class DynamoMetaStore:
         )
 
     def write(self, meta: SnapshotMeta) -> None:
-        self.table.put_item(
-            Item={
-                "pk": _partition_key(meta.subject),
-                "key": meta.key,
-                "versionId": meta.version_id,
-                "etag": meta.etag,
-                "byteCount": Decimal(meta.byte_count),
-                "uploadedAt": meta.uploaded_at,
-                "schemaVersion": meta.schema_version,
-                "newerThanServer": meta.newer_than_server,
-                "unrecognizedMigrations": list(meta.unrecognized_migrations),
-                "rowCounts": {k: Decimal(v) for k, v in meta.row_counts.items()},
-                "readable": meta.readable,
-                "problem": meta.problem,
-                "deviceId": meta.device_id,
-            }
-        )
+        """Writes unless a *newer* upload is already recorded — see `MetaStore`.
+
+        The comparison is lexicographic on the S3 event time, which is exact
+        rather than approximate: those timestamps are ISO-8601 UTC in a fixed
+        format, so string order is chronological order. Equal timestamps write,
+        which is the right way round — a tie is two records of the same instant
+        and refusing both would leave the index empty.
+
+        Needs no permission beyond the `dynamodb:PutItem` the function already
+        has; a conditional put is still a put.
+        """
+        from botocore.exceptions import ClientError
+
+        try:
+            self.table.put_item(
+                ConditionExpression="attribute_not_exists(pk) OR uploadedAt <= :uploadedAt",
+                ExpressionAttributeValues={":uploadedAt": meta.uploaded_at},
+                Item={
+                    "pk": _partition_key(meta.subject),
+                    "key": meta.key,
+                    "versionId": meta.version_id,
+                    "etag": meta.etag,
+                    "byteCount": Decimal(meta.byte_count),
+                    "uploadedAt": meta.uploaded_at,
+                    "schemaVersion": meta.schema_version,
+                    "newerThanServer": meta.newer_than_server,
+                    "unrecognizedMigrations": list(meta.unrecognized_migrations),
+                    "rowCounts": {k: Decimal(v) for k, v in meta.row_counts.items()},
+                    "readable": meta.readable,
+                    "problem": meta.problem,
+                    "deviceId": meta.device_id,
+                },
+            )
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
+                raise
+            # A newer upload is already indexed. This invocation did its job and
+            # lost a race it was never trying to win, so it returns normally —
+            # raising would make S3 retry an invocation that would lose again.
 
 
 def build_dependencies(bucket: str, meta_table: str) -> Any:

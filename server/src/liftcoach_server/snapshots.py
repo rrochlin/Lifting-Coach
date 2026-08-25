@@ -156,7 +156,26 @@ class SnapshotMeta:
 
 
 class MetaStore(Protocol):
-    """Where `snapshotMeta` items live. `aws.DynamoMetaStore` is the real one."""
+    """Where `snapshotMeta` items live. `aws.DynamoMetaStore` is the real one.
+
+    **`write` never moves the record backwards in time.** A write whose
+    `uploaded_at` predates the stored one is dropped, and that rule belongs to
+    the protocol rather than to either implementation, because it is what makes
+    the record's meaning stable: the item describes *the most recent upload*,
+    not *the most recent invocation*.
+
+    Those differ. The bucket is versioned and the function runs concurrently
+    (reserved concurrency 2), so two uploads a few seconds apart — a workout
+    finishing and the app going to background — produce two invocations with no
+    ordering between them. The second object's invocation can finish first, and
+    an unconditional write would then leave the index describing a version that
+    is no longer current, with a `versionId` and `etag` that look entirely
+    valid.
+
+    This is the other half of the bug that version pinning fixed. Pinning
+    stopped an invocation *reading* the wrong bytes; this stops it *recording*
+    them in the wrong order. Same cause, same class of fix.
+    """
 
     def read(self, subject: str) -> SnapshotMeta | None: ...
 
@@ -173,4 +192,7 @@ class InMemoryMetaStore:
         return self._items.get(subject)
 
     def write(self, meta: SnapshotMeta) -> None:
+        existing = self._items.get(meta.subject)
+        if existing is not None and existing.uploaded_at > meta.uploaded_at:
+            return
         self._items[meta.subject] = meta

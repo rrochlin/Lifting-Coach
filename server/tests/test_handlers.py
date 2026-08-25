@@ -218,3 +218,50 @@ def test_gzip_that_expands_absurdly_is_refused(
 
     assert handlers.index_snapshot(event_for()) == {"indexed": 0, "unreadable": 1}
     assert deps.meta.read("sub-abc").readable is False
+
+
+def test_a_late_invocation_does_not_overwrite_a_newer_record(
+    deps: handlers.Deps, objects: FakeObjects, tmp_path: Path
+) -> None:
+    """Two uploads, two invocations, and no ordering between them.
+
+    Reserved concurrency is 2 on the deployed function, so this is reachable
+    rather than theoretical: finishing a workout and backgrounding the app
+    seconds later produce two events, and nothing makes the first one's
+    invocation finish first. The index has to end up describing the newest
+    *upload*, not the last invocation to run.
+    """
+    for version in ("v1", "v2"):
+        archive = build_snapshot(tmp_path / f"{version}.sqlite.gz")
+        objects.put(
+            object_key("sub-abc"), archive.read_bytes(), version_id=version, metadata={}
+        )
+
+    # The newer upload is indexed first — the race this guards against.
+    handlers.index_snapshot(
+        event_for(version_id="v2", etag='"bbb"', event_time="2026-08-21T10:00:30.000Z")
+    )
+    handlers.index_snapshot(
+        event_for(version_id="v1", etag='"aaa"', event_time="2026-08-21T10:00:00.000Z")
+    )
+
+    record = deps.meta.read("sub-abc")
+    assert record.version_id == "v2"
+    assert record.etag == "bbb"
+
+
+def test_two_events_at_the_same_instant_still_write(
+    deps: handlers.Deps, objects: FakeObjects, tmp_path: Path
+) -> None:
+    """A tie writes rather than being refused — see `MetaStore`."""
+    for version in ("v1", "v2"):
+        archive = build_snapshot(tmp_path / f"{version}.sqlite.gz")
+        objects.put(
+            object_key("sub-abc"), archive.read_bytes(), version_id=version, metadata={}
+        )
+
+    at = "2026-08-21T10:00:00.000Z"
+    handlers.index_snapshot(event_for(version_id="v1", etag='"aaa"', event_time=at))
+    handlers.index_snapshot(event_for(version_id="v2", etag='"bbb"', event_time=at))
+
+    assert deps.meta.read("sub-abc").version_id == "v2"
