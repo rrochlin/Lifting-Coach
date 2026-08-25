@@ -18,6 +18,7 @@ Lifting-Coach (working title "Workout App" in the design docs) — a personal iO
 - `sync-notes.sh` — copies the Obsidian vault (`~/Notes/Home/Projects/Workout App/`) into `notes/` here. **The source path is hardcoded to `/home/rob/...`** — if the vault lives elsewhere on the machine this is run from (e.g. a macOS `/Users/...` path), update the script first or `notes/` will silently go stale instead of erroring.
 - `LiftingCoachModel/`, `Sources/App/`, `project.yml` — the phase 1 app. See "Project scaffold" below.
 - `scripts/` — a Python project (uv) that translates external training logs into the app's language. Root-level and deliberately away from the SwiftUI code: it's the seed of the Lambda-side layout. See "Importing external history" below.
+- `server/` — the phase 2 server, a Python (uv) project. **It reads the phone's snapshot and never writes it**; `server/README.md` states the contract and is worth reading before touching any of it, and `server/INFRA-SPEC.md` specifies the Terraform that hasn't been written yet. `cd server && uv run pytest` needs no AWS account — every AWS surface is behind a narrow protocol with an in-memory implementation. **The phone uploads to S3 directly**, with Cognito identity-pool credentials scoped to its own prefix by a principal tag, so there is no API in front of the bucket and no code here authorises a request. The one Lambda runs on `ObjectCreated` and **derives what it records by opening the file** — it never trusts the uploader's metadata.
 
 ## Current state (as of this handoff)
 `Concepts.md`'s data model is fleshed out and internally consistent: planned-vs-logged sets are properly split (`PlannedSet`/`WorkoutSet`, `PlannedExercise`/`WorkoutExercise`), and "current block" is derived from `startDate` rather than gated by `endDate`, so it doesn't disappear from view when a block runs long (slipped schedule, unlogged deload week).
@@ -26,7 +27,7 @@ The phase 1 project is scaffolded, the **Tracker → Planner loop is closed**, t
 
 The model went through a design pass driven by that import (see Core Tenets): `LoadPrescription` is `.absolute | .percentOf(_, of: MaxReference)`; `EffortTarget` is a separate axis living on `PlannedExercise` with per-set override; maxes are split into achieved (event history) / goal (setting) / theoretical (derived, unimplemented). Session start materializes resolved effort into each set's `plannedFrom` snapshot.
 
-Built: `WorkoutSession` + `WorkoutStore` + tracker UI; `PlanStore` + `UserStore` + planner UI; homepage metrics; theme; catalog import + program loading; the `scripts/` import pipeline; History editing. **253 Swift tests + 53 Python tests.**
+Built: `WorkoutSession` + `WorkoutStore` + tracker UI; `PlanStore` + `UserStore` + planner UI; homepage metrics; theme; catalog import + program loading; the `scripts/` import pipeline; History editing. **287 Swift tests + 92 Python tests** (52 in `scripts/`, 40 in `server/`).
 
 Achieved maxes now auto-record from logged sets (`AchievedMaxUpdate`, wired into `TrackerModel.completeSet`) — a heavier working-set weight than the current best becomes the new best, no manual entry. Bodyweight is logged explicitly via a sheet on Home (it's a distinct action, not derived) — though that sheet is still a plain `Form` with a text field, not the wheel selector `Feedback.md` asks for (it does at least open on the lifter's own unit now). Home's today card **starts the workout** and switches to the Workout tab (`HomeView.onStartWorkout` → `RootView.pendingStart` → the tracker). It used to only navigate; see the paragraph on it below for why that flipped, and for the guard that stops it clobbering a session already in progress. The Workout tab stays the only owner of session state. Home also has an honest "Health" placeholder (HealthKit not connected). Workout History is **both** the calendar `Features/Workout History.md` specifies (default) and the reverse-chronological paged list, switched from a toolbar toggle — see the History paragraph below.
 
@@ -362,9 +363,25 @@ regresses: the app **had no icon** (`Tools/make-app-icon.swift` renders one from
 `Theme.swift`'s own palette literals; App Store Connect rejects a build without a
 1024×1024 opaque marketing icon), `ITSAppUsesNonExemptEncryption` is declared so
 uploads don't stop to ask, and `PrivacyInfo.xcprivacy` states the honest answers
-for a local-only app — **all three need revisiting when the phase 2 backend
-lands**, because a training log leaving the phone changes the encryption answer
-and every line of the privacy manifest.
+for a local-only app.
+
+**Only one of those three moves when the backend lands, and it isn't the
+encryption one.** `ITSAppUsesNonExemptEncryption: false` means *no non-exempt*
+encryption, and standard HTTPS/TLS is exempt; SSE-KMS is server-side and never
+in the binary. So `project.yml`'s `false` stays right, and only adding crypto of
+our own on top of TLS would change it. This file previously claimed the cloud
+changes that answer — it was inherited caution rather than a checked fact.
+**The privacy manifest is the one that really changes**, and `server/INFRA-SPEC.md`
+§9 holds the exact entries plus the rest of the App Store list (the
+questionnaire, the policy URL, account deletion, and the versioned-bucket trap
+underneath it).
+
+**A user-facing export is not collection.** Profile's data export hands a file to
+the share sheet, and Apple's definition of *collect* turns on whether **we**
+receive it — not on whether bytes leave the phone. The system delivers it
+wherever the lifter picks; the app makes no network call. So the manifest stayed
+empty when export shipped, and Cognito plus the bucket are the first thing that
+changes it.
 
 ## Working conventions from this project
 - The notes docs are living working files, not archives — once a design conversation converges on a direction, implement it directly in the relevant `.md` (or, going forward, the actual Swift code). Don't leave agreed decisions sitting only in chat.

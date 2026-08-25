@@ -1,0 +1,125 @@
+# Ships `server/` to the one Lambda that indexes uploaded snapshots.
+#
+# **This workflow updates code and never configuration.** Runtime, memory,
+# timeout, architecture, handler, environment and the S3 trigger all belong to
+# `terraform-infrastructure`, which owns the `aws_lambda_function` resource and
+# carries `ignore_changes = [filename, source_code_hash]` so a code deploy from
+# here doesn't read as drift there. That split is why `update-function-code` is
+# called bare: passing `--architectures` would put a second owner on a field
+# Terraform already owns, and the two would take turns changing it back.
+#
+# See `server/INFRA-SPEC.md` §5 and §7.
+name: Deploy Server
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "server/**"
+      - "!server/**.md" # a spec edit is not a code change
+      - ".github/workflows/deploy-server.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "server/**"
+      - "!server/**.md"
+      - ".github/workflows/deploy-server.yml"
+  workflow_dispatch:
+
+permissions:
+  id-token: write # OIDC, to assume the deploy role
+  contents: read
+
+env:
+  # Pinned rather than read from a secret. There is one region in this design
+  # (INFRA-SPEC §2) and an unset secret would expand to an empty string, which
+  # fails in a way that names neither the secret nor the region.
+  AWS_REGION: us-west-2
+  FUNCTION_NAME: lift-coach-prod-index-snapshot
+
+# Two deploys of the same function must not race. Queued rather than
+# cancelled: a half-finished code update is worse than a redundant one.
+concurrency:
+  group: deploy-server
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Run the suite
+        working-directory: server
+        run: uv run pytest -q
+
+  deploy:
+    name: Deploy
+    runs-on: ubuntu-latest
+    needs: test
+    # Pull requests run the tests above and stop there. Only main deploys, and
+    # the deploy role's trust policy independently restricts it to
+    # `refs/heads/main` — so this condition is a courtesy, not the control.
+    if: github.event_name != 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Build the package
+        working-directory: server/src
+        run: |
+          set -euo pipefail
+          # Zipped from `server/src`, so `liftcoach_server/` sits at the root of
+          # the archive. The deployed handler is
+          # `liftcoach_server.handlers.index_snapshot`, and zipping from
+          # `server/` instead buries the package one level down and produces
+          # `Runtime.ImportModuleError: No module named 'liftcoach_server'` —
+          # which is what the placeholder function failed with, so it is a real
+          # mistake rather than a hypothetical one.
+          zip -qr /tmp/function.zip liftcoach_server \
+            -x '*__pycache__*' '*.pyc'
+          unzip -l /tmp/function.zip
+
+      - name: Update the function code
+        run: |
+          set -euo pipefail
+          # No `--architectures`, no configuration flags: Terraform owns those.
+          # Nothing is vendored either — the package has no runtime
+          # dependencies, and every Lambda runtime already ships boto3.
+          aws lambda update-function-code \
+            --function-name "$FUNCTION_NAME" \
+            --zip-file fileb:///tmp/function.zip \
+            --query 'FunctionName' --output text
+          aws lambda wait function-updated-v2 --function-name "$FUNCTION_NAME"
+
+      - name: Confirm the deployed bytes are the built bytes
+        run: |
+          set -euo pipefail
+          # `update-function-code` returning 200 means AWS accepted the upload,
+          # not that this build is what's now running. `CodeSha256` is the
+          # base64 SHA-256 of the archive Lambda actually holds, so comparing it
+          # against the file we just built turns "the API said yes" into
+          # "the function is running this commit's code".
+          expected="$(openssl dgst -sha256 -binary /tmp/function.zip | base64)"
+          actual="$(aws lambda get-function \
+            --function-name "$FUNCTION_NAME" \
+            --query 'Configuration.CodeSha256' --output text)"
+
+          if [ "$expected" != "$actual" ]; then
+            echo "::error::Deployed code does not match the build."
+            echo "  built:    $expected"
+            echo "  deployed: $actual"
+            exit 1
+          fi
+          echo "$FUNCTION_NAME is running $expected"

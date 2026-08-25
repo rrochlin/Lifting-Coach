@@ -14,6 +14,8 @@ What it does: record what was planned, record what actually happened, and make t
 
 This is the tenet most likely to be violated by a well-meaning feature. "It would be smart if it just…" is the warning phrase.
 
+**Phase 2 keeps this structurally, not by discipline.** An AI coach does not write the plan. It emits a *draft* — a program document in the same language as `Resources/Block1.json` — which the lifter reviews and accepts, and only then does `ProgramLoader` create a block on the device. The coach's proposal and the lifter's decision are two different events with the lifter's tap between them, which is this tenet expressed as a mechanism rather than a rule someone has to remember. See [[Backend/Overview]].
+
 ## 2. A prescription has two axes: load and effort
 
 **Load** is an instruction about the bar — 70% of a max, or 405 lb. **Effort** is an instruction about the lifter — RPE 7.
@@ -93,6 +95,10 @@ The line: **the app computes and presents; the lifter decides.**
 Editing a plan, deleting a block, or letting a coach rewrite programming must never mutate or delete logged history. Logged sets carry a snapshot of what they were prescribed against, so history stays self-contained and readable without the plan that produced it.
 
 Phase 2 makes this sharper: an AI coach with write access to the plan must be structurally incapable of touching the log.
+
+**The phase 2 design achieves that by giving the coach no write access at all.** The server holds a read-only snapshot of the lifter's database; the phone is the only writer, permanently. The coach's sole output is a draft program, and the only thing that consumes a draft is `ProgramLoader`, which can create a block and cannot express a mutation to a logged workout. So the guarantee is a property of the shape rather than a rule every Lambda has to honour — and it survives an agent behaving badly, which a rule does not.
+
+This is also why the cloud copy is not a shared, mutable database under a lock. A lock serializes writers; it does not stop one from overwriting what the other did. See [[Backend/Overview]]'s "why there is no edit mutex."
 
 ## 9. Phase 1: the lifter is his own coach
 

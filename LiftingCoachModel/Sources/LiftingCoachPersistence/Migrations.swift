@@ -475,6 +475,39 @@ extension AppDatabase {
             }
         }
 
+        // Additive, same reasoning as v2-v7 above.
+        //
+        // Phase 2's Cognito replaces the *identity*, not the storage: this
+        // database stays the system of record and gains a note saying which
+        // account it belongs to. That note is what lets the app answer "whose
+        // log is this?" offline — before any network call, and after the token
+        // has expired.
+        //
+        // Nullable, and null is the honest answer for every row that exists
+        // today: `localUser()` has been making a placeholder lifter since phase
+        // 1, and one that has never signed in is bound to nobody. Unique
+        // because it is an identity claim, exactly like `exercise.sourceSlug`
+        // — two lifters on one device cannot both be the same account. SQLite
+        // lets a unique index hold any number of NULLs, which is the behaviour
+        // wanted: unbound is not a claim.
+        //
+        // Deliberately *not* a column on the `User` domain struct, and
+        // deliberately absent from `UserStore`'s `UserRow`. The binding is a
+        // property of this database's relationship to an account, not of the
+        // lifter — and keeping it out of the row that `save(_:)` writes means
+        // saving a user can never clear it. `UserStoreTests` pins that.
+        migrator.registerMigration("v14_cognitoSub") { db in
+            try db.alter(table: "user") { t in
+                t.add(column: "cognitoSub", .text)
+            }
+            try db.create(
+                index: "user_on_cognitoSub",
+                on: "user",
+                columns: ["cognitoSub"],
+                unique: true
+            )
+        }
+
         return migrator
     }
 }

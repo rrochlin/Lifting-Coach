@@ -4,9 +4,15 @@ import LiftingCoachModel
 /// Assembles a `DataExport` from the local database.
 ///
 /// Lives beside the stores rather than in the app target because it's a read
-/// over persistence, and because phase 2's sync will want exactly this — one
-/// place that knows how to say "everything, as values" — rather than a second
-/// traversal written against the same tables.
+/// over persistence — one place that knows how to say "everything, as values"
+/// — rather than a second traversal written against the same tables.
+///
+/// **Not what phase 2 uploads.** That is `SnapshotExporter`: `VACUUM INTO` plus
+/// gzip, producing a file the server opens with `sqlite3` and queries. The two
+/// answer different questions and neither should be built on the other. This
+/// one is the lifter's own copy of their training — readable, portable, and
+/// meaningful without this app — so it stays JSON even though it is larger and
+/// slower to produce.
 ///
 /// **Deliberately not paged or streamed.** Export is a single explicit action
 /// on a phone holding one lifter's history, and correctness beats cleverness:

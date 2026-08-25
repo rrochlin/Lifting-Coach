@@ -4,9 +4,24 @@
 <dict>
 	<!-- Phase 1 is local-first and offline: no analytics, no network calls, no
 	     third-party SDKs. Nothing leaves the phone, so there is nothing to
-	     declare as collected and no tracking domains. Revisit every key here
-	     when the phase 2 backend lands — training logs and bodyweight are
-	     health data, and that changes all three answers below. -->
+	     declare as collected and no tracking domains.
+
+	     Profile's data export does NOT change this, and that question is worth
+	     answering here because it will be asked again. Apple's definition of
+	     "collect" is transmitting data off the device in a way that lets US or
+	     our partners access it — it turns on who receives the data, not on
+	     whether bytes leave the phone. The export hands a file to
+	     UIActivityViewController; the system delivers it wherever the lifter
+	     picked, and the app makes no network call at all.
+
+	     The trigger for changing this file is exact: the first build that
+	     uploads a snapshot to S3. Then four types get declared, all
+	     Linked = true because everything server-side is keyed by the Cognito
+	     sub — see server/INFRA-SPEC.md §9.2, which holds the entries ready to
+	     paste and explains why pre-declaring them would be wrong.
+
+	     ITSAppUsesNonExemptEncryption in project.yml does NOT move with it;
+	     TLS is exempt encryption. §9.2 again. -->
 	<key>NSPrivacyTracking</key>
 	<false/>
 	<key>NSPrivacyTrackingDomains</key>
