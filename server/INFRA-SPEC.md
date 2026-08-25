@@ -1053,14 +1053,33 @@ None of these are secrets — every one of them ships inside the app's Amplify
 configuration and is readable by anyone holding the binary. Access is the
 identity pool's job, not the obscurity of an id.
 
-**§11 steps 6–11 are outstanding, and step 6 is the one that matters.** The
-plan could not prove the principal tag resolved: `aws_iam_role_policy` for the
-authenticated role renders as `(known after apply)` because it interpolates the
-bucket ARN, so nothing has yet confirmed the prefix keys on the **user pool
-`sub`** rather than the identity pool's own identity id.
+**§11 step 6 is closed, verified at runtime rather than by reading the policy.**
+The plan could not prove it — `aws_iam_role_policy` renders as
+`(known after apply)` because it interpolates the bucket ARN — so it was tested
+against the live account:
 
-Both wrong outcomes deny rather than allow, so this is not a hole standing open
-— but the failure that would be expensive is the third one: a tag resolving to
-something *shared* would let one account write another's prefix, and would look
-like a working system until there were two accounts. Run the 403/200 pair
-before any app code is built against the bucket.
+| | |
+| --- | --- |
+| `sts:GetCallerIdentity` as the phone | `assumed-role/lift-coach-prod-authenticated` |
+| PUT to another user's prefix | 403 `AccessDenied` |
+| PUT to own `sub` prefix | succeeded, SSE-KMS under the right key |
+| GET own object back | succeeded — the restore path works |
+| `s3:ListBucket` / `s3:DeleteObject` | `AccessDenied`, both absent as designed |
+
+**The identifier trap in §3.3 is closed**, and the two values differ
+concretely: the token `sub` was `58a1f320-…` while the identity pool's own
+identity id was `us-west-2:442dd054-…`, and the object landed under the former.
+That is the check no amount of reading the HCL could have substituted for.
+
+**Step 11 is closed too** — it needed no app code. `If-None-Match: *` on an
+existing object returns 412; `If-Match` with the current etag succeeds; `If-Match`
+with a stale etag returns 412 `PreconditionFailed`. §8's single-writer signal is
+real S3 behaviour, confirmed before any client is built on it. The client half
+is still open and is app work: whether Amplify's Storage plugin can send those
+headers, or whether the PUT needs the AWS SDK for Swift's
+`PutObjectInput.ifMatch` directly.
+
+**Steps 7–10 wait on the Lambda deploy.** Until the function's code is uploaded
+it is a placeholder that fails at import, so an upload triggers three retried
+import errors and nothing reaches the table — which is itself an incidental
+confirmation of D6's reasoning about what a raising handler costs.
