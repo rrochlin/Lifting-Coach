@@ -667,9 +667,13 @@ Per `ONBOARDING.md`, using the shared `../modules/github-oidc` module.
 module "github_oidc_deploy" {
   source                   = "../modules/github-oidc"
   role_name                = "github-actions-lift-coach"
-  allowed_subject_patterns = ["repo:rrochlin/Lifting-Coach:ref:refs/heads/main"]
-  common_tags              = local.common_tags
-  policy_json              = jsonencode({ /* below */ })
+  allowed_subject_patterns = [
+    # Not `repo:rrochlin/Lifting-Coach:...` — see below. The numbers are the
+    # owner and repository database ids, and they are the point.
+    "repo:rrochlin@43162265/Lifting-Coach@1312491618:ref:refs/heads/main",
+  ]
+  common_tags = local.common_tags
+  policy_json = jsonencode({ /* below */ })
 }
 ```
 
@@ -677,6 +681,54 @@ Restricted to `refs/heads/main` rather than `amazing-adventure`'s `:*`. That
 repo's pattern is documented as an exact match for a role adopted by
 `terraform import`; this one is new, so it starts at the tighter setting — a PR
 branch shouldn't be able to deploy code.
+
+> ### The subject claim carries database ids, and this repo is not like the other one
+>
+> **This cost a deploy and an hour, so it is written down rather than
+> remembered.** The first deploy failed with `Not authorized to perform
+> sts:AssumeRoleWithWebIdentity` while every piece of configuration was
+> provably correct — audience right, `id-token: write` set, the applied trust
+> policy read back from AWS and matching the HCL character for character, the
+> account's OIDC provider listing `sts.amazonaws.com`, and the push genuinely on
+> `refs/heads/main`.
+>
+> The token GitHub actually sent carried:
+>
+> ```
+> sub  repo:rrochlin@43162265/Lifting-Coach@1312491618:ref:refs/heads/main
+> ```
+>
+> GitHub now issues **immutable subject claims** — owner and repository
+> *database ids* embedded in the subject — so that a repository deleted and
+> recreated under the same name cannot inherit a trust relationship. The old
+> `repo:owner/name:...` form is a name, and names can be reused.
+>
+> **It is not account-wide, and that is the part that misleads.** Queried
+> directly, the two repos disagree:
+>
+> ```
+> Lifting-Coach         sub_claim_prefix  repo:rrochlin@43162265/Lifting-Coach@1312491618
+> An-Amazing-Adventure  sub_claim_prefix  repo:rrochlin/An-Amazing-Adventure
+> ```
+>
+> Both report `use_default: true` and `use_immutable_subject: false`, so nobody
+> configured this — the *default* differs, evidently by repository age. So
+> `amazing-adventure` keeps working, its pattern in this same Terraform stays
+> correct, and copying that working pattern into a new app's directory produces
+> a role that cannot be assumed. Check the prefix rather than copying:
+>
+> ```sh
+> gh api /repos/<owner>/<repo>/actions/oidc/customization/sub
+> ```
+>
+> Matching the id form is also the better security posture, not a workaround —
+> it is exactly the repo-recreation attack the immutable format exists to close,
+> so pinning the ids is stricter than the name ever was. The alternative, forcing
+> the legacy format back with `PUT …/oidc/customization/sub`, opts out of that
+> for cosmetic consistency and is the wrong trade.
+>
+> `.github/workflows/deploy-server.yml` prints this claim on any future
+> assume-role failure, which is how it was found.
 
 Permissions: `lambda:UpdateFunctionCode`, `lambda:GetFunction`,
 `lambda:GetFunctionConfiguration` on
