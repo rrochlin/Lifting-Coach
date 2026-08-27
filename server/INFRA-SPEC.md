@@ -1161,6 +1161,15 @@ is still open and is app work: whether Amplify's Storage plugin can send those
 headers, or whether the PUT needs the AWS SDK for Swift's
 `PutObjectInput.ifMatch` directly.
 
+**The exporter and the indexer agree, checked without AWS.**
+`swift run --package-path LiftingCoachModel snapshot-tool <dir>` writes a real
+snapshot and prints what `SnapshotExporter` says is in it; feeding that same
+file to `inspection.inspect` returns the same schema version and the same count
+for all fifteen tables. That is §11 step 8's central claim — the index describes
+what the file contains — proved against the *actual producer* rather than a
+fixture, which is the part a test helper writing its own input could never
+establish. Re-run it whenever a migration lands.
+
 **Steps 7–10 wait on the Lambda deploy.** Until the function's code is uploaded
 it is a placeholder that fails at import, so an upload triggers three retried
 import errors and nothing reaches the table — which is itself an incidental

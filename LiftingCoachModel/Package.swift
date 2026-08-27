@@ -45,5 +45,15 @@ let package = Package(
             name: "LiftingCoachPersistenceTests",
             dependencies: ["LiftingCoachPersistence"]
         ),
+
+        // A dev tool, not part of the app. Writes a real snapshot and prints
+        // the metadata the phone would report for it, so `server/`'s indexer
+        // can be verified against the actual producer instead of a fixture —
+        // see INFRA-SPEC.md §11. Deliberately not a `product`: `swift build`
+        // makes it, and the iOS target links only the two libraries above.
+        .executableTarget(
+            name: "snapshot-tool",
+            dependencies: ["LiftingCoachPersistence"]
+        ),
     ]
 )
