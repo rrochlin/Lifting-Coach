@@ -1170,7 +1170,40 @@ what the file contains — proved against the *actual producer* rather than a
 fixture, which is the part a test helper writing its own input could never
 establish. Re-run it whenever a migration lands.
 
-**Steps 7–10 wait on the Lambda deploy.** Until the function's code is uploaded
-it is a placeholder that fails at import, so an upload triggers three retried
-import errors and nothing reaches the table — which is itself an incidental
-confirmation of D6's reasoning about what a raising handler costs.
+**Steps 7, 8, 9 and 11 are closed against the deployed function**, run with the
+real snapshot above rather than a fixture:
+
+- **7** — S3 echoed the `x-amz-checksum-sha256` back matching, so the body was
+  *verified* server-side rather than merely accepted. The item recorded
+  `v14_cognitoSub`, 192249 bytes, `readable = true`, and all fifteen row counts
+  identical to the exporter's.
+- **8, the claim that replaced a signature** — the same file re-uploaded with
+  `x-amz-meta-schema-version: v1_core` and `row-counts: exercise=1,user=999`
+  still indexed as `v14_cognitoSub` / `exercise 873`. `deviceId` echoed the
+  supplied `liar-device`, which is the **control**: it proves the metadata
+  arrived and was deliberately not trusted for anything load-bearing.
+- **9** — a truncated copy and random bytes both recorded `readable = false`
+  with a distinguishing reason, each in **exactly one invocation**. No retries,
+  so the D6 boundary is the right way round. The truncated case produces the
+  better message because it names the failure a phone actually causes: a
+  connection lost mid-PUT.
+- **The ordering guard** — two puts four seconds apart left the index holding
+  the *second* version, with no error on the first, so a lost race returns
+  normally.
+
+> **When a race can't be forced, test the predicate instead.** Two sequential
+> uploads only prove the condition doesn't *wrongly reject* a valid later write.
+> They cannot prove an out-of-order arrival is rejected, because the
+> interleaving isn't schedulable on demand — and that half is the whole reason
+> the condition exists. It was closed by running the expression directly against
+> real DynamoDB on a throwaway partition key: an earlier `uploadedAt` returned
+> `ConditionalCheckFailedException`, a later one was accepted, probe row
+> deleted. What stays untested is the true concurrent interleaving, which is a
+> scheduling accident rather than a semantic property.
+
+**Step 10 — Sign in with Apple end to end — is the only one still open.** It
+needs a person and a phone.
+
+The bucket and table were emptied afterwards, versions and delete markers
+included, so the first real upload lands on a clean slate rather than on top of
+verification fixtures.
