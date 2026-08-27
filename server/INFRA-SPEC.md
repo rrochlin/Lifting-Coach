@@ -707,11 +707,12 @@ branch shouldn't be able to deploy code.
 > directly, the two repos disagree:
 >
 > ```
-> Lifting-Coach         sub_claim_prefix  repo:rrochlin@43162265/Lifting-Coach@1312491618
-> An-Amazing-Adventure  sub_claim_prefix  repo:rrochlin/An-Amazing-Adventure
+> Lifting-Coach             repo:rrochlin@43162265/Lifting-Coach@1312491618
+> An-Amazing-Adventure      repo:rrochlin/An-Amazing-Adventure
+> terraform-infrastructure  repo:rrochlin/terraform-infrastructure
 > ```
 >
-> Both report `use_default: true` and `use_immutable_subject: false`, so nobody
+> All three report `use_default: true` and `use_immutable_subject: false`, so nobody
 > configured this — the *default* differs, evidently by repository age. So
 > `amazing-adventure` keeps working, its pattern in this same Terraform stays
 > correct, and copying that working pattern into a new app's directory produces
@@ -729,6 +730,15 @@ branch shouldn't be able to deploy code.
 >
 > `.github/workflows/deploy-server.yml` prints this claim on any future
 > assume-role failure, which is how it was found.
+>
+> **No resolver, and that's decided.** The tempting fix is a module helper that
+> queries the prefix at plan time. It trades a loud failure for a quiet one: an
+> external data source errors on a machine without `gh`, or worse resolves
+> differently in CI than locally, and it puts a value in a *trust policy* that
+> can't be read off the diff. The ids stay literal and commented. If this
+> recurs, the thing to build is a **check** — CI asserting each app's configured
+> pattern still matches what GitHub reports — which catches drift both ways,
+> can't fail an apply, and stays outside the state file.
 
 Permissions: `lambda:UpdateFunctionCode`, `lambda:GetFunction`,
 `lambda:GetFunctionConfiguration` on
