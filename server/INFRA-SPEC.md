@@ -1201,8 +1201,43 @@ real snapshot above rather than a fixture:
 > deleted. What stays untested is the true concurrent interleaving, which is a
 > scheduling accident rather than a semantic property.
 
-**Step 10 — Sign in with Apple end to end — is the only one still open.** It
-needs a person and a phone.
+**Step 10 — Sign in with Apple end to end — passes, and it needed no app.**
+Cognito's Hosted UI drives the whole flow in a browser: the `/oauth2/authorize`
+URL with `identity_provider=SignInWithApple`, the code read out of the redirect
+to `liftcoach://callback` (which fails to open, as it should, on a machine with
+no app registered for the scheme), then `/oauth2/token`.
+
+That confirms the Apple prerequisites in §3.2 — App ID, Services ID, and the
+Return URL matching the Cognito domain — which is the combination that fails at
+Apple's end with an error naming none of them. The federated identity then
+carried all the way through:
+
+```
+user pool sub    a8f153c0-e011-703f-1887-c47cc2a097e4
+identity id      us-west-2:442dd054-f3e2-c4c4-d75b-cd148ce69252
+assumed role     lift-coach-prod-authenticated
+PUT other prefix 403
+PUT own prefix   succeeded; indexed under pk = USER#a8f153c0-…
+```
+
+Two visibly different identifiers again, and the object under the first.
+
+> **One tag mapping covers both sign-in methods, and here is why it isn't luck.**
+> `aws_cognito_identity_pool_provider_principal_tag` is scoped to the **user pool
+> as a provider of the identity pool** — not to Sign in with Apple as a provider
+> of the *user pool*. SIWA federates *into* the pool, so by the time the identity
+> pool sees the token there is exactly one provider
+> (`cognito-idp.us-west-2.amazonaws.com/us-west-2_…`) and the same
+> `principal_tags` mapping applies. Adding a second federated provider in 2.2
+> needs no new mapping for the same reason.
+>
+> Recorded as the reason it holds rather than as a coincidence — but note the
+> explanation was only available *after* the test. Reasoning it out beforehand
+> and skipping the check would have been the same move as trusting the HCL
+> instead of reading the trust policy back: probably right, and unverified. An
+> email/password user and a federated user reaching the same role is a stronger
+> claim than either alone, because it shows the tag is applied on the **path**
+> rather than on the account.
 
 The bucket and table were emptied afterwards, versions and delete markers
 included, so the first real upload lands on a clean slate rather than on top of
