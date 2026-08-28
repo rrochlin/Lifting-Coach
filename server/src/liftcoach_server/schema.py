@@ -55,7 +55,10 @@ from .errors import UnreadableSnapshot
 #: Renaming looks tidier and is worse in a way that only shows up here. A device
 #: that already applied the old identifier would see the renamed one as
 #: unapplied and re-run its `ALTER TABLE`, which fails as a duplicate column on
-#: a Release build. Guarding the migration body makes the *phone* safe, and
+#: a Release build. Wiping both phones first avoids that — they are dev devices
+#: — but nothing *enforces* the wipe, and a TestFlight build installing onto an
+#: un-wiped phone is the ordinary path rather than an unlucky one. Guarding the
+#: migration body makes the *phone* safe, and
 #: pushes the damage into this file: that device's `grdb_migrations` then holds
 #: both identifiers, the old one isn't in this list, and every snapshot it ever
 #: uploads comes back `newer_than_server = True` with the retired name in
