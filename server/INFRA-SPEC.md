@@ -667,9 +667,13 @@ Per `ONBOARDING.md`, using the shared `../modules/github-oidc` module.
 module "github_oidc_deploy" {
   source                   = "../modules/github-oidc"
   role_name                = "github-actions-lift-coach"
-  allowed_subject_patterns = ["repo:rrochlin/Lifting-Coach:ref:refs/heads/main"]
-  common_tags              = local.common_tags
-  policy_json              = jsonencode({ /* below */ })
+  allowed_subject_patterns = [
+    # Not `repo:rrochlin/Lifting-Coach:...` — see below. The numbers are the
+    # owner and repository database ids, and they are the point.
+    "repo:rrochlin@43162265/Lifting-Coach@1312491618:ref:refs/heads/main",
+  ]
+  common_tags = local.common_tags
+  policy_json = jsonencode({ /* below */ })
 }
 ```
 
@@ -677,6 +681,64 @@ Restricted to `refs/heads/main` rather than `amazing-adventure`'s `:*`. That
 repo's pattern is documented as an exact match for a role adopted by
 `terraform import`; this one is new, so it starts at the tighter setting — a PR
 branch shouldn't be able to deploy code.
+
+> ### The subject claim carries database ids, and this repo is not like the other one
+>
+> **This cost a deploy and an hour, so it is written down rather than
+> remembered.** The first deploy failed with `Not authorized to perform
+> sts:AssumeRoleWithWebIdentity` while every piece of configuration was
+> provably correct — audience right, `id-token: write` set, the applied trust
+> policy read back from AWS and matching the HCL character for character, the
+> account's OIDC provider listing `sts.amazonaws.com`, and the push genuinely on
+> `refs/heads/main`.
+>
+> The token GitHub actually sent carried:
+>
+> ```
+> sub  repo:rrochlin@43162265/Lifting-Coach@1312491618:ref:refs/heads/main
+> ```
+>
+> GitHub now issues **immutable subject claims** — owner and repository
+> *database ids* embedded in the subject — so that a repository deleted and
+> recreated under the same name cannot inherit a trust relationship. The old
+> `repo:owner/name:...` form is a name, and names can be reused.
+>
+> **It is not account-wide, and that is the part that misleads.** Queried
+> directly, the two repos disagree:
+>
+> ```
+> Lifting-Coach             repo:rrochlin@43162265/Lifting-Coach@1312491618
+> An-Amazing-Adventure      repo:rrochlin/An-Amazing-Adventure
+> terraform-infrastructure  repo:rrochlin/terraform-infrastructure
+> ```
+>
+> All three report `use_default: true` and `use_immutable_subject: false`, so nobody
+> configured this — the *default* differs, evidently by repository age. So
+> `amazing-adventure` keeps working, its pattern in this same Terraform stays
+> correct, and copying that working pattern into a new app's directory produces
+> a role that cannot be assumed. Check the prefix rather than copying:
+>
+> ```sh
+> gh api /repos/<owner>/<repo>/actions/oidc/customization/sub
+> ```
+>
+> Matching the id form is also the better security posture, not a workaround —
+> it is exactly the repo-recreation attack the immutable format exists to close,
+> so pinning the ids is stricter than the name ever was. The alternative, forcing
+> the legacy format back with `PUT …/oidc/customization/sub`, opts out of that
+> for cosmetic consistency and is the wrong trade.
+>
+> `.github/workflows/deploy-server.yml` prints this claim on any future
+> assume-role failure, which is how it was found.
+>
+> **No resolver, and that's decided.** The tempting fix is a module helper that
+> queries the prefix at plan time. It trades a loud failure for a quiet one: an
+> external data source errors on a machine without `gh`, or worse resolves
+> differently in CI than locally, and it puts a value in a *trust policy* that
+> can't be read off the diff. The ids stay literal and commented. If this
+> recurs, the thing to build is a **check** — CI asserting each app's configured
+> pattern still matches what GitHub reports — which catches drift both ways,
+> can't fail an apply, and stays outside the state file.
 
 Permissions: `lambda:UpdateFunctionCode`, `lambda:GetFunction`,
 `lambda:GetFunctionConfiguration` on
@@ -1099,7 +1161,84 @@ is still open and is app work: whether Amplify's Storage plugin can send those
 headers, or whether the PUT needs the AWS SDK for Swift's
 `PutObjectInput.ifMatch` directly.
 
-**Steps 7–10 wait on the Lambda deploy.** Until the function's code is uploaded
-it is a placeholder that fails at import, so an upload triggers three retried
-import errors and nothing reaches the table — which is itself an incidental
-confirmation of D6's reasoning about what a raising handler costs.
+**The exporter and the indexer agree, checked without AWS.**
+`swift run --package-path LiftingCoachModel snapshot-tool <dir>` writes a real
+snapshot and prints what `SnapshotExporter` says is in it; feeding that same
+file to `inspection.inspect` returns the same schema version and the same count
+for all fifteen tables. That is §11 step 8's central claim — the index describes
+what the file contains — proved against the *actual producer* rather than a
+fixture, which is the part a test helper writing its own input could never
+establish. Re-run it whenever a migration lands.
+
+**Steps 7, 8, 9 and 11 are closed against the deployed function**, run with the
+real snapshot above rather than a fixture:
+
+- **7** — S3 echoed the `x-amz-checksum-sha256` back matching, so the body was
+  *verified* server-side rather than merely accepted. The item recorded
+  `v14_cognitoSub`, 192249 bytes, `readable = true`, and all fifteen row counts
+  identical to the exporter's.
+- **8, the claim that replaced a signature** — the same file re-uploaded with
+  `x-amz-meta-schema-version: v1_core` and `row-counts: exercise=1,user=999`
+  still indexed as `v14_cognitoSub` / `exercise 873`. `deviceId` echoed the
+  supplied `liar-device`, which is the **control**: it proves the metadata
+  arrived and was deliberately not trusted for anything load-bearing.
+- **9** — a truncated copy and random bytes both recorded `readable = false`
+  with a distinguishing reason, each in **exactly one invocation**. No retries,
+  so the D6 boundary is the right way round. The truncated case produces the
+  better message because it names the failure a phone actually causes: a
+  connection lost mid-PUT.
+- **The ordering guard** — two puts four seconds apart left the index holding
+  the *second* version, with no error on the first, so a lost race returns
+  normally.
+
+> **When a race can't be forced, test the predicate instead.** Two sequential
+> uploads only prove the condition doesn't *wrongly reject* a valid later write.
+> They cannot prove an out-of-order arrival is rejected, because the
+> interleaving isn't schedulable on demand — and that half is the whole reason
+> the condition exists. It was closed by running the expression directly against
+> real DynamoDB on a throwaway partition key: an earlier `uploadedAt` returned
+> `ConditionalCheckFailedException`, a later one was accepted, probe row
+> deleted. What stays untested is the true concurrent interleaving, which is a
+> scheduling accident rather than a semantic property.
+
+**Step 10 — Sign in with Apple end to end — passes, and it needed no app.**
+Cognito's Hosted UI drives the whole flow in a browser: the `/oauth2/authorize`
+URL with `identity_provider=SignInWithApple`, the code read out of the redirect
+to `liftcoach://callback` (which fails to open, as it should, on a machine with
+no app registered for the scheme), then `/oauth2/token`.
+
+That confirms the Apple prerequisites in §3.2 — App ID, Services ID, and the
+Return URL matching the Cognito domain — which is the combination that fails at
+Apple's end with an error naming none of them. The federated identity then
+carried all the way through:
+
+```
+user pool sub    a8f153c0-e011-703f-1887-c47cc2a097e4
+identity id      us-west-2:442dd054-f3e2-c4c4-d75b-cd148ce69252
+assumed role     lift-coach-prod-authenticated
+PUT other prefix 403
+PUT own prefix   succeeded; indexed under pk = USER#a8f153c0-…
+```
+
+Two visibly different identifiers again, and the object under the first.
+
+> **One tag mapping covers both sign-in methods, and here is why it isn't luck.**
+> `aws_cognito_identity_pool_provider_principal_tag` is scoped to the **user pool
+> as a provider of the identity pool** — not to Sign in with Apple as a provider
+> of the *user pool*. SIWA federates *into* the pool, so by the time the identity
+> pool sees the token there is exactly one provider
+> (`cognito-idp.us-west-2.amazonaws.com/us-west-2_…`) and the same
+> `principal_tags` mapping applies. Adding a second federated provider in 2.2
+> needs no new mapping for the same reason.
+>
+> Recorded as the reason it holds rather than as a coincidence — but note the
+> explanation was only available *after* the test. Reasoning it out beforehand
+> and skipping the check would have been the same move as trusting the HCL
+> instead of reading the trust policy back: probably right, and unverified. An
+> email/password user and a federated user reaching the same role is a stronger
+> claim than either alone, because it shows the tag is applied on the **path**
+> rather than on the account.
+
+The bucket and table were emptied afterwards, versions and delete markers
+included, so the first real upload lands on a clean slate rather than on top of
+verification fixtures.
