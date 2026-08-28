@@ -35,19 +35,26 @@ final class PlannerModel {
     private let workouts: WorkoutStore
     private let userID: UUID
     let calendar: Calendar
+    /// Called after any write to the plan lands. Hung off `persist` rather than
+    /// off the four call sites that go through it, so a fifth write path can't
+    /// be added without one — which is the failure mode this app already
+    /// records for incrementally-maintained state (`ExerciseStatsStore`).
+    private let onSaved: () -> Void
 
     init(
         plans: PlanStore,
         workouts: WorkoutStore,
         userID: UUID,
         user: User? = nil,
-        calendar: Calendar = .current
+        calendar: Calendar = .current,
+        onSaved: @escaping () -> Void = {}
     ) {
         self.plans = plans
         self.workouts = workouts
         self.userID = userID
         self.user = user
         self.calendar = calendar
+        self.onSaved = onSaved
     }
 
     // MARK: Reading
@@ -302,6 +309,7 @@ final class PlannerModel {
         do {
             try write()
             loadError = nil
+            onSaved()
             return true
         } catch {
             loadError = error.localizedDescription

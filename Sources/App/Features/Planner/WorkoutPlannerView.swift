@@ -45,7 +45,8 @@ struct WorkoutPlannerView: View {
             plans: environment.plans,
             workouts: environment.workouts,
             userID: user.id,
-            user: user
+            user: user,
+            onSaved: { environment.snapshotDidChange(.planSaved) }
         )
         model.load()
         self.model = model

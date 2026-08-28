@@ -430,6 +430,7 @@ struct WorkoutDetailView: View {
             saveError = nil
             isEditing = false
             onChange?()
+            environment.snapshotDidChange(.historyEdited)
         } catch {
             saveError = error.localizedDescription
         }
@@ -442,6 +443,7 @@ struct WorkoutDetailView: View {
                 try? environment.exerciseStats.rebuild(for: userID)
             }
             onChange?()
+            environment.snapshotDidChange(.historyEdited)
             dismiss()
         } catch {
             saveError = error.localizedDescription
