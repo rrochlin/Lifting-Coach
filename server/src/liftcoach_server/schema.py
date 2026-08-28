@@ -82,6 +82,7 @@ KNOWN_MIGRATIONS: tuple[str, ...] = (
     "v11_setUnitOverride",
     "v12_exerciseStats",
     "v13_setDurationDistance",
+    "v14_plannedSetCount",
     "v14_cognitoSub",
 )
 
