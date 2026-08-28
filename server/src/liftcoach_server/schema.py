@@ -45,6 +45,29 @@ from .errors import UnreadableSnapshot
 #: two disagree — a test rather than a comment asking two files to be nice to
 #: each other. Since the redesign it is load-bearing rather than documentary:
 #: get the order wrong and a snapshot is reported at the wrong version.
+#:
+#: **Two migrations will carry a `v14_` prefix once phase 1 merges, and neither
+#: one gets renamed.** `v14_cognitoSub` and `v14_plannedSetCount` were authored
+#: concurrently on separate branches. They don't collide — GRDB keys on the full
+#: identifier — and the numbering is a human convention, while the ordering that
+#: actually matters is this list mirroring the registration order.
+#:
+#: Renaming looks tidier and is worse in a way that only shows up here. A device
+#: that already applied the old identifier would see the renamed one as
+#: unapplied and re-run its `ALTER TABLE`, which fails as a duplicate column on
+#: a Release build. Wiping both phones first avoids that — they are dev devices
+#: — but nothing *enforces* the wipe, and a TestFlight build installing onto an
+#: un-wiped phone is the ordinary path rather than an unlucky one. Guarding the
+#: migration body makes the *phone* safe, and
+#: pushes the damage into this file: that device's `grdb_migrations` then holds
+#: both identifiers, the old one isn't in this list, and every snapshot it ever
+#: uploads comes back `newer_than_server = True` with the retired name in
+#: `unrecognized`. Phase 2.3's query tools consult exactly that flag to decline
+#: answering — so the coach would permanently refuse to discuss that lifter's
+#: training, quietly and correctly, because of a cosmetic rename.
+#:
+#: The alternative, keeping the retired identifier in this list forever as a
+#: ghost, is strictly more confusing than one oddly-numbered line.
 KNOWN_MIGRATIONS: tuple[str, ...] = (
     "v1_core",
     "v2_exerciseCatalog",
