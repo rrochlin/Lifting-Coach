@@ -18,6 +18,10 @@ struct WorkoutTrackerView: View {
     /// The current calendar week's plan — a lifter should be able to see (and
     /// start, or skip) more than just today.
     @State private var weekPlan: [PlannedWorkout] = []
+    /// What's already been logged this week, so a day the lifter has finished
+    /// doesn't sit here looking exactly like one they haven't started. Same
+    /// type and same date join the planner uses — see `BlockCompletion`.
+    @State private var weekCompletion = BlockCompletion()
     #if DEBUG
     /// Latches `-openExercisePicker` to a single presentation.
     @State private var didOpenDebugPicker = false
@@ -34,6 +38,19 @@ struct WorkoutTrackerView: View {
             }
             .navigationTitle("Workout")
             .toolbar { toolbar }
+            // Outside the `Group` branch on purpose: finishing clears the
+            // session, so by the time there's a summary to show the screen has
+            // already fallen back to the week view — which is exactly where it
+            // should appear, over the day it just filled in.
+            .overlay {
+                if let model { summaryOverlay(model) }
+            }
+            .animation(.easeOut(duration: 0.25), value: model?.justFinished?.id)
+        }
+        .onChange(of: model?.justFinished?.id) { _, id in
+            // The week view's trained markers are now a session out of date.
+            guard id != nil else { return }
+            loadWeek()
         }
         .task {
             if model == nil, let userID = environment.currentUser?.id {
@@ -62,7 +79,8 @@ struct WorkoutTrackerView: View {
             // A beat before presenting, too: setting this in the same turn as
             // the view's first appearance lands before there's anything to
             // present from, and the sheet silently never opens.
-            if LaunchArguments.exercisePickerQuery != nil, !didOpenDebugPicker {
+            if LaunchArguments.exercisePickerQuery != nil
+                || LaunchArguments.exerciseSearchQuery != nil, !didOpenDebugPicker {
                 didOpenDebugPicker = true
                 try? await Task.sleep(for: .milliseconds(700))
                 isPickingExercise = true
@@ -73,7 +91,10 @@ struct WorkoutTrackerView: View {
         // case `.task` has long since run.
         .onChange(of: pendingStart?.id) { _, _ in consumePendingStart() }
         .sheet(isPresented: $isPickingExercise) {
-            ExercisePicker(initialDetailQuery: pickerDetailQuery) { exercise in
+            ExercisePicker(
+                initialQuery: debugSearchQuery,
+                initialDetailQuery: pickerDetailQuery
+            ) { exercise in
                 model?.addExercise(exercise, sets: 1)
             }
         }
@@ -85,6 +106,15 @@ struct WorkoutTrackerView: View {
         #if DEBUG
         let query = LaunchArguments.exercisePickerQuery
         return (query?.isEmpty ?? true) ? nil : query
+        #else
+        return nil
+        #endif
+    }
+
+    /// Under `-searchExercises`, what to type into the picker's search field.
+    private var debugSearchQuery: String? {
+        #if DEBUG
+        return LaunchArguments.exerciseSearchQuery
         #else
         return nil
         #endif
@@ -108,6 +138,7 @@ struct WorkoutTrackerView: View {
     /// target comes from the prescription and an ad-hoc set has none.
     private func startRestDemoIfRequested(_ model: TrackerModel) {
         guard let seconds = LaunchArguments.restDemoSeconds, !model.isActive else { return }
+        defer { if LaunchArguments.finishesDemo { model.finish() } }
         let catalog = (try? environment.exercises.fetchAll()) ?? []
         guard let first = catalog.first else { return }
 
@@ -194,11 +225,23 @@ struct WorkoutTrackerView: View {
         }
         .panelRow()
 
-        ForEach(workouts(on: day)) { workout in
+        let dayWorkouts = workouts(on: day)
+        let log = weekCompletion.log(
+            on: day,
+            plannedSets: dayWorkouts.reduce(0) { $0 + $1.plannedSetCount }
+        )
+
+        ForEach(dayWorkouts) { workout in
             Button {
                 if workout.skippedAt == nil { start(workout) }
             } label: {
-                PlannedSummaryRow(workout: workout, isToday: isToday)
+                PlannedSummaryRow(
+                    workout: workout,
+                    isToday: isToday,
+                    // A day-level fact, so it's stated once — the same reason
+                    // the planner marks only a day's first panel.
+                    log: workout.id == dayWorkouts.first?.id ? log : nil
+                )
             }
             .buttonStyle(.plain)
             .panelRow()
@@ -239,6 +282,24 @@ struct WorkoutTrackerView: View {
         // so step back a day to land on this week's actual last day.
         let lastDay = calendar.date(byAdding: .day, value: -1, to: week.end) ?? week.end
         weekPlan = (try? environment.plans.fetchPlanned(from: week.start, to: lastDay)) ?? []
+
+        // Summaries, not hydrated workouts: this needs a date and a count, and
+        // a week of sessions is thousands of queries to hydrate.
+        let summaries = (try? environment.workouts.fetchSummaries(
+            from: week.start, to: lastDay
+        )) ?? []
+        weekCompletion = BlockCompletion(
+            sessions: summaries.compactMap { summary in
+                summary.startTime.map {
+                    BlockCompletion.Session(
+                        id: summary.id,
+                        startedAt: $0,
+                        setCount: summary.completedSetCount
+                    )
+                }
+            },
+            calendar: calendar
+        )
     }
 
     private func skip(_ workout: PlannedWorkout) {
@@ -309,6 +370,18 @@ struct WorkoutTrackerView: View {
             cancelLabel: "Keep Going",
             onConfirm: { model.discard() }
         )
+    }
+
+    /// What just happened, once. An overlay rather than a sheet, matching
+    /// `themedConfirm`: it's about the workout behind it, and it's dismissed by
+    /// the one button on it.
+    @ViewBuilder
+    private func summaryOverlay(_ model: TrackerModel) -> some View {
+        if let workout = model.justFinished {
+            WorkoutSummaryOverlay(workout: workout, unit: environment.weightUnit) {
+                model.dismissSummary()
+            }
+        }
     }
 
     /// Say what's about to be dropped rather than letting it be discovered later.
@@ -390,6 +463,9 @@ private struct ActiveWorkoutList: View {
     /// The exercise whose slot is being filled — an open-choice slot being
     /// resolved, or any exercise being swapped mid-workout.
     @State private var choosingFor: ChoosingTarget?
+    /// The lift whose catalog entry is being read. A separate presentation from
+    /// `choosingFor` because looking a lift up is not choosing one.
+    @State private var infoFor: Exercise?
 
     /// Whether the list is in reorder mode: every exercise collapsed to a
     /// single draggable row.
@@ -409,6 +485,13 @@ private struct ActiveWorkoutList: View {
     @State private var isReordering = false
     @State private var didOpenLaunchReorder = false
 
+    /// Which number is being typed, across the whole screen.
+    ///
+    /// Owned here rather than per field because NEXT has to *move* focus, and a
+    /// field holding its own private `@FocusState` has no way to hand it on.
+    /// See `SuggestingNumberField.focus`.
+    @FocusState private var focusedField: SetField?
+
     /// The one set whose rest editor is open, if any.
     ///
     /// Owned here rather than inside `RestControl` because the editor is a
@@ -418,7 +501,37 @@ private struct ActiveWorkoutList: View {
     /// one screen is the sort of clutter this control keeps being pruned of.
     @State private var expandedRest: UUID?
 
+    /// Whether the running rest's own line is on screen. Drives the sticky bar
+    /// below — see `restBar`.
+    @State private var restLineVisible = false
+
     var body: some View {
+        ScrollViewReader { proxy in
+            list
+                // The lift you're about to do should be the lift you're looking
+                // at. Finishing an exercise used to leave the screen exactly
+                // where it was, with the next lift somewhere below the fold —
+                // "once a block's complete the transition to the next one is
+                // really jarring". Keyed on the *exercise*, not the set, so it
+                // doesn't yank the screen after every set of the one you're on.
+                .onChange(of: activeExerciseID) { _, id in
+                    guard let id, !isReordering else { return }
+                    withAnimation(.easeInOut(duration: 0.35)) {
+                        proxy.scrollTo(id, anchor: .top)
+                    }
+                }
+                // Tapping the sticky bar goes back to the set that's resting.
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    restBar { id in
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            proxy.scrollTo(id, anchor: .center)
+                        }
+                    }
+                }
+        }
+    }
+
+    private var list: some View {
         List {
             if isReordering {
                 reorderBanner
@@ -448,17 +561,18 @@ private struct ActiveWorkoutList: View {
         // sits above the bar and lifts the list instead of covering its last row.
         .safeAreaInset(edge: .bottom, spacing: 0) { achievedMaxBanner }
         .animation(.easeOut(duration: 0.22), value: model.newAchievedMax?.max.date)
-        // The lifter who *is* watching the screen still deserves to be told,
-        // and a phone on the bench is felt before it's read. The notification
-        // covers the case where the app isn't on screen at all.
-        .onChange(of: model.rest?.hasExpired) { _, expired in
-            guard expired == true else { return }
-            // A REST COMPLETE line with no way to acknowledge it is a dead end,
-            // so the editor — and its DONE — opens itself.
-            expandedRest = model.rest?.setID
-            #if os(iOS)
-            UINotificationFeedbackGenerator().notificationOccurred(.success)
-            #endif
+        // Rest moved to a different set — or ended. An editor left open on the
+        // set it used to belong to is the "rest timer modifier is frequently
+        // open, I don't think I'm trying to open it" report: it was opened by
+        // the *previous* set's expiry and then stranded there when the timer
+        // moved on.
+        .onChange(of: model.rest?.setID) { previous, _ in
+            // Assume the new rest's line is off screen until it says otherwise:
+            // a stale `true` from the last set's line would suppress the bar
+            // for the whole of the next rest period.
+            restLineVisible = false
+            guard let previous, expandedRest == previous else { return }
+            expandedRest = nil
         }
         .sheet(item: $noteEditorTarget) { target in
             NoteSheet(
@@ -466,6 +580,9 @@ private struct ActiveWorkoutList: View {
                 context: programmedNote(for: target).map { ("programmed", $0) },
                 note: usernoteBinding(for: target)
             )
+        }
+        .sheet(item: $infoFor) { exercise in
+            ExerciseInfoSheet(exercise: exercise)
         }
         .sheet(item: $choosingFor) { target in
             ExercisePicker(
@@ -478,6 +595,78 @@ private struct ActiveWorkoutList: View {
                 // tracking reference something specific rather than a goal.
                 model.updateExercise(id: target.id) { $0.exercise = picked }
             }
+        }
+    }
+
+    /// The exercise the next unlogged set belongs to — what "where you are"
+    /// means, and what the screen follows.
+    private var activeExerciseID: UUID? {
+        guard let session = model.session, let next = session.nextSet else { return nil }
+        return session.exercise(containingSetID: next.id)?.id
+    }
+
+    /// A running rest clock pinned to the top of the screen — but **only while
+    /// its own line is scrolled out of sight**.
+    ///
+    /// "Need a visible running timer on the workout. Maybe even a sticky header
+    /// for it." The clock lives on a line under the set that started it, which
+    /// is right (rest is per set, and per set is where it's tuned) and which
+    /// also means it's gone the moment you scroll to look at anything else.
+    ///
+    /// **It is a readout, not a fourth rest control.** This app has had three
+    /// surfaces for editing rest on screen at once before and pruned them down
+    /// to one; adding another would undo that. There is nothing here to press
+    /// but the bar itself, and pressing it takes you back to the line that
+    /// *does* edit it.
+    ///
+    /// Hiding it while that line is visible is what keeps the count of clocks
+    /// on screen at one. `onScrollVisibilityChange` is doing the work, attached
+    /// to the running line itself.
+    @ViewBuilder
+    private func restBar(scrollTo: @escaping (UUID) -> Void) -> some View {
+        if let timer = model.rest, !restLineVisible, !isReordering {
+            Button { scrollTo(timer.setID) } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: timer.hasExpired ? "checkmark.circle.fill" : "timer")
+                        .font(.system(size: 13, weight: .semibold))
+                    Text(timer.exerciseName.uppercased())
+                        .font(Theme.label)
+                        .tracking(1.4)
+                        .lineLimit(1)
+                    Spacer(minLength: 8)
+                    if timer.hasExpired {
+                        Text("REST COMPLETE")
+                            .font(Theme.label)
+                            .tracking(1.4)
+                            .fixedSize()
+                    } else {
+                        // Only the clock is inside the timeline — redrawing the
+                        // label and the glyph once a second is a phone warming
+                        // up to say nothing.
+                        TimelineView(.periodic(from: timer.startedAt, by: 1)) { context in
+                            // Rounded up for the same reason the inline clock
+                            // does it: a bar showing 1:00 has a full minute
+                            // left rather than flicking to 0:59 on arrival.
+                            Text(Int(timer.remaining(at: context.date).rounded(.up)).restClockDescription)
+                                .font(Theme.data(19, weight: .medium))
+                                .monospacedDigit()
+                                .fixedSize()
+                        }
+                    }
+                }
+                .foregroundStyle(timer.hasExpired ? Theme.signal : Theme.live)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 9)
+                .frame(maxWidth: .infinity)
+                .background(Theme.panel)
+                .overlay(alignment: .bottom) {
+                    Rectangle()
+                        .fill((timer.hasExpired ? Theme.signal : Theme.live).opacity(0.5))
+                        .frame(height: 1)
+                }
+            }
+            .buttonStyle(.plain)
+            .transition(.move(edge: .top).combined(with: .opacity))
         }
     }
 
@@ -635,6 +824,7 @@ private struct ActiveWorkoutList: View {
             onSetUnit: { onSetExerciseUnit(exercise.exercise.id, $0) },
             onSuperset: { model.superset(id: exercise.id, with: $0) },
             onUngroup: { model.ungroup(id: exercise.id) },
+            onShowInfo: { infoFor = exercise.exercise },
             onAddDropSet: { model.addDropSet(toExerciseWith: exercise.id) },
             onDelete: { model.deleteExercise(id: exercise.id) },
             onEditNote: { noteEditorTarget = .exercise(exercise.id) },
@@ -654,6 +844,7 @@ private struct ActiveWorkoutList: View {
             }
         )
         .panelGroupRow(expanded ? .top : .single, accent: accent)
+        .id(exercise.id)
 
         if expanded {
             // Ramp-up sets belong above the prescription, not appended after
@@ -677,9 +868,15 @@ private struct ActiveWorkoutList: View {
 
                 VStack(spacing: 0) {
                     SetRow(
-                        number: index + 1,
+                        // Counted among its own kind, so two warmups don't
+                        // rename the first working set to "03".
+                        number: ordinal(of: set, at: index, in: sets),
                         set: set,
                         suggestion: model.suggestion(forSetAt: index, in: exercise),
+                        focus: $focusedField,
+                        // Weight → reps → the next set's weight. The chain is
+                        // built here because a row can't see the row below it.
+                        nextSetID: index + 1 < sets.count ? sets[index + 1].id : nil,
                         isNextUp: model.session?.nextSet?.id == set.id,
                         // Most specific wins: this set's own unit, else the
                         // exercise's, else the app default.
@@ -703,7 +900,16 @@ private struct ActiveWorkoutList: View {
                     // the one running, that same line *is* the countdown.
                     restLine(for: set, timer: restingHere ? restTimer : nil)
                         .padding(.top, 8)
+                        // Only the line that's actually running reports in —
+                        // every other set's line is a prescription, and there
+                        // are a dozen of them on screen.
+                        .onScrollVisibilityChange(threshold: 0.4) { visible in
+                            guard restingHere else { return }
+                            restLineVisible = visible
+                        }
                 }
+                // The anchor the sticky bar scrolls back to.
+                .id(set.id)
                 .panelGroupRow(.middle, accent: restingHere ? Theme.live : accent)
                 .swipeActions(edge: .trailing) {
                     Button("Delete", systemImage: "trash", role: .destructive) {
@@ -757,6 +963,14 @@ private struct ActiveWorkoutList: View {
         }
     }
 
+    /// Where this set sits among the sets of its own type — the same rule
+    /// `SetSuggestion` matches on, so the number on screen and the number the
+    /// suggestion was drawn from agree.
+    private func ordinal(of set: WorkoutSet, at index: Int, in sets: [WorkoutSet]) -> Int {
+        let type = set.type ?? .working
+        return sets[..<index].filter { ($0.type ?? .working) == type }.count + 1
+    }
+
     /// A set's rest — the prescription, or the countdown when it's this set's
     /// rest that's running. One control either way; see `RestControl`.
     @ViewBuilder
@@ -765,6 +979,7 @@ private struct ActiveWorkoutList: View {
             mode: mode(for: set, timer: timer),
             isExpanded: expandedRest == set.id,
             onToggleExpanded: { expandedRest = expandedRest == set.id ? nil : set.id },
+            onPrimaryTap: timer?.hasExpired == true ? { model.dismissRest() } : nil,
             // A typed duration is this set's rest, or — while it's counting —
             // what's left on the clock.
             onSet: { seconds in
@@ -784,6 +999,10 @@ private struct ActiveWorkoutList: View {
             onToggleExpanded: {
                 expandedRest = expandedRest == timer.setID ? nil : timer.setID
             },
+            // A finished rest needs acknowledging, not editing. One tap on the
+            // line clears it; the caret still opens the editor for the lifter
+            // who wants to put time back on the clock.
+            onPrimaryTap: timer.hasExpired ? { model.dismissRest() } : nil,
             onSet: { model.setRestRemaining($0) }
         )
     }
@@ -954,6 +1173,8 @@ private enum NoteEditorTarget: Identifiable {
 private struct PlannedSummaryRow: View {
     let workout: PlannedWorkout
     let isToday: Bool
+    /// What was logged on this day, if anything.
+    let log: BlockCompletion.DayLog?
 
     var body: some View {
         Panel(accent: accent) {
@@ -982,10 +1203,13 @@ private struct PlannedSummaryRow: View {
                         .foregroundStyle(Theme.inkMuted)
                         .lineLimit(2)
                 }
-                Text("\(workout.allSets.count) SETS")
+                Text("\(workout.plannedSetCount) SETS")
                     .font(Theme.label)
                     .tracking(1.4)
                     .foregroundStyle(workout.skippedAt != nil ? Theme.inkFaint : Theme.signal)
+                if let log {
+                    TrainedMarker(log: log)
+                }
             }
         }
         // Skipped stays visible, per Core Tenets §10 — dimmed, not hidden.
@@ -994,7 +1218,8 @@ private struct PlannedSummaryRow: View {
 
     private var accent: Color {
         if workout.skippedAt != nil { return Theme.hairline }
-        return isToday ? Theme.live.opacity(0.5) : Theme.signal.opacity(0.45)
+        if isToday { return Theme.live.opacity(0.5) }
+        return log != nil ? Theme.signal : Theme.signal.opacity(0.45)
     }
 
     /// The plan's day label, falling back to the exercise list for an ad-hoc
@@ -1028,107 +1253,149 @@ private struct ExerciseHeaderRow: View {
     let onSetUnit: (WeightUnit?) -> Void
     let onSuperset: (UUID) -> Void
     let onUngroup: () -> Void
+    let onShowInfo: () -> Void
     let onAddDropSet: () -> Void
     let onDelete: () -> Void
     let onEditNote: () -> Void
     let onChooseExercise: () -> Void
 
     var body: some View {
-        HStack(spacing: 8) {
-            Button(action: onToggleExpanded) {
-                HStack(spacing: 8) {
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(Theme.inkFaint)
-                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                    VStack(alignment: .leading, spacing: 1) {
-                        Text(exercise.displayName)
-                            .font(Theme.heading)
-                            .foregroundStyle(Theme.ink)
-                            // Two lines rather than one: program exercise names are
-                            // long and descriptive ("Deadlift — heavy (straight
-                            // bar)"), and a single line truncates the part that
-                            // distinguishes it from the other three deadlift days.
-                            .lineLimit(2)
-                            .multilineTextAlignment(.leading)
-                            .fixedSize(horizontal: false, vertical: true)
-                        // The catalog lift underneath the plan's wording —
-                        // which is what a logged max is recorded against, so
-                        // it shouldn't be invisible while lifting.
-                        if exercise.variant != nil {
-                            Text(exercise.exercise.name)
-                                .font(Theme.caption)
-                                .foregroundStyle(Theme.inkFaint)
-                                .lineLimit(1)
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(spacing: 8) {
+                Button(action: onToggleExpanded) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(Theme.inkFaint)
+                            .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(exercise.displayName)
+                                .font(Theme.heading)
+                                .foregroundStyle(Theme.ink)
+                                // Two lines rather than one: program exercise names are
+                                // long and descriptive ("Deadlift — heavy (straight
+                                // bar)"), and a single line truncates the part that
+                                // distinguishes it from the other three deadlift days.
+                                .lineLimit(2)
+                                .multilineTextAlignment(.leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                            // The catalog lift underneath the plan's wording —
+                            // which is what a logged max is recorded against, so
+                            // it shouldn't be invisible while lifting.
+                            if exercise.variant != nil {
+                                Text(exercise.exercise.name)
+                                    .font(Theme.caption)
+                                    .foregroundStyle(Theme.inkFaint)
+                                    .lineLimit(1)
+                            }
+                        }
+                        if isActive {
+                            Chip(text: "active", color: Theme.live)
                         }
                     }
-                    if isActive {
-                        Chip(text: "active", color: Theme.live)
-                    }
-                    // The coach specified a goal, not a movement — a reminder
-                    // to pick your own implementation, and a signal that this
-                    // exercise doesn't track an achieved max.
-                    if exercise.exercise.isOpenChoice {
-                        Chip(text: "your choice", color: Theme.inkMuted)
-                    }
+                    .contentShape(.rect)
                 }
-                .contentShape(.rect)
-            }
-            .buttonStyle(.plain)
+                .buttonStyle(.plain)
 
-            Spacer(minLength: 8)
+                // The coach specified a goal, not a movement — and this is the
+                // control that resolves it, not a caption about it.
+                //
+                // It used to be a plain `Chip` *inside* the expand button, so the
+                // one thing on the row that names an unmade decision did nothing
+                // when tapped except fold the exercise shut. Choosing was only
+                // reachable through the `…` menu, which is where it was reported
+                // from the gym floor as "the selector did not open on interaction".
+                // The obvious affordance is now the real one; the menu entry stays
+                // for the swap case.
+                if exercise.exercise.isOpenChoice {
+                    Button(action: onChooseExercise) {
+                        HStack(spacing: 4) {
+                            Text("YOUR CHOICE")
+                                .font(Theme.label)
+                                .tracking(1.2)
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 9, weight: .semibold))
+                        }
+                        .foregroundStyle(Theme.signal)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 4)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 3)
+                                .strokeBorder(Theme.signal.opacity(0.6), lineWidth: 1)
+                        )
+                        .fixedSize()
+                        .contentShape(.rect)
+                    }
+                    // A `List` row runs its own tap through every plain button in
+                    // it unless each says otherwise; without this, tapping the chip
+                    // also toggled the expansion behind it.
+                    .buttonStyle(.plain)
+                }
 
-            if !isExpanded {
-                Text(collapsedProgress)
-                    .font(Theme.data(14))
-                    .foregroundStyle(Theme.inkMuted)
-            }
+                Spacer(minLength: 8)
 
-            if let notes = exercise.usernotes, !notes.isEmpty {
-                Image(systemName: "note.text")
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.signal)
-            }
+                if !isExpanded {
+                    Text(collapsedProgress)
+                        .font(Theme.data(14))
+                        .foregroundStyle(Theme.inkMuted)
+                }
 
-            Menu {
-                // An open-choice slot names a goal, not a movement — recording
-                // which exercise actually filled it is the whole point, so it
-                // leads the menu while unresolved.
-                Button(
-                    exercise.exercise.isOpenChoice ? "Choose Exercise" : "Swap Exercise",
-                    systemImage: "arrow.triangle.2.circlepath",
-                    action: onChooseExercise
-                )
-                // Sticky, and the menu says so — a control that silently
-                // changes every future session is worse than one that doesn't.
-                // Pairing is a decision made at the rack, not something that
-                // can only arrive from a plan.
-                if isSupersetted {
-                    Button("Remove From Superset", systemImage: "arrow.up.and.down.and.arrow.left.and.right", action: onUngroup)
-                } else if !supersetCandidates.isEmpty {
-                    Menu("Superset With", systemImage: "arrow.triangle.merge") {
-                        ForEach(supersetCandidates, id: \.id) { candidate in
-                            Button(candidate.name) { onSuperset(candidate.id) }
+
+                Menu {
+                    // An open-choice slot names a goal, not a movement — recording
+                    // which exercise actually filled it is the whole point, so it
+                    // leads the menu while unresolved.
+                    Button(
+                        exercise.exercise.isOpenChoice ? "Choose Exercise" : "Swap Exercise",
+                        systemImage: "arrow.triangle.2.circlepath",
+                        action: onChooseExercise
+                    )
+                    // Sticky, and the menu says so — a control that silently
+                    // changes every future session is worse than one that doesn't.
+                    // Pairing is a decision made at the rack, not something that
+                    // can only arrive from a plan.
+                    if isSupersetted {
+                        Button("Remove From Superset", systemImage: "arrow.up.and.down.and.arrow.left.and.right", action: onUngroup)
+                    } else if !supersetCandidates.isEmpty {
+                        Menu("Superset With", systemImage: "arrow.triangle.merge") {
+                            ForEach(supersetCandidates, id: \.id) { candidate in
+                                Button(candidate.name) { onSuperset(candidate.id) }
+                            }
                         }
                     }
-                }
-                Button("Add Drop Set", systemImage: "arrow.down.right", action: onAddDropSet)
-                Button("Reorder Exercises", systemImage: "arrow.up.arrow.down", action: onReorder)
-                Menu("Unit — \(unit.symbol)", systemImage: "scalemass") {
-                    Picker("Unit", selection: unitSelection) {
-                        ForEach(WeightUnit.allCases, id: \.self) { option in
-                            Text(option == .pounds ? "Pounds (lb)" : "Kilograms (kg)")
-                                .tag(Optional(option))
+                    // The catalog knows what this lift works and how it's
+                    // performed; until now the only way to read any of it was to go
+                    // and *choose* an exercise, which is the wrong verb for a lift
+                    // you're already three sets into.
+                    Button("Exercise Info", systemImage: "info.circle", action: onShowInfo)
+                    Button("Add Drop Set", systemImage: "arrow.down.right", action: onAddDropSet)
+                    Button("Reorder Exercises", systemImage: "arrow.up.arrow.down", action: onReorder)
+                    Menu("Unit — \(unit.symbol)", systemImage: "scalemass") {
+                        Picker("Unit", selection: unitSelection) {
+                            ForEach(WeightUnit.allCases, id: \.self) { option in
+                                Text(option == .pounds ? "Pounds (lb)" : "Kilograms (kg)")
+                                    .tag(Optional(option))
+                            }
                         }
+                        Button("Use App Default") { onSetUnit(nil) }
                     }
-                    Button("Use App Default") { onSetUnit(nil) }
+                    Button("Edit Note", systemImage: "note.text", action: onEditNote)
+                    Button("Delete Exercise", systemImage: "trash", role: .destructive, action: onDelete)
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .font(.system(size: 16))
+                        .foregroundStyle(Theme.inkMuted)
                 }
-                Button("Edit Note", systemImage: "note.text", action: onEditNote)
-                Button("Delete Exercise", systemImage: "trash", role: .destructive, action: onDelete)
-            } label: {
-                Image(systemName: "ellipsis.circle")
-                    .font(.system(size: 16))
-                    .foregroundStyle(Theme.inkMuted)
+            }
+
+            // Under the row rather than beside it: a note is prose and needs
+            // the panel's width, and there is nothing else on this row that can
+            // afford to give it up.
+            if let programmed = exercise.notes, !programmed.isEmpty {
+                NoteLine(text: programmed, isProgrammed: true, lineLimit: isExpanded ? 4 : 1)
+            }
+            if let mine = exercise.usernotes, !mine.isEmpty {
+                NoteLine(text: mine, lineLimit: isExpanded ? 4 : 1)
             }
         }
     }
@@ -1147,7 +1414,55 @@ private struct ExerciseHeaderRow: View {
     }
 }
 
+/// A note, shown where it was written rather than behind a tap.
+///
+/// **Notes existed and were invisible.** Both kinds were signalled by a small
+/// `note.text` glyph and nothing else — the text itself was only reachable by
+/// opening the editor, which is not a thing anyone does mid-set. Reported as
+/// "notes aren't visible from the workout. If something's written I need to be
+/// able to see it", and that's the whole of it: a note you have to go and find
+/// is a note that doesn't exist.
+///
+/// **Two kinds, told apart, because they aren't the same claim.** A programmed
+/// note is what the coach wrote and the lifter can't change (it lives in the
+/// `plannedFrom` snapshot, or on the `PlannedExercise`); a lifter's note is
+/// their own. Rendering them identically would let "2s pause at the chest" and
+/// "shoulder felt off today" read as the same kind of instruction. The glyph
+/// and the ink both carry the difference, never colour alone (WCAG §1.4.1).
+private struct NoteLine: View {
+    let text: String
+    /// `true` for the program's own words, `false` for the lifter's.
+    var isProgrammed = false
+    var lineLimit = 3
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 5) {
+            Image(systemName: isProgrammed ? "text.quote" : "note.text")
+                .font(.system(size: 11))
+                .foregroundStyle(isProgrammed ? Theme.inkFaint : Theme.signal)
+                .fixedSize()
+            Text(text)
+                .font(Theme.caption)
+                .foregroundStyle(isProgrammed ? Theme.inkMuted : Theme.ink)
+                .lineLimit(lineLimit)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+        }
+    }
+}
+
 // MARK: - Set row
+
+/// One typeable number, addressed so focus can move between them.
+///
+/// This is what makes NEXT possible: a `@FocusState` has to hold a value the
+/// whole screen agrees on, and `Bool` per field can only ever say "me" or "not
+/// me". Weight and reps are separate cases rather than one case with a flag so
+/// the chain reads as what it is — `.weight(a) → .reps(a) → .weight(b)`.
+enum SetField: Hashable {
+    case weight(UUID)
+    case reps(UUID)
+}
 
 /// One exercise group, collapsed to a single draggable row.
 ///
@@ -1202,11 +1517,22 @@ private struct ReorderRow: View {
 }
 
 private struct SetRow: View {
+    /// This set's position **among sets of its own kind** — warmup 1, 2, 3 and
+    /// working 1, 2, 3, each counting from one.
+    ///
+    /// Numbering used to run straight down the exercise, which meant adding two
+    /// warmups renamed the first working set to "03". The number a lifter wants
+    /// while working is which set of the prescription they're on, and warmups
+    /// aren't part of it.
     let number: Int
     let set: WorkoutSet
     /// What the lifter did last time, shown greyed in whichever of reps/weight
     /// is still empty. A proposal, never a prescription — see `SetSuggestion`.
     let suggestion: SetSuggestion.Values?
+    /// The screen's focus, so this row's NEXT can reach the row below it.
+    let focus: FocusState<SetField?>.Binding
+    /// The set after this one, or nil at the end of the exercise.
+    let nextSetID: UUID?
     let isNextUp: Bool
     /// The unit this row reads and writes weights in — already resolved by the
     /// caller through `set.unit ?? exerciseUnit ?? preferredUnit`.
@@ -1232,14 +1558,23 @@ private struct SetRow: View {
             if hasAnnotations {
                 annotations
             }
+            // A set's note is prose and gets its own line, for the same reason
+            // the exercise's does — it was a glyph on the `…` button and
+            // nothing else, which is not a way to read anything.
+            if let programmed = self.set.plannedFrom?.notes, !programmed.isEmpty {
+                NoteLine(text: programmed, isProgrammed: true, lineLimit: 2)
+                    .padding(.leading, 38)
+            }
+            if let mine = self.set.usernotes, !mine.isEmpty {
+                NoteLine(text: mine, lineLimit: 2)
+                    .padding(.leading, 38)
+            }
         }
         .padding(.vertical, 2)
     }
 
     private var hasAnnotations: Bool {
-        prescription != nil
-            || showsSuggestionTag
-            || (self.set.type.map { $0 != .working } ?? false)
+        prescription != nil || showsSuggestionTag
     }
 
     /// Whether a greyed number is currently standing in for an entry.
@@ -1277,29 +1612,7 @@ private struct SetRow: View {
         HStack(spacing: 6) {
             checkboxButton
 
-            Text(String(format: "%02d", number))
-                .font(Theme.data(13))
-                .foregroundStyle(Theme.inkFaint)
-                // Never let the index be the thing that gets truncated.
-                .fixedSize()
-
-            SuggestingNumberField(
-                value: repsBinding,
-                suggestion: suggestion?.reps.map(Double.init),
-                fractionDigits: 0,
-                label: "reps",
-                isActive: !done,
-                font: Theme.data(15, weight: done ? .regular : .medium),
-                foreground: Theme.ink,
-                step: 1,
-                onStep: { delta in onRepsChange(max(0, (self.set.reps ?? 0) + Int(delta))) }
-            )
-            .layoutPriority(1)
-
-            Text("×")
-                .font(Theme.data(14))
-                .foregroundStyle(Theme.inkFaint)
-                .fixedSize()
+            typeBadge
 
             SuggestingNumberField(
                 value: weightBinding,
@@ -1315,7 +1628,10 @@ private struct SetRow: View {
                 onStep: { delta in
                     let current = self.set.weight?.expressed(in: unit).value ?? 0
                     onWeightChange(Measurement(value: max(0, current + delta), unit: weightUnit))
-                }
+                },
+                focus: focus,
+                id: .weight(self.set.id),
+                next: .reps(self.set.id)
             )
             .layoutPriority(2)
 
@@ -1323,6 +1639,27 @@ private struct SetRow: View {
                 .font(Theme.data(13))
                 .foregroundStyle(Theme.inkFaint)
                 .fixedSize()
+
+            Text("×")
+                .font(Theme.data(14))
+                .foregroundStyle(Theme.inkFaint)
+                .fixedSize()
+
+            SuggestingNumberField(
+                value: repsBinding,
+                suggestion: suggestion?.reps.map(Double.init),
+                fractionDigits: 0,
+                label: "reps",
+                isActive: !done,
+                font: Theme.data(15, weight: done ? .regular : .medium),
+                foreground: Theme.ink,
+                step: 1,
+                onStep: { delta in onRepsChange(max(0, (self.set.reps ?? 0) + Int(delta))) },
+                focus: focus,
+                id: .reps(self.set.id),
+                next: nextSetID.map { .weight($0) }
+            )
+            .layoutPriority(1)
 
             RPEPicker(
                 value: self.set.rpe,
@@ -1334,10 +1671,93 @@ private struct SetRow: View {
         }
     }
 
-    /// One glyph, four capabilities. This was a bare note button; a set had no
-    /// way to change its own unit or its type, which meant a set added as the
-    /// wrong kind had to be deleted and remade. Matches the planner's set row,
-    /// which has had this menu all along.
+    /// The set's index, and its kind, in one tappable badge: `W1`, `2`, `D1`.
+    ///
+    /// This is the row's answer to "no way to toggle or see which sets are
+    /// warmup or working". Seeing it was previously a small uppercase word on
+    /// the *second* line, and only for non-working sets; changing it meant
+    /// finding a `Picker` three levels inside the `…` menu. Both now live on
+    /// the number that was already sitting there doing nothing.
+    ///
+    /// The letter is the channel, not the colour (WCAG §1.4.1) — the tint only
+    /// reinforces it, which matters because the badge is small and the app is
+    /// read at arm's length.
+    private var typeBadge: some View {
+        Menu {
+            Picker("Set Type", selection: typeSelection) {
+                ForEach(SetType.allCases, id: \.self) { type in
+                    Text(type.rawValue.capitalized).tag(type)
+                }
+            }
+        } label: {
+            Text(badgeText)
+                .font(Theme.data(13, weight: .medium))
+                .foregroundStyle(badgeInk)
+                .frame(minWidth: 30, minHeight: 26)
+                // Never let the index be the thing that gets truncated.
+                .fixedSize()
+                .padding(.horizontal, 5)
+                .background(badgeFill)
+                .clipShape(RoundedRectangle(cornerRadius: 5))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 5)
+                        .strokeBorder(badgeEdge, lineWidth: 1)
+                )
+                .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var setType: SetType { self.set.type ?? .working }
+
+    private var badgeText: String {
+        switch setType {
+        case .warmup: "W\(number)"
+        case .working: String(format: "%02d", number)
+        case .drop: "D\(number)"
+        }
+    }
+
+    /// **Three tiers of prominence, not three hues.** The report was that set
+    /// classification is "too subtle", and it was: the badge was bare text in
+    /// two shades of grey, sitting in a row where every other control wears an
+    /// outlined box. Two things were wrong — it didn't look editable (it opens
+    /// a menu), and it didn't separate the kinds.
+    ///
+    /// It's a box now, like everything else the lifter can change, and the
+    /// three kinds differ by *brightness* rather than by colour: a working set
+    /// reads brightest because it's the work, a warmup recedes, and a drop
+    /// takes the app's cyan because it's a departure from the prescription.
+    /// Deliberately no new palette entry — a fourth hue would have to be
+    /// learned, and the letter is still the channel that carries the meaning
+    /// (WCAG §1.4.1) with the tint only reinforcing it.
+    private var badgeInk: Color {
+        switch setType {
+        case .warmup: Theme.inkMuted
+        case .working: Theme.ink
+        case .drop: Theme.signal
+        }
+    }
+
+    private var badgeEdge: Color {
+        switch setType {
+        case .warmup: Theme.hairline
+        case .working: Theme.fieldEdge
+        case .drop: Theme.signal.opacity(0.55)
+        }
+    }
+
+    /// Only the working set is filled. A ramp of five warmups above one working
+    /// set should not be five filled boxes and one — the fill is what makes the
+    /// prescribed work findable while scrolling.
+    private var badgeFill: Color {
+        setType == .working ? Theme.panelRaised : .clear
+    }
+
+    /// Unit, note, delete. Set type used to be in here too and has moved to the
+    /// badge at the head of the row — a control buried three levels inside a
+    /// `…` menu is one the lifter reported as not existing, and the row already
+    /// had a place where the set's kind belongs.
     private var setMenu: some View {
         Menu {
             Menu("Unit — \(unit.symbol)", systemImage: "scalemass") {
@@ -1350,11 +1770,6 @@ private struct SetRow: View {
                 // Only offered when it would do something.
                 if hasUnitOverride {
                     Button("Use Exercise Default (\(exerciseUnit.symbol))") { onUnitChange(nil) }
-                }
-            }
-            Picker("Set Type", selection: typeSelection) {
-                ForEach(SetType.allCases, id: \.self) { type in
-                    Text(type.rawValue.capitalized).tag(type)
                 }
             }
             Button("Edit Note", systemImage: "note.text", action: onEditNote)
@@ -1404,14 +1819,6 @@ private struct SetRow: View {
             }
 
             Spacer(minLength: 0)
-
-            if let type = self.set.type, type != .working {
-                Text(type.rawValue.uppercased())
-                    .font(Theme.label)
-                    .tracking(1.1)
-                    .foregroundStyle(Theme.inkFaint)
-                    .fixedSize()
-            }
         }
         .padding(.leading, 38)
     }

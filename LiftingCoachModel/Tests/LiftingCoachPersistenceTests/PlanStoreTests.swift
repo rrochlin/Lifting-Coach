@@ -110,7 +110,7 @@ struct PlanStoreTests {
                                 exercise: squat,
                                 sets: [
                                     PlannedSet(reps: 5, type: .warmup, load: .percentOf(0.5, of: .goal)),
-                                    PlannedSet(reps: 3, type: .working, load: .percentOf(0.85, of: .goal), effort: EffortTarget(rpe: 9), restTime: 240),
+                                    PlannedSet(count: 3, reps: 3, type: .working, load: .percentOf(0.85, of: .goal), effort: EffortTarget(rpe: 9), restTime: 240),
                                 ],
                                 effort: EffortTarget(rpe: 7)
                             )
@@ -157,6 +157,24 @@ struct PlanStoreTests {
         #expect(loaded?.defaultRestTimes?[.working] == 180)
         #expect(loaded?.defaultRestTimes?[.warmup] == 60)
         #expect(loaded?.program?.count == 2)
+    }
+
+    @Test("A row's set count survives the round trip")
+    func roundTripsSetCount() throws {
+        let fixture = try makeFixture()
+        let original = block()
+
+        try fixture.plans.save(original, userId: fixture.user.id)
+        let loaded = try fixture.plans.fetchBlock(id: original.id)
+
+        let sets = try #require(
+            loaded?.program?[day(2026, 3, 2)]?.first?.exercises?.first?.first?.sets
+        )
+        // Two rows, four sets: a warmup single and 3x3 @ 85%.
+        #expect(sets.count == 2)
+        #expect(sets[0].count == 1)
+        #expect(sets[1].count == 3)
+        #expect(loaded?.program?[day(2026, 3, 2)]?.first?.plannedSetCount == 4)
     }
 
     @Test("Block settings update without rewriting the program")

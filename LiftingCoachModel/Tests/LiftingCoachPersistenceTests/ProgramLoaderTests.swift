@@ -55,10 +55,19 @@ struct ProgramLoaderTests {
         #expect(loaded != nil)
         #expect(loaded?.startDate == blockStart)
 
+        // SUM, not COUNT. A row prescribes `setCount` sets — the program is
+        // written "3x5 @ 72.5%" and stored that way — so 698 sets live in 209
+        // rows. Counting rows here would be asserting how the file happens to
+        // be punctuated rather than how much work it prescribes.
         let persistedSets = try database.writer.read { db in
-            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM plannedSet")
+            try Int.fetchOne(db, sql: "SELECT SUM(setCount) FROM plannedSet")
         }
         #expect(persistedSets == 698)
+
+        let persistedRows = try database.writer.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM plannedSet")
+        }
+        #expect(persistedRows == 209)
     }
 
     @Test("The program's maxes load as goals against the lifts they govern")
@@ -115,13 +124,48 @@ struct ProgramLoaderTests {
         let all = try ExerciseStore(database).fetchAll()
 
         let triceps = try #require(all.first { $0.name == "Triceps" })
-        #expect(triceps.suggestions == ["Overhead extension", "Pushdown"])
+        #expect(triceps.suggestions == ["Overhead Extension", "Pushdown"])
 
         // Suggestions are optional — the program floats none for a plain
         // cardio slot, and an empty list would read as "nothing is suitable".
         let cardio = try #require(all.first { $0.name == "Cardio" })
         #expect(cardio.isOpenChoice)
         #expect(cardio.suggestions == nil)
+    }
+
+    @Test("Every suggested movement is findable in the catalog")
+    func suggestionsResolveAgainstTheCatalog() throws {
+        // A suggestion chip is a *search shortcut* — tapping one types it into
+        // the picker's search field. So a suggestion the catalog has no word
+        // for isn't a harmless bit of prose, it's a button that empties the
+        // screen. That's what happened on the Tuesday deadlift day: the row
+        // slot suggested "Chest-supported row" and "Seal row", the catalog
+        // contains neither, and the lifter got a blank list mid-workout.
+        //
+        // The coach's own wording is not lost by fixing this — it lives in
+        // `PlannedExercise.variant`, which is what the tracker shows as the
+        // exercise's title. This is the translation layer, and translating is
+        // the job (see `ProgramLoader`'s doc comment).
+        let (database, _, _) = try loadBundled()
+        let all = try ExerciseStore(database).fetchAll()
+        // Through the picker's own search rather than a substring test, so this
+        // asks what the chip actually does. It used to check `contains`, which
+        // has since stopped being how the picker searches — a guard that
+        // measures something the app no longer does can pass while the button
+        // it was written for is broken.
+        let index = ExerciseSearchIndex(all)
+
+        var checked = 0
+        for slot in all where slot.isOpenChoice {
+            for suggestion in slot.suggestions ?? [] {
+                #expect(!index.ranked(suggestion).isEmpty,
+                        "\(slot.name): '\(suggestion)' finds nothing")
+                checked += 1
+            }
+        }
+        // Guards the guard: a loader that stopped carrying suggestions at all
+        // would otherwise make this test pass by having nothing to check.
+        #expect(checked >= 12)
     }
 
     @Test("The program's own wording survives as a variant")

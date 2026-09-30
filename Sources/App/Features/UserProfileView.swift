@@ -19,11 +19,16 @@ struct UserProfileView: View {
     @State private var exportedFile: SharedFile?
     @State private var exportSummary: String?
     @State private var exportError: String?
+    @State private var isBrowsingExercises = false
+    #if DEBUG
+    @State private var didOpenLaunchLibrary = false
+    #endif
 
     var body: some View {
         NavigationStack {
             List {
                 unitsSection
+                referenceSection
                 accountSection
                 dataSection
             }
@@ -32,6 +37,24 @@ struct UserProfileView: View {
             .navigationTitle("Profile")
             .sheet(item: $exportedFile) { file in
                 ShareSheet(url: file.url)
+            }
+            #if DEBUG
+            .task {
+                // Latched: `.task` re-runs on every return to this tab, and a
+                // sheet that re-presents itself reads as a bug.
+                guard !didOpenLaunchLibrary, LaunchArguments.opensExerciseLibrary else { return }
+                didOpenLaunchLibrary = true
+                try? await Task.sleep(for: .milliseconds(400))
+                isBrowsingExercises = true
+            }
+            #endif
+            .sheet(isPresented: $isBrowsingExercises) {
+                // No `onPick`: browsing. See `ExercisePicker`.
+                #if DEBUG
+                ExercisePicker(initialDetailQuery: LaunchArguments.exerciseLibraryQuery)
+                #else
+                ExercisePicker()
+                #endif
             }
         }
     }
@@ -100,6 +123,48 @@ struct UserProfileView: View {
                     .foregroundStyle(Theme.inkMuted)
             }
         }
+        .panelRow()
+    }
+
+    /// The catalog, readable.
+    ///
+    /// ~870 vendored entries with equipment, mechanic, force, level, both
+    /// muscle lists and step-by-step instructions have been on the phone since
+    /// the catalog import landed, and the only way to read any of it was to go
+    /// and *choose* an exercise — which is a verb you only reach for while
+    /// editing a workout. Same screen, same search, same usage ordering; the
+    /// only difference is that nothing here commits.
+    ///
+    /// Lives on Profile because it's reference material rather than part of the
+    /// training loop. The in-the-moment route is the tracker's own `…` menu
+    /// ("Exercise Info"), which opens straight to the lift in front of you.
+    @ViewBuilder
+    private var referenceSection: some View {
+        SectionLabel(text: "reference").panelRow()
+
+        Button { isBrowsingExercises = true } label: {
+            Panel {
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("EXERCISE LIBRARY")
+                            .font(Theme.label)
+                            .tracking(1.4)
+                            .foregroundStyle(Theme.signal)
+                        Text("Search the catalog: what each lift works, how it's performed, and everything you've logged under it.")
+                            .font(Theme.caption)
+                            .foregroundStyle(Theme.inkMuted)
+                            .multilineTextAlignment(.leading)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    Spacer(minLength: 6)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Theme.inkFaint)
+                }
+            }
+            .contentShape(.rect)
+        }
+        .buttonStyle(.plain)
         .panelRow()
     }
 

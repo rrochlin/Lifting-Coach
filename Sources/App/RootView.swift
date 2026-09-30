@@ -33,10 +33,15 @@ struct RootView: View {
     private var tabs: some View {
         TabView(selection: $selection) {
             Tab("Home", systemImage: "house.fill", value: RootTab.home) {
-                HomeView(onStartWorkout: { planned in
-                    pendingStart = planned
-                    selection = .workout
-                })
+                HomeView(
+                    onStartWorkout: { planned in
+                        pendingStart = planned
+                        selection = .workout
+                    },
+                    // Resuming hands over nothing: the session is already on
+                    // disk and the tracker picks it up itself.
+                    onResumeWorkout: { selection = .workout }
+                )
             }
             Tab("Workout", systemImage: "figure.strengthtraining.traditional", value: RootTab.workout) {
                 WorkoutTrackerView(pendingStart: $pendingStart)
@@ -103,6 +108,14 @@ enum LaunchArguments {
         value(for: "-restDemo").flatMap(Int.init)
     }
 
+    /// `-finishDemo` finishes the `-restDemo` workout the moment it's built,
+    /// which is the only way to see `WorkoutSummaryOverlay` from the command
+    /// line — it lives on the far side of a toolbar tap and a confirm dialog,
+    /// and simctl can tap neither. Pair with `-restDemo`.
+    static var finishesDemo: Bool {
+        ProcessInfo.processInfo.arguments.contains("-finishDemo")
+    }
+
     /// `-openExercisePicker` opens the tracker's exercise picker on launch, and
     /// `-openExercisePicker <name>` pushes straight through to the detail
     /// screen of the first exercise whose name contains that text.
@@ -117,6 +130,17 @@ enum LaunchArguments {
         // flag names the exercise to push onto.
         guard next < arguments.endIndex, !arguments[next].hasPrefix("-") else { return "" }
         return arguments[next]
+    }
+
+    /// `-searchExercises <query>` opens the picker with that already typed into
+    /// the search field.
+    ///
+    /// Search is the one thing about the picker a screenshot can't otherwise
+    /// reach: `simctl` can install, launch and screenshot, but it cannot type,
+    /// so every ranked result was invisible from the command line. Same stopgap
+    /// family as `-initialTab`, and it wants `-initialTab workout` beside it.
+    static var exerciseSearchQuery: String? {
+        value(for: "-searchExercises")
     }
 
     /// `-openWorkoutDetail 0` pushes the detail screen of the nth most recent
@@ -145,6 +169,30 @@ enum LaunchArguments {
     /// same family as the rest of these.
     static var opensReorderMode: Bool {
         ProcessInfo.processInfo.arguments.contains("-reorderMode")
+    }
+
+    /// `-openExerciseLibrary` opens Profile's exercise library (needs
+    /// `-initialTab profile`); `-openExerciseLibrary "Squat"` pushes straight
+    /// through to that exercise's entry. Same stopgap family as the rest — the
+    /// library is behind a tap, and simctl can't tap.
+    static var opensExerciseLibrary: Bool {
+        ProcessInfo.processInfo.arguments.contains("-openExerciseLibrary")
+    }
+
+    /// The exercise `-openExerciseLibrary` should open, if it names one.
+    static var exerciseLibraryQuery: String? {
+        value(for: "-openExerciseLibrary")
+    }
+
+    /// `-rpeDemo` opens the RPE scale on the first set row that draws one.
+    ///
+    /// The scale is a popover behind a tap, and simctl can't tap. It's also a
+    /// control the owner has reported on twice from the gym, so being able to
+    /// look at it from the command line is worth a flag — the first version of
+    /// this check forced *every* `RPEPicker` on screen open at once, and iOS
+    /// presented none of them.
+    static var opensRPEScale: Bool {
+        ProcessInfo.processInfo.arguments.contains("-rpeDemo")
     }
 
     /// `-openCalendarDay 18` opens History's calendar dialog on that day of the

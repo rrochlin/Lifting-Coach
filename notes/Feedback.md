@@ -2,7 +2,7 @@
 This document will be a thorough review of the current application state and issues that I'm seeing broken down by section
 
 ## Home
-- highlighted workout doesn't have  a quickstart click interaction
+- ~~highlighted workout doesn't have  a quickstart click interaction~~ — the today card starts the workout and switches to the Workout tab. An in-progress session now gets its own card above it, in amber, so a workout left running is visible from the screen the app opens on rather than only from the tab you'd have to think to visit.
 - ~~we should shift the plan timeline back for testing. I'm actually doing that plan now and I'm on the last workout of week 5 actually~~ — the block's header panel on Plan opens Block Settings: start date (with an explicit "move the program with it"), length in weeks, name, rest defaults, delete. The TODAY readout says which week the change lands you in, so you dial the date until it reads week 6.
 - I can log bodyweight, but that doesn't appear to go anywhere. Also I'd like to use a wheel selector prepoulated with the previous recorded weight. we should allow up to 1/10 kg/lb resolution entered.
 
@@ -26,6 +26,19 @@ This document will be a thorough review of the current application state and iss
 - slide delete has the same issue as the workout tab
 - no confirmation to save changes on the plan, we should have that when modifying a day.
 - no where to set RPE's
+- ~~the block doesn't indicate that I've completed a workout tied to it~~ — the
+  planner showed one half of a block, the prescription, and nothing said a day
+  had been trained; six weeks of finished work looked identical to six weeks of
+  intentions. Three rollups now, from the same source: a trained day's panel
+  gets a cyan footer reading `✓ 12 / 14 SETS LOGGED`, a week header reads
+  `5/6d`, and the block header gains `TRAINED 12 / 69 days` beside its week
+  count.
+  - **Counts, not verdicts.** `Workout.blockId` is never written, so the join
+    is by calendar date — the same one Home's adherence already makes. That
+    can't tell an ad-hoc session on a programmed day from the programmed
+    session, so the screen reports logged sets against programmed sets and
+    leaves the reading to the lifter (Core Tenets §1) rather than stamping a
+    day "done".
 
 ## History
 - ~~calendar view~~ — `WorkoutCalendarView`: one month at a time, dots with no detail, a dialog on touch with an EDIT that opens the editor directly. The paged list is still there behind a toolbar toggle, because the two answer different questions.
@@ -34,13 +47,179 @@ This document will be a thorough review of the current application state and iss
   - "See incomplete sets" is the one part with nothing to show: finishing a workout deletes its incomplete sets, so none survive into history. If they should survive instead, that's a change to `WorkoutSession.finish`, not to this screen.
 - ~~not showing time of day workout was completed~~ — shown on every row.
 
+## Search
+- ~~search is far too naive — "Barbell incline press" finds nothing even though
+  "Barbell Incline Bench Press - Medium Grip" is right there~~ — the picker
+  ranks with `ExerciseSearch` now: tokens rather than substrings, so word order
+  and missing words are fine; equipment and muscles searchable; plurals and
+  compounds collapsed (`pushups` ≡ `push up`); typos tolerated; and a small
+  authored alias table for gym words the vendored catalog doesn't use (`pec
+  deck` → *Butterfly*, `ohp` → *shoulder press*). Measured against 149 real
+  queries from five years of the owner's own logging: substring search answered
+  84% of them with a blank screen, this answers 0%.
+  - Vector search was built and measured rather than assumed. Both of Apple's
+    on-device models are worse than the string matching here — they encode
+    topical relatedness, so `squat` lands nearer `deadlift` than any real
+    synonym pair, and the contextual model ranks *Pec Deck* → Butterfly 851st
+    of 873. The reasoning is in `ExerciseSearch`'s doc comment so it doesn't
+    get re-litigated from intuition.
+
 ## Profile
 - fine for now
+- ~~look up exercise info — we have it all, we might as well show it~~ — EXERCISE LIBRARY under `reference`: the whole vendored catalog, searchable, ordered by what you actually train. Each entry shows its tags, primary and secondary muscles (imported since the catalog landed and displayed nowhere until now), everything you've logged under it, and the catalog's own step-by-step instructions. Mid-workout the same screen is one tap away from any lift's `…` menu as "Exercise Info".
 - ~~data export~~ — EXPORT DATA writes the whole local database as one JSON archive and hands it to the share sheet. Import stays out by direction; the screen says so rather than leaving the section half-empty.
+
+## 20-08-26 — from the gym floor
+Raw, in the order it was reported. Struck through as each is closed.
+
+- ~~Adding color and a box to the set classification. It's too subtle
+  currently~~ — the badge is an outlined box like every other control in the
+  row (it opens a menu, and it didn't look like it did), and the three kinds
+  differ by brightness: a working set is filled and brightest, a warmup
+  recedes, a drop takes the app's cyan. No new hue — the letter is still the
+  channel (WCAG §1.4.1).
+- ~~Auto fill suggested reps.~~ / ~~Fill in lower working sets with weight I
+  enter above~~ — one bug, in `TrackerModel.suggestion`: a `guard let` on the
+  exercise's history returned nil before `SetSuggestion` was ever asked, which
+  killed its "the set above speaks" fallback in exactly the case it was written
+  for — a lift with no logged history. Typing 90 into the first set now
+  proposes it, greyed, into every blank set below it, and checking one off
+  commits it.
+- Probably should just add the warm up sets to my plan also — **not an app
+  change**; that's an edit to the program. It is easier now: a planned row says
+  how many sets it is, and a set's type menu makes the rows above them warmups. Authoring a *ramp* (45/95/135/185) is still row by
+  row — the generated warmup block in `## 21-08-26 — from build 68
+From `notes/Workout App/Mid lift thoughts.md`.
+
+- ~~Notes aren't visible from the workout. If something's written I need to be
+  able to see it.~~ — they were signalled by a small `note.text` glyph and
+  nothing else, so the text was only reachable by opening the editor, which is
+  not a thing anyone does mid-set. Both kinds now render as a line where they
+  were written — on the exercise header and under the set — and they're told
+  apart: the program's own words are muted with a quote glyph, the lifter's are
+  bright with a note glyph. A collapsed exercise gets one line, the lift being
+  worked gets four.
+- ~~The alert for rest completion should be the next set in order, not the
+  current set that triggered the rest.~~ — `RestTimer.upNext` carries the lift
+  the *next* set belongs to, read after the triggering set was logged. The
+  notification reads "Up next — Squat", or "Last set done" where there is no
+  next set rather than inventing one. The sticky bar deliberately still names
+  the lift the rest *follows*, because tapping it scrolls to that set.
+- ~~After a rest time is over if I'm not on the app I don't get the sound, but
+  when I open the app the sound plays.~~ — two halves.
+  - The late chime is fixed: `Task.sleep` doesn't run while the app is
+    suspended, so a rest that ended in a pocket fired the instant the app
+    reopened. An expiry more than 3s late is treated as stale — no chime, and
+    the timer clears. Checking elapsed time rather than app state is what makes
+    that work, since on reopen the app *is* active.
+  - The notification now plays the same three beeps as the in-app chime instead
+    of `.default`. **It still obeys the ring/silent switch and nothing in the
+    app can change that** — notification audio is delivered by the system, so
+    the `.playback` trick that makes `RestChime` audible on a silenced phone
+    doesn't apply to it. Bypassing silent from the background needs Apple's
+    Critical Alerts entitlement, which is granted by application. If the phone
+    is on silent and the app is backgrounded, the haptic and the banner are
+    what's left.
+  - Fixed in passing: with the app in the foreground both the chime *and* the
+    notification's sound were playing. The foreground presenter asks for
+    `.banner` only now — the chime is the better of the two, because it goes
+    through the silent switch.
+
+## Backlog` is what fixes that properly.
+- ~~After the timer sound effect happened my music audio was quiet until the
+  timer got dismissed in the panel~~ — `.duckOthers` ducks for as long as the
+  audio session is *active*, and `RestChime` activated once and never let go,
+  so the first rest period of a session dipped the music for the rest of it. It
+  deactivates with `.notifyOthersOnDeactivation` once the chime finishes.
+- ~~It should just auto dismiss after 1-2s~~ / ~~when a timer's completed it
+  should dismiss or tap to dismiss, dismiss on next interaction~~ — REST
+  COMPLETE clears itself after 2s (`TrackerModel.expiredLinger`). Tapping it
+  and checking off the next set both still clear it immediately, and putting
+  time back on the clock cancels the tidy-up.
+- ~~I think the sound only happens if the app's open? Nope I had it open and
+  the sound didn't fire, I did get a notification though~~ / ~~sound is
+  wayyyyy too quiet on rest time out~~ — same root cause, and it was not a
+  volume setting. `AudioServicesPlaySystemSound` is routed by the *system*, not
+  through the app's `AVAudioSession`, so the `.playback` category that is
+  supposed to make rest audible on a silenced phone had no bearing on it and
+  its volume was never ours to set. It plays a real asset through
+  `AVAudioPlayer` now — three rising beeps, generated by
+  `Tools/make-rest-chime.py`. Separately, the chime hung off an `onChange` in
+  the tracker's list, so a lifter on another tab got the notification and no
+  sound; it fires from `TrackerModel` now, where expiry actually happens.
+- **Creating a new warmup set and then dragging it down messes up all the set
+  orders** — **still open.** Not reproduced: nothing on this machine can drag,
+  and the model's `moveSet` is already tested and correct (which matches "on
+  interaction it's all fixed"). It is a stale-render bug in the tracker's set
+  `ForEach`, and it's the same family as the two reorder bugs already fixed in
+  this file — many rows per `ForEach` element. Wants the UI test target that
+  `## Backlog` has wanted all along.
+- ~~Once a block's complete the transition to the next one is really jarring.
+  Animate/scroll?~~ — the list scrolls to the newly active exercise. Keyed on
+  the *exercise*, not the set, so it doesn't yank the screen after every set of
+  the lift you're on.
+- ~~Need a visible running timer on the workout. Maybe even a sticky header for
+  it~~ — a sticky bar with the lift and the countdown, appearing **only while
+  the rest line's own clock is scrolled out of sight**. It's a readout, not a
+  fourth rest control: the only thing to press is the bar itself, which scrolls
+  back to the line that does the editing.
+- ~~Workout complete pop up after finishing a workout.~~ —
+  `WorkoutSummaryOverlay`: time, sets, lifts, volume, and the lifts by name.
+  It reports rather than grades — no score, no streak, no mark out of the plan.
+- ~~On the workout view there's no indication that I've completed that
+  workout.~~ — the week view's day cards carry the same `TrainedMarker` the
+  planner does, from the same `BlockCompletion`.
+- ~~In the planner we should be able to program sets x weight x reps to make
+  writing easier if we're doing the same weight for multiple sets.~~ — every
+  planned set row carries a **set count** (`PlannedSet.count`, migration
+  `v14_plannedSetCount`), so a row reads `4 × 5 × 225 lb @7` and one row is the
+  whole prescription. Defaults to 1 on a new row.
+
+  **Done twice.** The first answer was a separate `ALL 4 × 5 → APPLY` bar above
+  the rows, which wrote them in bulk. It worked and it was the wrong shape: it
+  was a second control saying the same thing as the rows beneath it, having to
+  be kept seeded and in agreement with them, and it still left four rows behind
+  once pressed. Corrected on the owner's call — "this is a much more standard
+  way to write a program" — and it is: sets × reps × weight is the notation
+  every program on paper is written in. The bar and
+  `PlannedWorkoutDraft.setWorkingSets` are both gone.
 
 ## Backlog
 Not broken — wanted, and bigger than a fix.
 
+- **A warmup block, generated.** Adding warmup sets one at a time and typing
+  each weight is the friction; what's wanted is "here is the ramp to today's
+  top set", built down from it. This needs a *scheme* the app doesn't have —
+  how many steps, what percentages, whether they're of the first working set or
+  of a max, whether bar-only counts as a step, and how it rounds to loadable
+  plates (which is the plate calculator above, so the two land together). It is
+  emphatically not the app deciding your warmup (Core Tenets §1): it proposes a
+  ramp into real, editable sets, the way `SetSuggestion` proposes a number.
+  Until then `Add Warmup Set` prepends one empty set at a time, and an empty
+  warmup field now shows last session's ramp greyed.
+- **Rep-aware weight suggestion.** A suggestion drawn from last session's sets
+  of 8 is a bad proposal for today's triple, and today the fallback carries the
+  weight across unchanged. Doing this properly means relating load to reps —
+  which is the **theoretical-max model that deliberately doesn't exist**
+  (`MaxReference.theoretical` resolves to `nil` on purpose, and `Ideas.md`
+  explicitly distrusts the standard formulas). So this is blocked on that
+  decision, not on the suggestion code. What's *not* blocked and is already
+  done: matching within set type and by ordinal, so a warmup draws from warmups
+  and a fourth working set from the fourth.
+- **Lock-screen and Dynamic Island control.** "Unlocking my phone to check off
+  an active set sucks" — twice, in two months. The real answer is a Live
+  Activity: the running rest timer and the next set on the lock screen, with a
+  check-off control. `ActivityKit`, an app-extension target, and a shared app
+  group for the session state; the timer is the easy half (it renders from
+  `startedAt`/`endsAt`, which is already how `RestTimer` stores itself) and
+  logging a set from the widget is the half that needs real design. Notably
+  this does **not** need the music player integrated — that was the guess in
+  the 19-07 note, and it's wrong; a Live Activity sits on the lock screen
+  whatever is playing.
+- **Separate RPE scales by rep range.** An RPE 8 triple and an RPE 8 set of ten
+  are different instructions, and the app treats the number as one scale. Noted
+  19-07-26 and still unaddressed — probably wants the effort target to carry
+  its rep context rather than a second scale, but that's a design question.
 - **Plate calculator (lb and kg).** Given a target weight and a bar, say what to
   load per side. Needs a real model of what's *available*: bar weight (45/35/15
   lb, 20/15 kg), which plates the gym has and how many, and whether the lifter

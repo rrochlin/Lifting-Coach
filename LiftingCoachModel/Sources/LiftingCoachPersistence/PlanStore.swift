@@ -52,6 +52,9 @@ private struct PlannedSetRow: Codable, FetchableRecord, PersistableRecord {
     var id: String
     var plannedExerciseId: String
     var position: Int
+    /// How many identical sets this row prescribes. Named to avoid colliding
+    /// with SQL's `count`.
+    var setCount: Int
     var reps: Int?
     var setType: String?
     var loadKind: String?
@@ -243,6 +246,7 @@ public struct PlanStore: Sendable {
                         id: set.id.uuidString,
                         plannedExerciseId: exercise.id.uuidString,
                         position: setPosition,
+                        setCount: set.count,
                         reps: set.reps,
                         setType: set.type?.rawValue,
                         loadKind: load.kind,
@@ -431,6 +435,7 @@ public struct PlanStore: Sendable {
     private func decode(_ row: PlannedSetRow) -> PlannedSet {
         PlannedSet(
             id: UUID(uuidString: row.id) ?? UUID(),
+            count: row.setCount,
             reps: row.reps,
             type: row.setType.flatMap(SetType.init(rawValue:)),
             load: decodeLoad(

@@ -142,9 +142,8 @@ struct PlannedWorkoutEditor: View {
         )
         .panelGroupRow(.top)
 
-        ForEach(Array(sets.enumerated()), id: \.element.id) { index, set in
+        ForEach(sets) { set in
             PlannedSetRow(
-                number: index + 1,
                 set: set,
                 inheritedEffort: exercise.effort,
                 resolvedWeight: resolvedWeight(for: set, exercise: exercise.exercise),
@@ -372,13 +371,23 @@ private struct PlannedExerciseHeaderRow: View {
 
 // MARK: - Set row
 
-/// One prescribed set, with every quantity visible and directly editable —
-/// same contract as the tracker's set row, and width-agnostic the same way:
-/// nothing has a fixed width, the two number fields share free space by layout
-/// priority, and every label is `fixedSize` so iOS truncates a field rather
-/// than rendering "lb" as "l".
+/// One prescribed set row — `4 × 5 × 225 lb @7`, the notation a program is
+/// actually written in.
+///
+/// Every quantity is visible and directly editable, same contract as the
+/// tracker's set row, and width-agnostic the same way: nothing has a fixed
+/// width, the number fields share free space by layout priority, and every
+/// label is `fixedSize` so iOS truncates a field rather than rendering "lb" as
+/// "l".
+///
+/// **The leading field is the set count, and it replaced the position badge.**
+/// That badge (`01`, `02`) numbered the rows, which was true while a row was a
+/// set and became a lie the moment one row could be four — row 2 of a day
+/// beginning "3×5" is sets four through six, not set two. So it went, and the
+/// number that took its place is the one a program leads with. It also cost
+/// nothing in width, which is why three number fields, a mode menu, an RPE
+/// chip and a menu still fit on a phone.
 private struct PlannedSetRow: View {
-    let number: Int
     let set: PlannedSet
     /// The exercise's effort target, shown greyed when this set doesn't
     /// override it — so an inherited RPE 7 is visible on the row rather than
@@ -442,10 +451,19 @@ private struct PlannedSetRow: View {
 
     private var quantities: some View {
         HStack(spacing: 6) {
-            Text(String(format: "%02d", number))
-                .font(Theme.data(13))
-                .foregroundStyle(Theme.inkFaint)
-                .fixedSize()
+            NumberField(
+                value: countBinding,
+                format: .number,
+                label: "sets",
+                font: Theme.data(15),
+                step: 1,
+                onStep: { delta in
+                    countBinding.wrappedValue = countBinding.wrappedValue + Int(delta)
+                }
+            )
+            .layoutPriority(1)
+
+            times
 
             NumberField(
                 value: repsBinding,
@@ -459,10 +477,7 @@ private struct PlannedSetRow: View {
             )
             .layoutPriority(1)
 
-            Text("×")
-                .font(Theme.data(14))
-                .foregroundStyle(Theme.inkFaint)
-                .fixedSize()
+            times
 
             NumberField(
                 value: loadBinding,
@@ -557,6 +572,24 @@ private struct PlannedSetRow: View {
     // `self.` throughout: a bare `set` opening a computed property's body parses
     // as the start of a setter declaration.
     private var hasNote: Bool { !(self.set.notes ?? "").isEmpty }
+
+    /// `sets × reps × weight`, the separator repeated between all three. One
+    /// view rather than two literals so the two can't drift apart.
+    private var times: some View {
+        Text("×")
+            .font(Theme.data(14))
+            .foregroundStyle(Theme.inkFaint)
+            .fixedSize()
+    }
+
+    /// Clamped at one on the way in as well as in the model: stepping a 1 down
+    /// should do nothing visible, not bounce off a floor applied afterwards.
+    private var countBinding: Binding<Int> {
+        Binding(
+            get: { self.set.count },
+            set: { count in onChange { $0.count = max(1, count) } }
+        )
+    }
 
     private var repsBinding: Binding<Int> {
         Binding(

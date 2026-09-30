@@ -175,6 +175,10 @@ struct EffortTarget {
 }
 
 struct PlannedSet {
+	// How many identical sets this row prescribes — the "4" in "4x5 @ 225".
+	// Always at least 1; clamped rather than validated. See "A planned set row
+	// prescribes N sets" below.
+	var count: Int
 	var reps: Int?
 	var type: SetType?
 	var load: LoadPrescription?
@@ -190,6 +194,18 @@ struct PlannedSet {
 }
 
 ```
+
+## A planned set row prescribes N sets
+
+`PlannedSet.count` is the "4" in "4x5 @ 225" — sets x reps x weight, which is the notation every program on paper is written in. One row is the whole prescription for a uniform exercise, and a row added in the planner starts at 1.
+
+**A row is a prescription, not a collapsed run.** Nothing regroups sets by value. "5, 3, 5" stays three rows because it is three instructions, and `PlannedExercise.setGroups` — which collapses *consecutive* identical rows for display — is unchanged apart from summing their counts, so two rows of 2x5 read as one 4x5 the same way two rows of 1x5 always did.
+
+**It expands at `WorkoutSession.start`**, one #WorkoutSet per set, and the snapshot each logged set carries is normalized to `count: 1`. Planned and actual are compared per set (Core Tenets §6), so a snapshot still reading 4 would claim, on the single set it's attached to, that four had been asked for there. Sets expanded from one row share a `plannedFrom.id`, which is harmless because the snapshot is a value and not a foreign key.
+
+**Counting prescribed sets means summing counts, not counting rows.** `PlannedWorkout.plannedSetCount` is the property that answers it; `allSets` is a list of rows. Every adherence and progress readout in the app asks the first question.
+
+**Existing rows are never collapsed.** Four consecutive identical rows look like a 4x5 and merging them would be the app deciding what an author meant — and would take four set ids down to one (Core Tenets §1). A program already written a set at a time stays that way and reads identically.
 
 ## Set completion is stamped; a set is still an instant, not an interval
 #WorkoutSet `timeComplete` records when a set was checked off, to the millisecond, and is kept precise on purpose: it's the anchor anything else on the same clock — a heart rate series, sleep, HRV — would be lined up against later.
@@ -461,4 +477,12 @@ The consequence for importing anything external (the owner's original spreadshee
 
 `Exercise.isOpenChoice` is load-bearing, not cosmetic: `AchievedMaxUpdate` refuses to record a max for an open-choice exercise, because a heavier weight logged under it than last time doesn't mean progress on the same lift — it might not be the same lift at all. Which is exactly why it's authored rather than guessed: an inferred flag would let a correctly-programmed lift with an unusual name silently stop tracking maxes.
 
-**"More advanced searching down the line" is about the exercise picker**, not about program loading. Picker search is substring-only over ~870 entries; if that needs to get smarter, it's embeddings or an LLM call. It has nothing to do with how a program names its exercises, which is now settled.
+**"More advanced searching down the line" is about the exercise picker**, not about program loading. It has nothing to do with how a program names its exercises, which is now settled.
+
+That searching is now built — `ExerciseSearch` — and the boundary between it and the deleted matcher is worth stating precisely, because on the surface both "read a name and find an exercise".
+
+**The difference is who decides.** The matcher's output *became* the answer: it wrote an identity into the data, and a wrong guess mislabeled logged history permanently with nobody in a position to notice. Search's output is a **ranked list of candidates a lifter then taps**. A wrong guess puts the right lift second. One is inference standing in for a decision that was always available to be recorded; the other is helping a person find something they are actively looking for.
+
+The practical test: **anything that consumes search output without a person choosing is the forbidden thing wearing a new name.** Program loading must never call it.
+
+The guess in the sentence this replaced — that better search would mean embeddings or an LLM — was measured and is wrong, which is worth keeping as a caution about answering this kind of question from intuition. Both of Apple's on-device embedding models are *worse* than string matching on this catalog: they encode topical relatedness rather than synonymy, so every gym word sits near every other one (`squat` is nearer `deadlift` than any true synonym pair), and the domain's actual vocabulary gaps — *pec deck* meaning *butterfly* — are exactly what a general English model doesn't know. What works is ordinary information retrieval (tokens, rare-word weighting, stemming, a fuzzy tier) plus a small **authored** alias table for the jargon, which is the same "record the judgment once" pattern as the rest of this section.

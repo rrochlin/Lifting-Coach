@@ -18,6 +18,14 @@ final class TrackerModel {
     /// The rest period in progress, if any. See `RestTimer`.
     private(set) var rest: RestTimer?
 
+    /// The workout that just ended, held for the summary the lifter sees on
+    /// the way out. Cleared by `dismissSummary()`.
+    ///
+    /// Kept here rather than in the view because `finish` is what knows the
+    /// final shape of it — incomplete sets have been dropped by then, so a copy
+    /// taken beforehand would report sets that aren't in the log.
+    private(set) var justFinished: Workout?
+
     /// A just-recorded achieved max, for a transient banner. The lifter should
     /// know the PR was actually captured, not just quietly written to disk.
     private(set) var newAchievedMax: (exercise: Exercise, max: AchievedMax)?
@@ -27,6 +35,8 @@ final class TrackerModel {
     /// expired state) while the app is on screen. The scheduled notification
     /// covers the other case; this covers the lifter who *is* watching.
     private var restExpiryTask: Task<Void, Never>?
+    /// Clears the finished timer a couple of seconds after it announces itself.
+    private var restDismissTask: Task<Void, Never>?
 
     private let workouts: WorkoutStore
     private let users: UserStore
@@ -98,6 +108,7 @@ final class TrackerModel {
         self.session = session
         dismissRest()
         persist()
+        justFinished = session.workout
         self.session = nil
         // A workout only becomes history when it ends, so this is exactly when
         // the derived per-lift stats go stale. Recomputed rather than nudged —
@@ -127,6 +138,12 @@ final class TrackerModel {
             startRest(
                 for: exercise,
                 afterSetWith: id,
+                // What the lifter walks to when this rest is up. Read *after*
+                // the set was completed, so it's the genuinely next unlogged
+                // set rather than the one just finished.
+                upNext: session.nextSet.flatMap {
+                    session.exercise(containingSetID: $0.id)?.displayName
+                },
                 seconds: session.restTarget(afterSetWith: id),
                 from: date
             )
@@ -201,13 +218,30 @@ final class TrackerModel {
     }
 
     /// What to propose for one set, or nil if there's nothing to say.
+    ///
+    /// **No history is not the same as nothing to say**, and this used to treat
+    /// it as if it were: a `guard let` on `lastSessions` returned nil before
+    /// `SetSuggestion` was ever asked, which killed its "the set above speaks"
+    /// fallback in precisely the case it exists for. A lift with no logged
+    /// history — a new exercise, a fresh install, the first session on this
+    /// phone — is where typing 90 into the first set and finding the four below
+    /// it still blank was reported from ("fill in lower working sets with
+    /// weight I enter above"). An empty array is the honest input; the rule for
+    /// what to do with it lives in one place, and it is not here.
     func suggestion(forSetAt index: Int, in exercise: WorkoutExercise) -> SetSuggestion.Values? {
-        guard let previous = lastSessions[exercise.exercise.id] else { return nil }
-        return SetSuggestion.forSet(at: index, in: exercise.sets ?? [], previous: previous)
+        SetSuggestion.forSet(
+            at: index,
+            in: exercise.sets ?? [],
+            previous: lastSessions[exercise.exercise.id] ?? []
+        )
     }
 
     func dismissAchievedMaxBanner() {
         newAchievedMax = nil
+    }
+
+    func dismissSummary() {
+        justFinished = nil
     }
 
     func uncompleteSet(id: UUID) {
@@ -288,6 +322,7 @@ final class TrackerModel {
     func startRest(
         for exercise: WorkoutExercise,
         afterSetWith setID: UUID,
+        upNext: String? = nil,
         seconds: Int,
         from date: Date = Date()
     ) {
@@ -295,6 +330,7 @@ final class TrackerModel {
             exerciseID: exercise.id,
             setID: setID,
             exerciseName: exercise.displayName,
+            upNext: upNext,
             seconds: seconds,
             from: date
         )
@@ -326,13 +362,36 @@ final class TrackerModel {
         rest = nil
         restExpiryTask?.cancel()
         restExpiryTask = nil
+        restDismissTask?.cancel()
+        restDismissTask = nil
         notifier.cancel()
     }
+
+    /// How long REST COMPLETE stays on screen before clearing itself.
+    ///
+    /// Long enough to be seen by someone who looked up at the sound, short
+    /// enough that it isn't a thing to deal with. It was permanent until
+    /// acknowledged, which made the end of every rest period a small chore for
+    /// a fact the lifter already had — reported as "when a timer's completed it
+    /// should dismiss or tap to dismiss, dismiss on next interaction". Tapping
+    /// still clears it immediately, and so does checking off the next set.
+    static let expiredLinger: Duration = .seconds(2)
+
+    /// How late an expiry can fire and still count as happening *now*.
+    ///
+    /// The in-app path fires within milliseconds of `endsAt`; anything beyond
+    /// this arrived because the app was suspended and has just come back. Three
+    /// seconds is far outside the first case and far inside the second.
+    private static let staleExpiry: TimeInterval = 3
 
     /// Arms both the on-screen expiry and the notification for a timer's end.
     private func scheduleExpiry(for timer: RestTimer, now: Date = Date()) {
         restExpiryTask?.cancel()
-        notifier.schedule(at: timer.endsAt, exerciseName: timer.exerciseName, now: now)
+        // Putting time back on an expired clock cancels the tidy-up that was
+        // about to clear it.
+        restDismissTask?.cancel()
+        restDismissTask = nil
+        notifier.schedule(at: timer.endsAt, upNext: timer.upNext, now: now)
 
         let interval = timer.endsAt.timeIntervalSince(now)
         guard interval > 0 else {
@@ -349,10 +408,42 @@ final class TrackerModel {
 
     /// Guarded by `timerID` so a task that outlives its rest period — the lifter
     /// logged the next set early — can't expire whatever timer replaced it.
-    private func markRestExpired(timerID: UUID) {
+    ///
+    /// **The chime fires from here rather than from the view**, which is the
+    /// other half of "I had it open and the sound didn't fire": it hung off an
+    /// `onChange` in the tracker's list, so a lifter who had switched to
+    /// another tab — or whose list had been torn down for any other reason —
+    /// got the notification and no sound. Expiry is a fact about the session,
+    /// and the session is here.
+    private func markRestExpired(timerID: UUID, now: Date = Date()) {
         guard var timer = rest, timer.id == timerID else { return }
         timer.hasExpired = true
         rest = timer
+
+        // **A late expiry is a stale one, and it must not make a sound.**
+        // `Task.sleep` doesn't run while the app is suspended, so a rest that
+        // ended in the lifter's pocket fires the instant they reopen the app —
+        // "if I'm not on the app I don't get the sound, but when I open the app
+        // the sound plays". The notification already announced it at the right
+        // moment; chiming now is announcing something that finished minutes
+        // ago. Checking elapsed time rather than the app's state is what makes
+        // this work, because on reopen the app *is* active.
+        guard now.timeIntervalSince(timer.endsAt) < Self.staleExpiry else {
+            dismissRest()
+            return
+        }
+        RestChime.play()
+
+        restDismissTask?.cancel()
+        restDismissTask = Task { [weak self] in
+            try? await Task.sleep(for: Self.expiredLinger)
+            guard !Task.isCancelled else { return }
+            // Re-checked rather than assumed: the lifter may have put more time
+            // on the clock in the meantime, and clearing *that* timer would
+            // throw away a rest period they had just asked for.
+            guard let self, self.rest?.id == timerID, self.rest?.hasExpired == true else { return }
+            self.dismissRest()
+        }
     }
 
     // MARK: Plumbing

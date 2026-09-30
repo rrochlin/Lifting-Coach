@@ -84,7 +84,9 @@ struct PlannedWorkoutDraftTests {
         let id = draft.addExercise(bench, sets: 4, reps: 3)
 
         let added = try #require(draft.exercise(id: id))
-        #expect(added.sets?.count == 4)
+        // One row prescribing four sets — "4x3" is one instruction.
+        #expect(added.sets?.count == 1)
+        #expect(added.sets?.first?.count == 4)
         #expect(added.sets?.allSatisfy { $0.reps == 3 } == true)
         // An exercise just added hasn't been prescribed — a pre-filled
         // percentage would put a number in the plan nobody chose.
@@ -264,5 +266,120 @@ struct PlannedWorkoutDraftTests {
 
         draft.setNotes("")
         #expect(draft.workout.notes == nil)
+    }
+}
+
+// MARK: - Set counts
+
+/// `PlannedSet.count` — "4 sets of 225 for 5", the notation a program is
+/// written in.
+@Suite("Planned draft — set counts")
+struct PlannedSetCountTests {
+
+    private func draft(_ sets: [PlannedSet]) -> PlannedWorkoutDraft {
+        PlannedWorkoutDraft(PlannedWorkout(exercises: [[
+            PlannedExercise(exercise: squat, sets: sets)
+        ]]))
+    }
+
+    @Test("A row prescribes one set unless it says otherwise")
+    func defaultsToOne() {
+        #expect(PlannedSet().count == 1)
+        #expect(PlannedSet(count: 4).count == 4)
+    }
+
+    @Test("A row can never prescribe fewer than one set")
+    func clampsAtOne() {
+        // Zero sets is a row that should have been deleted. Clamped rather than
+        // validated, on the way in and on assignment, so no caller carries the
+        // rule.
+        #expect(PlannedSet(count: 0).count == 1)
+        #expect(PlannedSet(count: -3).count == 1)
+
+        var set = PlannedSet(count: 4)
+        set.count = 0
+        #expect(set.count == 1)
+    }
+
+    @Test("A new exercise is one row of three sets, not three rows")
+    func addExerciseWritesOneRow() throws {
+        var draft = PlannedWorkoutDraft(PlannedWorkout(exercises: []))
+        draft.addExercise(bench, sets: 3, reps: 5)
+
+        let sets = try #require(draft.exerciseGroups.first?.first?.sets)
+        #expect(sets.count == 1)
+        #expect(sets[0].count == 3)
+        #expect(sets[0].reps == 5)
+    }
+
+    @Test("Adding a row starts at one set, whatever it copied")
+    func addSetDoesNotCopyCount() throws {
+        // Otherwise pressing Add Set under a 4x5 writes another four, and the
+        // prescription doubles every time the button is pressed.
+        var draft = draft([PlannedSet(count: 4, reps: 5, type: .working)])
+        let exerciseID = try #require(draft.exerciseGroups.first?.first?.id)
+
+        let appended: UUID? = draft.addSet(toExerciseWith: exerciseID)
+        let newID = try #require(appended)
+        let added = try #require(draft.set(id: newID))
+        #expect(added.count == 1)
+        #expect(added.reps == 5)
+    }
+
+    @Test("A day's set total sums counts rather than counting rows")
+    func plannedSetCountSums() {
+        let draft = draft([
+            PlannedSet(count: 3, reps: 5, type: .working),
+            PlannedSet(count: 1, reps: 3, type: .working),
+        ])
+        #expect(draft.workout.allSets.count == 2)
+        #expect(draft.workout.plannedSetCount == 4)
+    }
+
+    @Test("Adjacent rows with the same prescription read as one group")
+    func setGroupsSumCounts() throws {
+        // A row is itself a run now, so two rows saying 2x5 @ 225 are one 4x5
+        // on the block overview — the same collapse that has always applied to
+        // two rows of one.
+        let draft = draft([
+            PlannedSet(count: 2, reps: 5, type: .working),
+            PlannedSet(count: 2, reps: 5, type: .working),
+        ])
+        let exercise = try #require(draft.exerciseGroups.first?.first)
+
+        #expect(exercise.setGroups.count == 1)
+        #expect(exercise.setGroups[0].count == 4)
+    }
+
+    @Test("A differing row still starts its own group")
+    func setGroupsStillSplit() throws {
+        let draft = draft([
+            PlannedSet(count: 3, reps: 5, type: .working),
+            PlannedSet(count: 1, reps: 1, type: .working),
+        ])
+        let exercise = try #require(draft.exerciseGroups.first?.first)
+
+        #expect(exercise.setGroups.map(\.count) == [3, 1])
+        #expect(exercise.setGroups.map(\.reps) == [5, 1])
+    }
+
+    @Test("A snapshot written before counts existed decodes as one set")
+    func decodesWithoutCount() throws {
+        // Every logged set on disk carries a `plannedFrom` JSON snapshot with
+        // no `count` key, and a non-optional Int would refuse all of them —
+        // which for `plannedFrom` means a workout that no longer loads.
+        let json = #"{"id":"F1B0B1E2-0000-0000-0000-000000000001","reps":5}"#
+        let set = try JSONDecoder().decode(PlannedSet.self, from: Data(json.utf8))
+        #expect(set.count == 1)
+        #expect(set.reps == 5)
+    }
+
+    @Test("A count round-trips through Codable")
+    func encodesCount() throws {
+        let original = PlannedSet(count: 4, reps: 5, type: .working)
+        let data = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(PlannedSet.self, from: data)
+        #expect(decoded == original)
+        #expect(decoded.count == 4)
     }
 }

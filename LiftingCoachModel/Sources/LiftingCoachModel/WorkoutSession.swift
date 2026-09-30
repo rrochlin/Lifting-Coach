@@ -31,27 +31,34 @@ public struct WorkoutSession: Equatable, Sendable {
     /// The lifter, if known — supplies `maxLifts` for resolving `%1RM`.
     public var user: User?
     /// Final fallback when neither the set nor the block specifies a rest time.
-    public var appDefaultRestTime: Int
+    /// Per set type — see `RestDefaults`.
+    public var appDefaultRest: RestDefaults
 
     public init(
         workout: Workout,
         block: WorkoutBlock? = nil,
         user: User? = nil,
-        appDefaultRestTime: Int = 120
+        appDefaultRest: RestDefaults = .standard
     ) {
         self.workout = workout
         self.block = block
         self.user = user
-        self.appDefaultRestTime = appDefaultRestTime
+        self.appDefaultRest = appDefaultRest
     }
 
     // MARK: - Starting
 
     /// Materializes a live workout from a prescription.
     ///
-    /// Each `PlannedSet` becomes a `WorkoutSet` that carries its prescription
-    /// forward in `plannedFrom`, so planned-vs-actual can be compared later
-    /// without needing the plan in hand. Two resolutions happen here:
+    /// Each `PlannedSet` becomes `count` `WorkoutSet`s — a row written as 4×5
+    /// is four logged sets — each carrying its prescription forward in
+    /// `plannedFrom`, so planned-vs-actual can be compared later without
+    /// needing the plan in hand. Three resolutions happen here:
+    ///
+    /// - **Sets** are expanded, and the snapshot's own `count` normalized to 1
+    ///   (see the note at the expansion). Four logged sets from one row share a
+    ///   `plannedFrom.id`, which is fine because the snapshot is a value rather
+    ///   than a foreign key — nothing keys off it.
     ///
     /// - **Weight** is pre-filled where the load resolves — an absolute load, or
     ///   a percentage against a max the lifter actually has recorded. A load that
@@ -64,25 +71,38 @@ public struct WorkoutSession: Equatable, Sendable {
         block: WorkoutBlock? = nil,
         user: User? = nil,
         at date: Date = Date(),
-        appDefaultRestTime: Int = 120
+        appDefaultRest: RestDefaults = .standard
     ) -> WorkoutSession {
         let groups = (planned.exercises ?? []).map { group in
             group.map { plannedExercise in
                 WorkoutExercise(
                     exercise: plannedExercise.exercise,
-                    sets: (plannedExercise.sets ?? []).map { plannedSet in
+                    sets: (plannedExercise.sets ?? []).flatMap { plannedSet in
                         var snapshot = plannedSet
                         snapshot.effort = plannedExercise.resolvedEffort(for: plannedSet)
-                        return WorkoutSet(
-                            reps: plannedSet.reps,
-                            weight: plannedSet.load?.resolvedWeight { reference in
-                                user?.max(reference, for: plannedExercise.exercise.id)
-                            },
-                            complete: false,
-                            type: plannedSet.type,
-                            notes: plannedSet.notes,
-                            plannedFrom: snapshot
-                        )
+                        // Normalized to one. A row prescribing 4×5 becomes four
+                        // logged sets, and each one *is* one set — a snapshot
+                        // that still said `count: 4` would read, on the single
+                        // set it's attached to, as though four had been asked
+                        // for there. Planned and actual are compared per set
+                        // (Core Tenets §6), so the snapshot describes the set
+                        // it travels with. How many were programmed is a
+                        // question for the plan, which still has the answer
+                        // (`PlannedWorkout.plannedSetCount`).
+                        snapshot.count = 1
+                        let weight = plannedSet.load?.resolvedWeight { reference in
+                            user?.max(reference, for: plannedExercise.exercise.id)
+                        }
+                        return (0..<plannedSet.count).map { _ in
+                            WorkoutSet(
+                                reps: plannedSet.reps,
+                                weight: weight,
+                                complete: false,
+                                type: plannedSet.type,
+                                notes: plannedSet.notes,
+                                plannedFrom: snapshot
+                            )
+                        }
                     },
                     // Carried forward, not looked up later: how the lift was
                     // prescribed that day ("heavy, paused") is part of what was
@@ -97,7 +117,7 @@ public struct WorkoutSession: Equatable, Sendable {
             workout: Workout(exercises: groups, startTime: date, notes: planned.notes),
             block: block,
             user: user,
-            appDefaultRestTime: appDefaultRestTime
+            appDefaultRest: appDefaultRest
         )
     }
 
@@ -107,13 +127,13 @@ public struct WorkoutSession: Equatable, Sendable {
         at date: Date = Date(),
         block: WorkoutBlock? = nil,
         user: User? = nil,
-        appDefaultRestTime: Int = 120
+        appDefaultRest: RestDefaults = .standard
     ) -> WorkoutSession {
         WorkoutSession(
             workout: Workout(exercises: [], startTime: date),
             block: block,
             user: user,
-            appDefaultRestTime: appDefaultRestTime
+            appDefaultRest: appDefaultRest
         )
     }
 
@@ -179,7 +199,7 @@ public struct WorkoutSession: Equatable, Sendable {
     /// (Core Tenets §1).
     public func restTarget(afterSetWith id: UUID) -> Int {
         guard let set = workout.allSets.first(where: { $0.id == id }) else {
-            return appDefaultRestTime
+            return appDefaultRest[nil]
         }
         if let override = set.restOverride { return override }
         return prescribedRest(afterSetWith: id)
@@ -190,17 +210,21 @@ public struct WorkoutSession: Equatable, Sendable {
     /// view having to re-walk the fallback chain itself.
     public func prescribedRest(afterSetWith id: UUID) -> Int {
         guard let set = workout.allSets.first(where: { $0.id == id }) else {
-            return appDefaultRestTime
+            return appDefaultRest[nil]
         }
+        // The app default is resolved against the set's own type either way, so
+        // an unprescribed warmup falls back to a warmup's rest rather than to
+        // the one number that used to stand for every kind of set.
+        let fallback = appDefaultRest[set.type ?? set.plannedFrom?.type]
         if let planned = set.plannedFrom {
-            return block?.restTime(for: planned, appDefault: appDefaultRestTime)
+            return block?.restTime(for: planned, appDefault: fallback)
                 ?? planned.restTime
-                ?? appDefaultRestTime
+                ?? fallback
         }
         if let type = set.type, let blockDefault = block?.defaultRestTimes?[type] {
             return blockDefault
         }
-        return appDefaultRestTime
+        return fallback
     }
 
     // MARK: - Logging

@@ -118,12 +118,14 @@ public struct PlannedExercise: Codable, Hashable, Identifiable, Sendable {
                last.load == set.load,
                last.effort == effort,
                last.type == set.type {
-                last.count += 1
+                // `set.count` rather than 1: a row is itself a run now, and two
+                // adjacent rows saying 2×5 @ 225 are still one 4×5.
+                last.count += set.count
                 groups[groups.count - 1] = last
             } else {
                 groups.append(
                     SetGroup(
-                        count: 1,
+                        count: set.count,
                         reps: set.reps,
                         load: set.load,
                         // Resolved, not the set's own: two sets both inheriting
@@ -242,8 +244,19 @@ public struct PlannedWorkout: Codable, Hashable, Identifiable, Sendable {
         self.skippedAt = skippedAt
     }
 
-    /// Every prescribed set, flattened across superset groups and exercises.
+    /// Every prescribed set **row**, flattened across superset groups and
+    /// exercises.
+    ///
+    /// Rows, not sets: a row carries a `count`, so `allSets.count` is how many
+    /// prescriptions were written, not how many sets were asked for. Use
+    /// `plannedSetCount` for the second question — which is the one every
+    /// adherence and progress readout in the app is asking.
     public var allSets: [PlannedSet] {
         (exercises ?? []).flatMap { $0 }.flatMap { $0.sets ?? [] }
+    }
+
+    /// How many sets this day prescribes, summing each row's `count`.
+    public var plannedSetCount: Int {
+        allSets.reduce(0) { $0 + $1.count }
     }
 }

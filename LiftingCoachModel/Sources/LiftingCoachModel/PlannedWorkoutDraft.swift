@@ -97,6 +97,9 @@ public struct PlannedWorkoutDraft: Equatable, Sendable {
     /// New sets carry reps but no load and no effort: an exercise just added
     /// hasn't been prescribed yet, and pre-filling a percentage would put a
     /// number in the plan that nobody chose.
+    ///
+    /// One row of `sets`, not `sets` rows of one — "3×5" is one instruction,
+    /// and that's the shape a `PlannedSet` can now hold.
     @discardableResult
     public mutating func addExercise(
         _ exercise: Exercise,
@@ -105,7 +108,7 @@ public struct PlannedWorkoutDraft: Equatable, Sendable {
     ) -> UUID {
         let new = PlannedExercise(
             exercise: exercise,
-            sets: (0..<sets).map { _ in PlannedSet(reps: reps, type: .working) }
+            sets: [PlannedSet(count: sets, reps: reps, type: .working)]
         )
         workout.exercises = (workout.exercises ?? []) + [[new]]
         return new.id
@@ -163,18 +166,25 @@ public struct PlannedWorkoutDraft: Equatable, Sendable {
 
     // MARK: - Set editing
 
-    /// Appends a set, copying the shape of the exercise's last set.
+    /// Appends a set row, copying the shape of the exercise's last one.
     ///
-    /// Programming is repetitive by nature — a fourth set of the same thing
+    /// Programming is repetitive by nature — a back-off after a top single
     /// shouldn't mean re-entering the prescription. Unlike the tracker's
     /// equivalent there's nothing to deliberately drop: a planned set copied
     /// from a planned set is still entirely plan.
+    ///
+    /// **`count` is the one thing not copied.** It starts at 1. Adding a row is
+    /// how you say "and then something else" — a back-off, a top single, an
+    /// AMRAP — whereas "and then three more of the same" is the row's own `#`
+    /// field. Carrying a 4 across would silently double the prescription every
+    /// time the button was pressed.
     @discardableResult
     public mutating func addSet(toExerciseWith exerciseID: UUID) -> UUID? {
         var newID: UUID?
         updateExercise(id: exerciseID) { exercise in
             let template = exercise.sets?.last
             let new = PlannedSet(
+                count: 1,
                 reps: template?.reps ?? 5,
                 type: template?.type ?? .working,
                 load: template?.load,

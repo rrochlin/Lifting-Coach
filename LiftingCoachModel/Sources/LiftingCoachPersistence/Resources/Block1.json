@@ -32,7 +32,7 @@
       "name": "Triceps",
       "muscleGroup": "Triceps",
       "suggestions": [
-        "Overhead extension",
+        "Overhead Extension",
         "Pushdown"
       ]
     },
@@ -41,8 +41,8 @@
       "name": "Row",
       "muscleGroup": "Middle Back",
       "suggestions": [
-        "Chest-supported row",
-        "Seal row"
+        "T-Bar Row",
+        "Dumbbell Incline Row"
       ]
     },
     {
@@ -56,8 +56,8 @@
       "name": "Incline press",
       "muscleGroup": "Chest",
       "suggestions": [
-        "Barbell incline press",
-        "Dumbbell incline press"
+        "Incline Bench Press",
+        "Incline Dumbbell Press"
       ]
     },
     {
@@ -65,8 +65,8 @@
       "name": "Upper back",
       "muscleGroup": "Lats",
       "suggestions": [
-        "Lat pulldown",
-        "Cable row"
+        "Lat Pulldown",
+        "Cable Row"
       ]
     },
     {
@@ -74,22 +74,25 @@
       "name": "Rear delts",
       "muscleGroup": "Shoulders",
       "suggestions": [
-        "Face pulls"
+        "Face Pull"
       ]
     },
     {
       "key": "biceps",
       "name": "Biceps",
       "muscleGroup": "Biceps",
-      "suggestions": []
+      "suggestions": [
+        "Barbell Curl",
+        "Hammer Curl"
+      ]
     },
     {
       "key": "core",
       "name": "Core",
       "muscleGroup": "Abdominals",
       "suggestions": [
-        "Ab wheel",
-        "Hanging leg raise"
+        "Ab Rollout",
+        "Hanging Leg Raise"
       ]
     }
   ],
@@ -107,22 +110,7 @@
             "notes": "Top set",
             "sets": [
               {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.725
-                }
-              },
-              {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.725
-                }
-              },
-              {
+                "count": 3,
                 "reps": 5,
                 "type": "working",
                 "load": {
@@ -141,22 +129,7 @@
             "notes": "RPE 8 cap",
             "sets": [
               {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.7
-                }
-              },
-              {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.7
-                }
-              },
-              {
+                "count": 3,
                 "reps": 5,
                 "type": "working",
                 "load": {
@@ -175,30 +148,7 @@
             "notes": "comp stance; hip prep",
             "sets": [
               {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.72
-                }
-              },
-              {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.72
-                }
-              },
-              {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.72
-                }
-              },
-              {
+                "count": 4,
                 "reps": 5,
                 "type": "working",
                 "load": {
@@ -216,14 +166,7 @@
             "rpe": 9.5,
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -245,30 +188,7 @@
             "notes": "top set",
             "sets": [
               {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.7
-                }
-              },
-              {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.7
-                }
-              },
-              {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.7
-                }
-              },
-              {
+                "count": 4,
                 "reps": 5,
                 "type": "working",
                 "load": {
@@ -287,22 +207,7 @@
             "notes": "off-floor strength",
             "sets": [
               {
-                "reps": 4,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.65
-                }
-              },
-              {
-                "reps": 4,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.65
-                }
-              },
-              {
+                "count": 3,
                 "reps": 4,
                 "type": "working",
                 "load": {
@@ -321,14 +226,7 @@
             "notes": "posterior chain",
             "sets": [
               {
-                "reps": 8,
-                "type": "working"
-              },
-              {
-                "reps": 8,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 8,
                 "type": "working"
               }
@@ -343,18 +241,7 @@
             "notes": "upper back; keeps bar tight off floor",
             "sets": [
               {
-                "reps": 10,
-                "type": "working"
-              },
-              {
-                "reps": 10,
-                "type": "working"
-              },
-              {
-                "reps": 10,
-                "type": "working"
-              },
-              {
+                "count": 4,
                 "reps": 10,
                 "type": "working"
               }
@@ -391,33 +278,7 @@
             "notes": "W1 logged: 240x5 sub-RPE6 (app floor hid true value) - too light",
             "sets": [
               {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 240,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 240,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 240,
-                  "unit": "lb"
-                }
-              },
-              {
+                "count": 4,
                 "reps": 5,
                 "type": "working",
                 "load": {
@@ -437,24 +298,7 @@
             "notes": "done FRESH now - 2nd on Thu, incline moved to Sat",
             "sets": [
               {
-                "reps": 8,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 150,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 8,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 150,
-                  "unit": "lb"
-                }
-              },
-              {
+                "count": 3,
                 "reps": 8,
                 "type": "working",
                 "load": {
@@ -474,42 +318,7 @@
             "notes": "close-grip (straight bar, shoulder-width). Lockout/triceps. Calibrate wk1 to RPE",
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 285,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 285,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 285,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 285,
-                  "unit": "lb"
-                }
-              },
-              {
+                "count": 5,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -529,14 +338,7 @@
             "notes": "compound press, 3+ RIR - do NOT approach failure on light day",
             "sets": [
               {
-                "reps": 10,
-                "type": "working"
-              },
-              {
-                "reps": 10,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 10,
                 "type": "working"
               }
@@ -550,14 +352,7 @@
             "notes": "back + shoulder health",
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -569,14 +364,7 @@
             "notes": "back + shoulder health",
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -598,46 +386,7 @@
             "notes": "explosive; 60-90s rest",
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.7
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.7
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.7
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.7
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.7
-                }
-              },
-              {
+                "count": 6,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -656,22 +405,7 @@
             "notes": "PAUSED squat (2s) - real 2nd exposure now",
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.68
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.68
-                }
-              },
-              {
+                "count": 3,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -690,14 +424,7 @@
             "notes": "feet low & close = quad-dominant; full depth, controlled eccentric",
             "sets": [
               {
-                "reps": 8,
-                "type": "working"
-              },
-              {
-                "reps": 8,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 8,
                 "type": "working"
               }
@@ -719,18 +446,7 @@
             "notes": "upper back",
             "sets": [
               {
-                "reps": 8,
-                "type": "working"
-              },
-              {
-                "reps": 8,
-                "type": "working"
-              },
-              {
-                "reps": 8,
-                "type": "working"
-              },
-              {
+                "count": 4,
                 "reps": 8,
                 "type": "working"
               }
@@ -744,14 +460,7 @@
             "notes": "arms / pressing support",
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -763,14 +472,7 @@
             "notes": "arms / pressing support",
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -784,14 +486,7 @@
             "rpe": 9.0,
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -813,30 +508,7 @@
             "notes": "Top set",
             "sets": [
               {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.75
-                }
-              },
-              {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.75
-                }
-              },
-              {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.75
-                }
-              },
-              {
+                "count": 4,
                 "reps": 5,
                 "type": "working",
                 "load": {
@@ -855,22 +527,7 @@
             "notes": "RPE 8 cap",
             "sets": [
               {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.7
-                }
-              },
-              {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.7
-                }
-              },
-              {
+                "count": 3,
                 "reps": 5,
                 "type": "working",
                 "load": {
@@ -889,30 +546,7 @@
             "notes": "comp stance",
             "sets": [
               {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.75
-                }
-              },
-              {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.75
-                }
-              },
-              {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.75
-                }
-              },
-              {
+                "count": 4,
                 "reps": 5,
                 "type": "working",
                 "load": {
@@ -930,14 +564,7 @@
             "rpe": 9.5,
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -959,30 +586,7 @@
             "notes": "top set",
             "sets": [
               {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.725
-                }
-              },
-              {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.725
-                }
-              },
-              {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.725
-                }
-              },
-              {
+                "count": 4,
                 "reps": 5,
                 "type": "working",
                 "load": {
@@ -1001,22 +605,7 @@
             "notes": "off-floor strength",
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.7
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.7
-                }
-              },
-              {
+                "count": 3,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -1035,14 +624,7 @@
             "notes": "posterior chain",
             "sets": [
               {
-                "reps": 8,
-                "type": "working"
-              },
-              {
-                "reps": 8,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 8,
                 "type": "working"
               }
@@ -1057,18 +639,7 @@
             "notes": "upper back; keeps bar tight off floor",
             "sets": [
               {
-                "reps": 10,
-                "type": "working"
-              },
-              {
-                "reps": 10,
-                "type": "working"
-              },
-              {
-                "reps": 10,
-                "type": "working"
-              },
-              {
+                "count": 4,
                 "reps": 10,
                 "type": "working"
               }
@@ -1105,33 +676,7 @@
             "notes": "Logged: 260x5x3 @ RPE6, 295x5 @ RPE9 (fatigued). 280 = your RPE 8 / 7RM anchor.",
             "sets": [
               {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 280,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 280,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 280,
-                  "unit": "lb"
-                }
-              },
-              {
+                "count": 4,
                 "reps": 5,
                 "type": "working",
                 "load": {
@@ -1151,24 +696,7 @@
             "notes": "5 when all sets hit reps @ target",
             "sets": [
               {
-                "reps": 8,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 155,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 8,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 155,
-                  "unit": "lb"
-                }
-              },
-              {
+                "count": 3,
                 "reps": 8,
                 "type": "working",
                 "load": {
@@ -1188,42 +716,7 @@
             "notes": "10 when all triples hit @ target RPE",
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 295,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 295,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 295,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 295,
-                  "unit": "lb"
-                }
-              },
-              {
+                "count": 5,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -1243,14 +736,7 @@
             "notes": "compound press, 3+ RIR - do NOT approach failure on light day",
             "sets": [
               {
-                "reps": 10,
-                "type": "working"
-              },
-              {
-                "reps": 10,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 10,
                 "type": "working"
               }
@@ -1264,14 +750,7 @@
             "notes": "back + shoulder health",
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -1283,14 +762,7 @@
             "notes": "back + shoulder health",
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -1312,46 +784,7 @@
             "notes": "explosive; 60-90s rest",
             "sets": [
               {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.725
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.725
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.725
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.725
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.725
-                }
-              },
-              {
+                "count": 6,
                 "reps": 2,
                 "type": "working",
                 "load": {
@@ -1370,22 +803,7 @@
             "notes": "paused/speed",
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.7
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.7
-                }
-              },
-              {
+                "count": 3,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -1404,14 +822,7 @@
             "notes": "feet low & close = quad-dominant; full depth, controlled eccentric",
             "sets": [
               {
-                "reps": 8,
-                "type": "working"
-              },
-              {
-                "reps": 8,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 8,
                 "type": "working"
               }
@@ -1433,18 +844,7 @@
             "notes": "upper back",
             "sets": [
               {
-                "reps": 8,
-                "type": "working"
-              },
-              {
-                "reps": 8,
-                "type": "working"
-              },
-              {
-                "reps": 8,
-                "type": "working"
-              },
-              {
+                "count": 4,
                 "reps": 8,
                 "type": "working"
               }
@@ -1458,14 +858,7 @@
             "notes": "arms / pressing support",
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -1477,14 +870,7 @@
             "notes": "arms / pressing support",
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -1498,14 +884,7 @@
             "rpe": 9.0,
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -1527,30 +906,7 @@
             "notes": "Top set",
             "sets": [
               {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.775
-                }
-              },
-              {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.775
-                }
-              },
-              {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.775
-                }
-              },
-              {
+                "count": 4,
                 "reps": 5,
                 "type": "working",
                 "load": {
@@ -1569,14 +925,7 @@
             "notes": "RPE 8 cap",
             "sets": [
               {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.7
-                }
-              },
-              {
+                "count": 2,
                 "reps": 5,
                 "type": "working",
                 "load": {
@@ -1595,38 +944,7 @@
             "notes": "top of meso",
             "sets": [
               {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.775
-                }
-              },
-              {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.775
-                }
-              },
-              {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.775
-                }
-              },
-              {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.775
-                }
-              },
-              {
+                "count": 5,
                 "reps": 5,
                 "type": "working",
                 "load": {
@@ -1644,14 +962,7 @@
             "rpe": 9.5,
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -1673,38 +984,7 @@
             "notes": "top set",
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.775
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.775
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.775
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.775
-                }
-              },
-              {
+                "count": 5,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -1723,22 +1003,7 @@
             "notes": "off-floor strength",
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.675
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.675
-                }
-              },
-              {
+                "count": 3,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -1757,14 +1022,7 @@
             "notes": "posterior chain",
             "sets": [
               {
-                "reps": 8,
-                "type": "working"
-              },
-              {
-                "reps": 8,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 8,
                 "type": "working"
               }
@@ -1779,18 +1037,7 @@
             "notes": "upper back; keeps bar tight off floor",
             "sets": [
               {
-                "reps": 10,
-                "type": "working"
-              },
-              {
-                "reps": 10,
-                "type": "working"
-              },
-              {
-                "reps": 10,
-                "type": "working"
-              },
-              {
+                "count": 4,
                 "reps": 10,
                 "type": "working"
               }
@@ -1827,33 +1074,7 @@
             "notes": "top of meso",
             "sets": [
               {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 290,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 290,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 290,
-                  "unit": "lb"
-                }
-              },
-              {
+                "count": 4,
                 "reps": 5,
                 "type": "working",
                 "load": {
@@ -1873,24 +1094,7 @@
             "notes": "top of meso",
             "sets": [
               {
-                "reps": 8,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 160,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 8,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 160,
-                  "unit": "lb"
-                }
-              },
-              {
+                "count": 3,
                 "reps": 8,
                 "type": "working",
                 "load": {
@@ -1910,42 +1114,7 @@
             "notes": "top of meso",
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 305,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 305,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 305,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 305,
-                  "unit": "lb"
-                }
-              },
-              {
+                "count": 5,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -1965,14 +1134,7 @@
             "notes": "compound press, 3+ RIR - do NOT approach failure on light day",
             "sets": [
               {
-                "reps": 10,
-                "type": "working"
-              },
-              {
-                "reps": 10,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 10,
                 "type": "working"
               }
@@ -1986,14 +1148,7 @@
             "notes": "back + shoulder health",
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -2005,14 +1160,7 @@
             "notes": "back + shoulder health",
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -2034,46 +1182,7 @@
             "notes": "explosive; 60-90s rest",
             "sets": [
               {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.75
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.75
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.75
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.75
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.75
-                }
-              },
-              {
+                "count": 6,
                 "reps": 2,
                 "type": "working",
                 "load": {
@@ -2092,30 +1201,7 @@
             "notes": "paused/speed",
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.71
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.71
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.71
-                }
-              },
-              {
+                "count": 4,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -2134,14 +1220,7 @@
             "notes": "feet low & close = quad-dominant; full depth, controlled eccentric",
             "sets": [
               {
-                "reps": 8,
-                "type": "working"
-              },
-              {
-                "reps": 8,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 8,
                 "type": "working"
               }
@@ -2163,18 +1242,7 @@
             "notes": "upper back",
             "sets": [
               {
-                "reps": 8,
-                "type": "working"
-              },
-              {
-                "reps": 8,
-                "type": "working"
-              },
-              {
-                "reps": 8,
-                "type": "working"
-              },
-              {
+                "count": 4,
                 "reps": 8,
                 "type": "working"
               }
@@ -2188,14 +1256,7 @@
             "notes": "arms / pressing support",
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -2207,14 +1268,7 @@
             "notes": "arms / pressing support",
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -2228,14 +1282,7 @@
             "rpe": 9.0,
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -2257,22 +1304,7 @@
             "notes": "Top set",
             "sets": [
               {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.65
-                }
-              },
-              {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.65
-                }
-              },
-              {
+                "count": 3,
                 "reps": 5,
                 "type": "working",
                 "load": {
@@ -2291,14 +1323,7 @@
             "notes": "deload",
             "sets": [
               {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.6
-                }
-              },
-              {
+                "count": 2,
                 "reps": 5,
                 "type": "working",
                 "load": {
@@ -2324,14 +1349,7 @@
             "notes": "top set",
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.6
-                }
-              },
-              {
+                "count": 2,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -2372,15 +1390,7 @@
             "notes": "deload",
             "sets": [
               {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 200,
-                  "unit": "lb"
-                }
-              },
-              {
+                "count": 2,
                 "reps": 5,
                 "type": "working",
                 "load": {
@@ -2400,24 +1410,7 @@
             "notes": "deload",
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 225,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 225,
-                  "unit": "lb"
-                }
-              },
-              {
+                "count": 3,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -2444,30 +1437,7 @@
             "notes": "explosive; 60-90s rest",
             "sets": [
               {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.6
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.6
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.6
-                }
-              },
-              {
+                "count": 4,
                 "reps": 2,
                 "type": "working",
                 "load": {
@@ -2486,14 +1456,7 @@
             "notes": "deload",
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.55
-                }
-              },
-              {
+                "count": 2,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -2519,30 +1482,7 @@
             "notes": "Top set",
             "sets": [
               {
-                "reps": 4,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.775
-                }
-              },
-              {
-                "reps": 4,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.775
-                }
-              },
-              {
-                "reps": 4,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.775
-                }
-              },
-              {
+                "count": 4,
                 "reps": 4,
                 "type": "working",
                 "load": {
@@ -2561,22 +1501,7 @@
             "notes": "RPE 8 cap",
             "sets": [
               {
-                "reps": 4,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.7
-                }
-              },
-              {
-                "reps": 4,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.7
-                }
-              },
-              {
+                "count": 3,
                 "reps": 4,
                 "type": "working",
                 "load": {
@@ -2595,30 +1520,7 @@
             "notes": "new rep bracket",
             "sets": [
               {
-                "reps": 4,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.75
-                }
-              },
-              {
-                "reps": 4,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.75
-                }
-              },
-              {
-                "reps": 4,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.75
-                }
-              },
-              {
+                "count": 4,
                 "reps": 4,
                 "type": "working",
                 "load": {
@@ -2636,14 +1538,7 @@
             "rpe": 9.5,
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -2665,30 +1560,7 @@
             "notes": "top set",
             "sets": [
               {
-                "reps": 4,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.75
-                }
-              },
-              {
-                "reps": 4,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.75
-                }
-              },
-              {
-                "reps": 4,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.75
-                }
-              },
-              {
+                "count": 4,
                 "reps": 4,
                 "type": "working",
                 "load": {
@@ -2707,22 +1579,7 @@
             "notes": "off-floor strength",
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.7
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.7
-                }
-              },
-              {
+                "count": 3,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -2741,14 +1598,7 @@
             "notes": "posterior chain",
             "sets": [
               {
-                "reps": 8,
-                "type": "working"
-              },
-              {
-                "reps": 8,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 8,
                 "type": "working"
               }
@@ -2763,18 +1613,7 @@
             "notes": "upper back; keeps bar tight off floor",
             "sets": [
               {
-                "reps": 10,
-                "type": "working"
-              },
-              {
-                "reps": 10,
-                "type": "working"
-              },
-              {
-                "reps": 10,
-                "type": "working"
-              },
-              {
+                "count": 4,
                 "reps": 10,
                 "type": "working"
               }
@@ -2811,33 +1650,7 @@
             "notes": "LARSEN = flat bench with FEET UP / unsupported (on bench or straight out), no leg drive, normal comp grip and full ROM. It is NOT the JM press (skull-crusher negative into a close-grip press) - that is a triceps/lockout tool and belongs with close-grip work, not here. Feet-up costs most lifters 5-15% vs comp bench, so expect ~310-325 max. Wk5 is a calibration week: load to last-set RPE.",
             "sets": [
               {
-                "reps": 4,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 255,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 4,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 255,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 4,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 255,
-                  "unit": "lb"
-                }
-              },
-              {
+                "count": 4,
                 "reps": 4,
                 "type": "working",
                 "load": {
@@ -2857,33 +1670,7 @@
             "notes": "new rep bracket",
             "sets": [
               {
-                "reps": 6,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 160,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 6,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 160,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 6,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 160,
-                  "unit": "lb"
-                }
-              },
-              {
+                "count": 4,
                 "reps": 6,
                 "type": "working",
                 "load": {
@@ -2903,42 +1690,7 @@
             "notes": "lockout strength press",
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 295,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 295,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 295,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 295,
-                  "unit": "lb"
-                }
-              },
-              {
+                "count": 5,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -2958,14 +1710,7 @@
             "notes": "compound press, 3+ RIR - do NOT approach failure on light day",
             "sets": [
               {
-                "reps": 10,
-                "type": "working"
-              },
-              {
-                "reps": 10,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 10,
                 "type": "working"
               }
@@ -2979,14 +1724,7 @@
             "notes": "back + shoulder health",
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -2998,14 +1736,7 @@
             "notes": "back + shoulder health",
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -3027,46 +1758,7 @@
             "notes": "explosive; 60-90s rest",
             "sets": [
               {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.725
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.725
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.725
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.725
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.725
-                }
-              },
-              {
+                "count": 6,
                 "reps": 2,
                 "type": "working",
                 "load": {
@@ -3085,22 +1777,7 @@
             "notes": "paused",
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.7
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.7
-                }
-              },
-              {
+                "count": 3,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -3119,14 +1796,7 @@
             "notes": "feet low & close = quad-dominant; full depth, controlled eccentric",
             "sets": [
               {
-                "reps": 8,
-                "type": "working"
-              },
-              {
-                "reps": 8,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 8,
                 "type": "working"
               }
@@ -3148,18 +1818,7 @@
             "notes": "upper back",
             "sets": [
               {
-                "reps": 8,
-                "type": "working"
-              },
-              {
-                "reps": 8,
-                "type": "working"
-              },
-              {
-                "reps": 8,
-                "type": "working"
-              },
-              {
+                "count": 4,
                 "reps": 8,
                 "type": "working"
               }
@@ -3173,14 +1832,7 @@
             "notes": "arms / pressing support",
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -3192,14 +1844,7 @@
             "notes": "arms / pressing support",
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -3213,14 +1858,7 @@
             "rpe": 9.0,
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -3242,30 +1880,7 @@
             "notes": "Top set",
             "sets": [
               {
-                "reps": 4,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.8
-                }
-              },
-              {
-                "reps": 4,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.8
-                }
-              },
-              {
-                "reps": 4,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.8
-                }
-              },
-              {
+                "count": 4,
                 "reps": 4,
                 "type": "working",
                 "load": {
@@ -3284,22 +1899,7 @@
             "notes": "RPE 8 cap",
             "sets": [
               {
-                "reps": 4,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.7
-                }
-              },
-              {
-                "reps": 4,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.7
-                }
-              },
-              {
+                "count": 3,
                 "reps": 4,
                 "type": "working",
                 "load": {
@@ -3318,30 +1918,7 @@
             "notes": "comp stance",
             "sets": [
               {
-                "reps": 4,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.785
-                }
-              },
-              {
-                "reps": 4,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.785
-                }
-              },
-              {
-                "reps": 4,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.785
-                }
-              },
-              {
+                "count": 4,
                 "reps": 4,
                 "type": "working",
                 "load": {
@@ -3359,14 +1936,7 @@
             "rpe": 9.5,
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -3388,38 +1958,7 @@
             "notes": "top set",
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.8
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.8
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.8
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.8
-                }
-              },
-              {
+                "count": 5,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -3438,22 +1977,7 @@
             "notes": "off-floor strength",
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.7
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.7
-                }
-              },
-              {
+                "count": 3,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -3472,14 +1996,7 @@
             "notes": "posterior chain",
             "sets": [
               {
-                "reps": 8,
-                "type": "working"
-              },
-              {
-                "reps": 8,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 8,
                 "type": "working"
               }
@@ -3494,18 +2011,7 @@
             "notes": "upper back; keeps bar tight off floor",
             "sets": [
               {
-                "reps": 10,
-                "type": "working"
-              },
-              {
-                "reps": 10,
-                "type": "working"
-              },
-              {
-                "reps": 10,
-                "type": "working"
-              },
-              {
+                "count": 4,
                 "reps": 10,
                 "type": "working"
               }
@@ -3542,33 +2048,7 @@
             "notes": "Feet-up Larsen (see wk5 note). Progress off wk5 calibration.",
             "sets": [
               {
-                "reps": 4,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 265,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 4,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 265,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 4,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 265,
-                  "unit": "lb"
-                }
-              },
-              {
+                "count": 4,
                 "reps": 4,
                 "type": "working",
                 "load": {
@@ -3587,33 +2067,7 @@
             "rpe": 8.5,
             "sets": [
               {
-                "reps": 6,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 165,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 6,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 165,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 6,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 165,
-                  "unit": "lb"
-                }
-              },
-              {
+                "count": 4,
                 "reps": 6,
                 "type": "working",
                 "load": {
@@ -3632,42 +2086,7 @@
             "rpe": 7.5,
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 305,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 305,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 305,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 305,
-                  "unit": "lb"
-                }
-              },
-              {
+                "count": 5,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -3687,14 +2106,7 @@
             "notes": "compound press, 3+ RIR - do NOT approach failure on light day",
             "sets": [
               {
-                "reps": 10,
-                "type": "working"
-              },
-              {
-                "reps": 10,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 10,
                 "type": "working"
               }
@@ -3708,14 +2120,7 @@
             "notes": "back + shoulder health",
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -3727,14 +2132,7 @@
             "notes": "back + shoulder health",
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -3756,46 +2154,7 @@
             "notes": "explosive; 60-90s rest",
             "sets": [
               {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.75
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.75
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.75
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.75
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.75
-                }
-              },
-              {
+                "count": 6,
                 "reps": 2,
                 "type": "working",
                 "load": {
@@ -3814,22 +2173,7 @@
             "notes": "paused/speed",
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.72
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.72
-                }
-              },
-              {
+                "count": 3,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -3848,14 +2192,7 @@
             "notes": "feet low & close = quad-dominant; full depth, controlled eccentric",
             "sets": [
               {
-                "reps": 8,
-                "type": "working"
-              },
-              {
-                "reps": 8,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 8,
                 "type": "working"
               }
@@ -3877,18 +2214,7 @@
             "notes": "upper back",
             "sets": [
               {
-                "reps": 8,
-                "type": "working"
-              },
-              {
-                "reps": 8,
-                "type": "working"
-              },
-              {
-                "reps": 8,
-                "type": "working"
-              },
-              {
+                "count": 4,
                 "reps": 8,
                 "type": "working"
               }
@@ -3902,14 +2228,7 @@
             "notes": "arms / pressing support",
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -3921,14 +2240,7 @@
             "notes": "arms / pressing support",
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -3942,14 +2254,7 @@
             "rpe": 9.0,
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -3971,30 +2276,7 @@
             "notes": "Top set",
             "sets": [
               {
-                "reps": 4,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.825
-                }
-              },
-              {
-                "reps": 4,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.825
-                }
-              },
-              {
-                "reps": 4,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.825
-                }
-              },
-              {
+                "count": 4,
                 "reps": 4,
                 "type": "working",
                 "load": {
@@ -4013,14 +2295,7 @@
             "notes": "RPE 8 cap",
             "sets": [
               {
-                "reps": 4,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.725
-                }
-              },
-              {
+                "count": 2,
                 "reps": 4,
                 "type": "working",
                 "load": {
@@ -4039,30 +2314,7 @@
             "notes": "top of meso",
             "sets": [
               {
-                "reps": 4,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.81
-                }
-              },
-              {
-                "reps": 4,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.81
-                }
-              },
-              {
-                "reps": 4,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.81
-                }
-              },
-              {
+                "count": 4,
                 "reps": 4,
                 "type": "working",
                 "load": {
@@ -4080,14 +2332,7 @@
             "rpe": 9.5,
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -4109,30 +2354,7 @@
             "notes": "top set",
             "sets": [
               {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.85
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.85
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.85
-                }
-              },
-              {
+                "count": 4,
                 "reps": 2,
                 "type": "working",
                 "load": {
@@ -4151,22 +2373,7 @@
             "notes": "off-floor strength",
             "sets": [
               {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.75
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.75
-                }
-              },
-              {
+                "count": 3,
                 "reps": 2,
                 "type": "working",
                 "load": {
@@ -4185,14 +2392,7 @@
             "notes": "posterior chain",
             "sets": [
               {
-                "reps": 8,
-                "type": "working"
-              },
-              {
-                "reps": 8,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 8,
                 "type": "working"
               }
@@ -4207,18 +2407,7 @@
             "notes": "upper back; keeps bar tight off floor",
             "sets": [
               {
-                "reps": 10,
-                "type": "working"
-              },
-              {
-                "reps": 10,
-                "type": "working"
-              },
-              {
-                "reps": 10,
-                "type": "working"
-              },
-              {
+                "count": 4,
                 "reps": 10,
                 "type": "working"
               }
@@ -4255,33 +2444,7 @@
             "notes": "Feet-up Larsen (see wk5 note). Progress off wk5 calibration.",
             "sets": [
               {
-                "reps": 4,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 270,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 4,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 270,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 4,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 270,
-                  "unit": "lb"
-                }
-              },
-              {
+                "count": 4,
                 "reps": 4,
                 "type": "working",
                 "load": {
@@ -4301,33 +2464,7 @@
             "notes": "top of meso",
             "sets": [
               {
-                "reps": 6,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 170,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 6,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 170,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 6,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 170,
-                  "unit": "lb"
-                }
-              },
-              {
+                "count": 4,
                 "reps": 6,
                 "type": "working",
                 "load": {
@@ -4347,42 +2484,7 @@
             "notes": "top of meso",
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 315,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 315,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 315,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 315,
-                  "unit": "lb"
-                }
-              },
-              {
+                "count": 5,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -4402,14 +2504,7 @@
             "notes": "compound press, 3+ RIR - do NOT approach failure on light day",
             "sets": [
               {
-                "reps": 10,
-                "type": "working"
-              },
-              {
-                "reps": 10,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 10,
                 "type": "working"
               }
@@ -4423,14 +2518,7 @@
             "notes": "back + shoulder health",
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -4442,14 +2530,7 @@
             "notes": "back + shoulder health",
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -4471,38 +2552,7 @@
             "notes": "explosive; 60-90s rest",
             "sets": [
               {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.775
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.775
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.775
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.775
-                }
-              },
-              {
+                "count": 5,
                 "reps": 2,
                 "type": "working",
                 "load": {
@@ -4521,30 +2571,7 @@
             "notes": "paused/speed",
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.73
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.73
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.73
-                }
-              },
-              {
+                "count": 4,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -4563,14 +2590,7 @@
             "notes": "feet low & close = quad-dominant; full depth, controlled eccentric",
             "sets": [
               {
-                "reps": 8,
-                "type": "working"
-              },
-              {
-                "reps": 8,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 8,
                 "type": "working"
               }
@@ -4592,18 +2612,7 @@
             "notes": "upper back",
             "sets": [
               {
-                "reps": 8,
-                "type": "working"
-              },
-              {
-                "reps": 8,
-                "type": "working"
-              },
-              {
-                "reps": 8,
-                "type": "working"
-              },
-              {
+                "count": 4,
                 "reps": 8,
                 "type": "working"
               }
@@ -4617,14 +2626,7 @@
             "notes": "arms / pressing support",
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -4636,14 +2638,7 @@
             "notes": "arms / pressing support",
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -4657,14 +2652,7 @@
             "rpe": 9.0,
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -4686,22 +2674,7 @@
             "notes": "Top set",
             "sets": [
               {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.675
-                }
-              },
-              {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.675
-                }
-              },
-              {
+                "count": 3,
                 "reps": 5,
                 "type": "working",
                 "load": {
@@ -4720,14 +2693,7 @@
             "notes": "deload",
             "sets": [
               {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.6
-                }
-              },
-              {
+                "count": 2,
                 "reps": 5,
                 "type": "working",
                 "load": {
@@ -4753,14 +2719,7 @@
             "notes": "top set",
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.625
-                }
-              },
-              {
+                "count": 2,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -4801,15 +2760,7 @@
             "notes": "deload",
             "sets": [
               {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 210,
-                  "unit": "lb"
-                }
-              },
-              {
+                "count": 2,
                 "reps": 5,
                 "type": "working",
                 "load": {
@@ -4829,24 +2780,7 @@
             "notes": "deload",
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 235,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 235,
-                  "unit": "lb"
-                }
-              },
-              {
+                "count": 3,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -4873,30 +2807,7 @@
             "notes": "explosive; 60-90s rest",
             "sets": [
               {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.6
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.6
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.6
-                }
-              },
-              {
+                "count": 4,
                 "reps": 2,
                 "type": "working",
                 "load": {
@@ -4915,14 +2826,7 @@
             "notes": "deload",
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.55
-                }
-              },
-              {
+                "count": 2,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -4948,22 +2852,7 @@
             "notes": "Top set",
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.825
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.825
-                }
-              },
-              {
+                "count": 3,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -4982,14 +2871,7 @@
             "notes": "RPE 8 cap",
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.725
-                }
-              },
-              {
+                "count": 2,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -5008,30 +2890,7 @@
             "notes": "intensification",
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.79
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.79
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.79
-                }
-              },
-              {
+                "count": 4,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -5049,14 +2908,7 @@
             "rpe": 9.5,
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -5078,30 +2930,7 @@
             "notes": "top set",
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.8
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.8
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.8
-                }
-              },
-              {
+                "count": 4,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -5120,22 +2949,7 @@
             "notes": "off-floor strength",
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.7
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.7
-                }
-              },
-              {
+                "count": 3,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -5154,14 +2968,7 @@
             "notes": "posterior chain",
             "sets": [
               {
-                "reps": 8,
-                "type": "working"
-              },
-              {
-                "reps": 8,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 8,
                 "type": "working"
               }
@@ -5176,18 +2983,7 @@
             "notes": "upper back; keeps bar tight off floor",
             "sets": [
               {
-                "reps": 10,
-                "type": "working"
-              },
-              {
-                "reps": 10,
-                "type": "working"
-              },
-              {
-                "reps": 10,
-                "type": "working"
-              },
-              {
+                "count": 4,
                 "reps": 10,
                 "type": "working"
               }
@@ -5224,24 +3020,7 @@
             "notes": "ESTIMATE - calibrate to last-set RPE",
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 280,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 280,
-                  "unit": "lb"
-                }
-              },
-              {
+                "count": 3,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -5261,33 +3040,7 @@
             "notes": "new rep bracket",
             "sets": [
               {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 170,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 170,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 170,
-                  "unit": "lb"
-                }
-              },
-              {
+                "count": 4,
                 "reps": 5,
                 "type": "working",
                 "load": {
@@ -5307,33 +3060,7 @@
             "notes": "lockout strength press",
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 305,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 305,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 305,
-                  "unit": "lb"
-                }
-              },
-              {
+                "count": 4,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -5353,14 +3080,7 @@
             "notes": "compound press, 3+ RIR - do NOT approach failure on light day",
             "sets": [
               {
-                "reps": 10,
-                "type": "working"
-              },
-              {
-                "reps": 10,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 10,
                 "type": "working"
               }
@@ -5374,14 +3094,7 @@
             "notes": "back + shoulder health",
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -5393,14 +3106,7 @@
             "notes": "back + shoulder health",
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -5422,46 +3128,7 @@
             "notes": "explosive; 60-90s rest",
             "sets": [
               {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.75
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.75
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.75
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.75
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.75
-                }
-              },
-              {
+                "count": 6,
                 "reps": 2,
                 "type": "working",
                 "load": {
@@ -5480,22 +3147,7 @@
             "notes": "paused",
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.71
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.71
-                }
-              },
-              {
+                "count": 3,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -5514,14 +3166,7 @@
             "notes": "feet low & close = quad-dominant; full depth, controlled eccentric",
             "sets": [
               {
-                "reps": 8,
-                "type": "working"
-              },
-              {
-                "reps": 8,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 8,
                 "type": "working"
               }
@@ -5543,18 +3188,7 @@
             "notes": "upper back",
             "sets": [
               {
-                "reps": 8,
-                "type": "working"
-              },
-              {
-                "reps": 8,
-                "type": "working"
-              },
-              {
-                "reps": 8,
-                "type": "working"
-              },
-              {
+                "count": 4,
                 "reps": 8,
                 "type": "working"
               }
@@ -5568,14 +3202,7 @@
             "notes": "arms / pressing support",
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -5587,14 +3214,7 @@
             "notes": "arms / pressing support",
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -5608,14 +3228,7 @@
             "rpe": 9.0,
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -5637,14 +3250,7 @@
             "notes": "Top set",
             "sets": [
               {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.875
-                }
-              },
-              {
+                "count": 2,
                 "reps": 2,
                 "type": "working",
                 "load": {
@@ -5663,14 +3269,7 @@
             "notes": "RPE 8 cap",
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.725
-                }
-              },
-              {
+                "count": 2,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -5689,22 +3288,7 @@
             "notes": "comp stance",
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.84
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.84
-                }
-              },
-              {
+                "count": 3,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -5722,14 +3306,7 @@
             "rpe": 9.5,
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -5751,22 +3328,7 @@
             "notes": "top set",
             "sets": [
               {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.875
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.875
-                }
-              },
-              {
+                "count": 3,
                 "reps": 2,
                 "type": "working",
                 "load": {
@@ -5785,22 +3347,7 @@
             "notes": "off-floor strength",
             "sets": [
               {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.75
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.75
-                }
-              },
-              {
+                "count": 3,
                 "reps": 2,
                 "type": "working",
                 "load": {
@@ -5819,14 +3366,7 @@
             "notes": "posterior chain",
             "sets": [
               {
-                "reps": 8,
-                "type": "working"
-              },
-              {
-                "reps": 8,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 8,
                 "type": "working"
               }
@@ -5841,18 +3381,7 @@
             "notes": "upper back; keeps bar tight off floor",
             "sets": [
               {
-                "reps": 10,
-                "type": "working"
-              },
-              {
-                "reps": 10,
-                "type": "working"
-              },
-              {
-                "reps": 10,
-                "type": "working"
-              },
-              {
+                "count": 4,
                 "reps": 10,
                 "type": "working"
               }
@@ -5888,24 +3417,7 @@
             "rpe": 8.0,
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 290,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 290,
-                  "unit": "lb"
-                }
-              },
-              {
+                "count": 3,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -5924,33 +3436,7 @@
             "rpe": 8.5,
             "sets": [
               {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 175,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 175,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 175,
-                  "unit": "lb"
-                }
-              },
-              {
+                "count": 4,
                 "reps": 5,
                 "type": "working",
                 "load": {
@@ -5969,33 +3455,7 @@
             "rpe": 7.5,
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 315,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 315,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 315,
-                  "unit": "lb"
-                }
-              },
-              {
+                "count": 4,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -6015,14 +3475,7 @@
             "notes": "compound press, 3+ RIR - do NOT approach failure on light day",
             "sets": [
               {
-                "reps": 10,
-                "type": "working"
-              },
-              {
-                "reps": 10,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 10,
                 "type": "working"
               }
@@ -6036,14 +3489,7 @@
             "notes": "back + shoulder health",
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -6055,14 +3501,7 @@
             "notes": "back + shoulder health",
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -6084,38 +3523,7 @@
             "notes": "explosive; 60-90s rest",
             "sets": [
               {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.775
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.775
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.775
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.775
-                }
-              },
-              {
+                "count": 5,
                 "reps": 2,
                 "type": "working",
                 "load": {
@@ -6134,22 +3542,7 @@
             "notes": "paused/speed",
             "sets": [
               {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.75
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.75
-                }
-              },
-              {
+                "count": 3,
                 "reps": 2,
                 "type": "working",
                 "load": {
@@ -6168,14 +3561,7 @@
             "notes": "feet low & close = quad-dominant; full depth, controlled eccentric",
             "sets": [
               {
-                "reps": 8,
-                "type": "working"
-              },
-              {
-                "reps": 8,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 8,
                 "type": "working"
               }
@@ -6197,18 +3583,7 @@
             "notes": "upper back",
             "sets": [
               {
-                "reps": 8,
-                "type": "working"
-              },
-              {
-                "reps": 8,
-                "type": "working"
-              },
-              {
-                "reps": 8,
-                "type": "working"
-              },
-              {
+                "count": 4,
                 "reps": 8,
                 "type": "working"
               }
@@ -6222,14 +3597,7 @@
             "notes": "arms / pressing support",
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -6241,14 +3609,7 @@
             "notes": "arms / pressing support",
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -6262,14 +3623,7 @@
             "rpe": 9.0,
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -6344,14 +3698,7 @@
             "rpe": 9.5,
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -6391,14 +3738,7 @@
             "notes": "posterior chain",
             "sets": [
               {
-                "reps": 8,
-                "type": "working"
-              },
-              {
-                "reps": 8,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 8,
                 "type": "working"
               }
@@ -6413,18 +3753,7 @@
             "notes": "upper back; keeps bar tight off floor",
             "sets": [
               {
-                "reps": 10,
-                "type": "working"
-              },
-              {
-                "reps": 10,
-                "type": "working"
-              },
-              {
-                "reps": 10,
-                "type": "working"
-              },
-              {
+                "count": 4,
                 "reps": 10,
                 "type": "working"
               }
@@ -6461,24 +3790,7 @@
             "notes": "top of meso",
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 295,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 295,
-                  "unit": "lb"
-                }
-              },
-              {
+                "count": 3,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -6498,33 +3810,7 @@
             "notes": "end target ~180x5 (e1RM ~210) = your 205-215 estimate",
             "sets": [
               {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 180,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 180,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 180,
-                  "unit": "lb"
-                }
-              },
-              {
+                "count": 4,
                 "reps": 5,
                 "type": "working",
                 "load": {
@@ -6544,33 +3830,7 @@
             "notes": "end target ~325x3",
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 325,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 325,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 325,
-                  "unit": "lb"
-                }
-              },
-              {
+                "count": 4,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -6590,14 +3850,7 @@
             "notes": "compound press, 3+ RIR - do NOT approach failure on light day",
             "sets": [
               {
-                "reps": 10,
-                "type": "working"
-              },
-              {
-                "reps": 10,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 10,
                 "type": "working"
               }
@@ -6611,14 +3864,7 @@
             "notes": "back + shoulder health",
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -6630,14 +3876,7 @@
             "notes": "back + shoulder health",
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -6659,38 +3898,7 @@
             "notes": "explosive; 60-90s rest",
             "sets": [
               {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.7
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.7
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.7
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.7
-                }
-              },
-              {
+                "count": 5,
                 "reps": 2,
                 "type": "working",
                 "load": {
@@ -6709,22 +3917,7 @@
             "notes": "light before Mon confirmation",
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.65
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.65
-                }
-              },
-              {
+                "count": 3,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -6743,14 +3936,7 @@
             "notes": "feet low & close = quad-dominant; full depth, controlled eccentric",
             "sets": [
               {
-                "reps": 8,
-                "type": "working"
-              },
-              {
-                "reps": 8,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 8,
                 "type": "working"
               }
@@ -6772,18 +3958,7 @@
             "notes": "upper back",
             "sets": [
               {
-                "reps": 8,
-                "type": "working"
-              },
-              {
-                "reps": 8,
-                "type": "working"
-              },
-              {
-                "reps": 8,
-                "type": "working"
-              },
-              {
+                "count": 4,
                 "reps": 8,
                 "type": "working"
               }
@@ -6797,14 +3972,7 @@
             "notes": "arms / pressing support",
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -6816,14 +3984,7 @@
             "notes": "arms / pressing support",
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -6837,14 +3998,7 @@
             "rpe": 9.0,
             "sets": [
               {
-                "reps": 12,
-                "type": "working"
-              },
-              {
-                "reps": 12,
-                "type": "working"
-              },
-              {
+                "count": 3,
                 "reps": 12,
                 "type": "working"
               }
@@ -6866,22 +4020,7 @@
             "notes": "Top set",
             "sets": [
               {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.6
-                }
-              },
-              {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.6
-                }
-              },
-              {
+                "count": 3,
                 "reps": 5,
                 "type": "working",
                 "load": {
@@ -6900,14 +4039,7 @@
             "notes": "deload",
             "sets": [
               {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.55
-                }
-              },
-              {
+                "count": 2,
                 "reps": 5,
                 "type": "working",
                 "load": {
@@ -6933,14 +4065,7 @@
             "notes": "top set",
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.575
-                }
-              },
-              {
+                "count": 2,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -6981,15 +4106,7 @@
             "notes": "deload",
             "sets": [
               {
-                "reps": 5,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 195,
-                  "unit": "lb"
-                }
-              },
-              {
+                "count": 2,
                 "reps": 5,
                 "type": "working",
                 "load": {
@@ -7009,24 +4126,7 @@
             "notes": "deload",
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 225,
-                  "unit": "lb"
-                }
-              },
-              {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "absolute",
-                  "value": 225,
-                  "unit": "lb"
-                }
-              },
-              {
+                "count": 3,
                 "reps": 3,
                 "type": "working",
                 "load": {
@@ -7053,30 +4153,7 @@
             "notes": "explosive; 60-90s rest",
             "sets": [
               {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.575
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.575
-                }
-              },
-              {
-                "reps": 2,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.575
-                }
-              },
-              {
+                "count": 4,
                 "reps": 2,
                 "type": "working",
                 "load": {
@@ -7095,14 +4172,7 @@
             "notes": "deload",
             "sets": [
               {
-                "reps": 3,
-                "type": "working",
-                "load": {
-                  "kind": "percentOfGoal",
-                  "value": 0.55
-                }
-              },
-              {
+                "count": 2,
                 "reps": 3,
                 "type": "working",
                 "load": {

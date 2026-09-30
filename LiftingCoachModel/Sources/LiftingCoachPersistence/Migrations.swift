@@ -475,6 +475,55 @@ extension AppDatabase {
             }
         }
 
+        // **There are two `v14` migrations, and that is deliberate.** They were
+        // authored concurrently on separate branches — this one on the phase 1
+        // planner work, `v14_cognitoSub` below on phase 2 — and by the time
+        // they met, each had already been applied to a real database. Renaming
+        // either to `v15_` was considered and rejected twice over:
+        //
+        // - The renamed one reads as unapplied on any device that already ran
+        //   it, so GRDB re-runs the body and the `ALTER TABLE` fails on a
+        //   duplicate column. A wipe avoids that, and both phones are
+        //   expendable — but nothing *enforces* the wipe, and installing a
+        //   TestFlight build onto a phone that wasn't wiped is the ordinary
+        //   path rather than an unlucky one.
+        // - Guarding the `ALTER` fixes that and makes it worse. The device ends
+        //   up carrying *both* identifiers in `grdb_migrations`, the retired one
+        //   is absent from the server's `KNOWN_MIGRATIONS`, and every snapshot
+        //   it uploads comes back `newer_than_server`. Phase 2.3's query tools
+        //   consult exactly that flag and decline to answer — so the coach would
+        //   quietly and permanently refuse to discuss that lifter's training,
+        //   correctly, for a reason nobody would trace to a migration name.
+        //
+        // GRDB keys on the whole identifier string, so the two never collide.
+        // What is load-bearing is the **order** below: `schema.py`'s
+        // `KNOWN_MIGRATIONS` mirrors this file's registration order to work out
+        // what "the last applied migration" means, and `tests/test_schema.py`
+        // parses this file and fails when the two disagree. Keep
+        // `v14_plannedSetCount` first — it shipped first, in TestFlight build
+        // 72 — and add new migrations as `v15_` onward.
+
+        // A planned set row prescribes N identical sets — the "4" in "4x5 @
+        // 225", which is how a program is actually written. Before this the
+        // planner made you author each of the four separately.
+        //
+        // Additive, with a default, so every existing row keeps meaning exactly
+        // what it meant: one set. **Nothing collapses existing rows**, and that
+        // is deliberate — four consecutive identical rows *look* like a 4x5,
+        // but merging them would be the app deciding what the author meant, and
+        // it would take four set ids down to one (Core Tenets §1). Programs
+        // already on the phone stay written a row at a time; `setGroups` has
+        // always rendered them as "4x5" anyway.
+        //
+        // Named `setCount` rather than `count`: `count` is a SQL function, and
+        // a column sharing its name is a bare-word ambiguity waiting for the
+        // first hand-written query.
+        migrator.registerMigration("v14_plannedSetCount") { db in
+            try db.alter(table: "plannedSet") { t in
+                t.add(column: "setCount", .integer).notNull().defaults(to: 1)
+            }
+        }
+
         // Additive, same reasoning as v2-v7 above.
         //
         // Phase 2's Cognito replaces the *identity*, not the storage: this

@@ -9,6 +9,34 @@ import Foundation
 /// weight" with no load at all.
 public struct PlannedSet: Codable, Hashable, Identifiable, Sendable {
     public var id: UUID
+    /// How many identical sets this row prescribes — the "4" in "4×5 @ 225".
+    ///
+    /// A program is *written* as sets × reps × weight, and until this existed
+    /// the planner made you author each of the four separately: four rows, four
+    /// rep fields, four weights. A bulk "ALL 4 × 5 → APPLY" control was tried
+    /// first and removed with this — it wrote the same prescription through a
+    /// second control that had to be kept in agreement with the rows beneath
+    /// it, which is the shape of every duplicated control this app has deleted.
+    ///
+    /// **A row is still one prescription, not a collapsed run.** Nothing
+    /// re-groups sets by value: "5, 3, 5" stays three rows because that is
+    /// three instructions, and `setGroups` (which collapses *consecutive*
+    /// identical rows for display) is unchanged and still needed for programs
+    /// written a row at a time. What this adds is the ability to say four sets
+    /// once.
+    ///
+    /// Always at least 1 — a row prescribing zero sets is a row that should
+    /// have been deleted, and the editor deletes rather than decrements to
+    /// nothing. Clamped rather than validated, in `init` and on assignment, so
+    /// no caller has to remember.
+    ///
+    /// **It expands at `WorkoutSession.start`**, one `WorkoutSet` per set, and
+    /// the snapshot each logged set carries is normalized to `count: 1` — see
+    /// the note there. Anything counting prescribed sets sums this rather than
+    /// counting rows (`PlannedWorkout.plannedSetCount`).
+    public var count: Int = 1 {
+        didSet { if count < 1 { count = 1 } }
+    }
     public var reps: Int?
     public var type: SetType?
     /// What to put on the bar.
@@ -27,6 +55,7 @@ public struct PlannedSet: Codable, Hashable, Identifiable, Sendable {
 
     public init(
         id: UUID = UUID(),
+        count: Int = 1,
         reps: Int? = nil,
         type: SetType? = nil,
         load: LoadPrescription? = nil,
@@ -35,12 +64,41 @@ public struct PlannedSet: Codable, Hashable, Identifiable, Sendable {
         notes: String? = nil
     ) {
         self.id = id
+        // `didSet` doesn't fire during initialization, so the clamp is repeated
+        // here rather than assumed.
+        self.count = max(1, count)
         self.reps = reps
         self.type = type
         self.load = load
         self.effort = effort
         self.restTime = restTime
         self.notes = notes
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, count, reps, type, load, effort, restTime, notes
+    }
+
+    /// Hand-written only to make `count` optional on the way in.
+    ///
+    /// A `PlannedSet` is encoded in two places that already hold years of data:
+    /// every logged set's `plannedFrom` snapshot on disk, and any archive
+    /// `DataExport` has written. Neither has a `count` key, and synthesized
+    /// decoding of a non-optional `Int` would fail on all of them — which for
+    /// `plannedFrom` means a workout that no longer loads. Absent means one,
+    /// which is what those rows have always meant.
+    ///
+    /// `encode(to:)` stays synthesized; only reading is lenient.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = try container.decode(UUID.self, forKey: .id)
+        self.count = max(1, try container.decodeIfPresent(Int.self, forKey: .count) ?? 1)
+        self.reps = try container.decodeIfPresent(Int.self, forKey: .reps)
+        self.type = try container.decodeIfPresent(SetType.self, forKey: .type)
+        self.load = try container.decodeIfPresent(LoadPrescription.self, forKey: .load)
+        self.effort = try container.decodeIfPresent(EffortTarget.self, forKey: .effort)
+        self.restTime = try container.decodeIfPresent(Int.self, forKey: .restTime)
+        self.notes = try container.decodeIfPresent(String.self, forKey: .notes)
     }
 }
 
