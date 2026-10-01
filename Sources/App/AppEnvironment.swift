@@ -277,41 +277,38 @@ public final class AppEnvironment {
                 using: url, callbackURLScheme: scheme, preferredBrowserSession: .ephemeral
             )
         }
-        keepsLocal = false
     }
 
-    // MARK: The launch prompt
+    // MARK: Sign-in at launch
 
-    /// The lifter chose to keep this phone local, from the launch prompt.
-    /// Remembered so the prompt asks once rather than every launch; signing in
-    /// from Profile later clears it.
-    public var keepsLocal: Bool {
-        get {
-            access(keyPath: \.keepsLocal)
-            return UserDefaults.standard.bool(forKey: Self.keepsLocalKey)
-        }
-        set {
-            withMutation(keyPath: \.keepsLocal) {
-                UserDefaults.standard.set(newValue, forKey: Self.keepsLocalKey)
-            }
-        }
-    }
-    private static let keepsLocalKey = "account.keepsLocal"
-
-    /// Set once the first `refreshCloud()` has answered, so the prompt doesn't
-    /// flash up for the instant before the Keychain is read.
+    /// Set once the first `refreshCloud()` has answered, so nothing flashes up
+    /// for the instant before the Keychain is read.
     public private(set) var hasCheckedSession = false
 
-    /// Ask at launch whenever there's a backend, nobody is signed in, and the
-    /// lifter hasn't said to keep this phone local.
+    /// Whether this database has ever been bound to an account.
+    private var hasBeenSignedIn: Bool {
+        guard let user = currentUser,
+              let binding = try? users.accountBinding(for: user.id)
+        else { return false }
+        return binding != nil
+    }
+
+    /// **Sign-in is part of the app, not an option.** A database never bound to
+    /// an account can't be used until it is — the app was offline-only during
+    /// phase 1 for simplicity of development, not as a product position.
     ///
-    /// Covers two cases with one rule. A first launch, where backups exist and
-    /// nothing else on screen says so. And a lapsed session — Cognito's refresh
-    /// token lasts thirty days from sign-in (INFRA-SPEC D3) — where backups
-    /// would otherwise stop with nothing saying they had. The app stays fully
-    /// usable without an account: this asks, it never gates.
-    public var shouldPromptSignIn: Bool {
-        backend.isAvailable && hasCheckedSession && cloud.session == nil && !keepsLocal
+    /// Only for a phone that has *never* signed in. That's always a first
+    /// launch or a fresh install, both of which had network a moment ago.
+    public var requiresSignIn: Bool {
+        backend.isAvailable && hasCheckedSession && cloud.session == nil && !hasBeenSignedIn
+    }
+
+    /// A session that has lapsed — thirty days from sign-in (INFRA-SPEC D3) —
+    /// asks again but **never blocks**. Gating here would mean a lifter in a
+    /// basement gym with no signal couldn't log the set in front of them. The
+    /// log is local; only the upload waits.
+    public var sessionLapsed: Bool {
+        backend.isAvailable && hasCheckedSession && cloud.session == nil && hasBeenSignedIn
     }
 
     /// Signs out locally. The database stays bound to the account — signing

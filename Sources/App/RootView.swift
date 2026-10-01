@@ -20,7 +20,7 @@ struct RootView: View {
         tabs
             .tint(Theme.signal)
             .task { await environment.refreshCloud() }
-            .sheet(isPresented: signInPromptShown) { SignInPrompt() }
+            .fullScreenCover(isPresented: signInPromptShown) { SignInPrompt() }
             .onAppear {
                 // The tab bar is the one surface UIKit still paints, and its
                 // default material reads as a light-grey slab against the void.
@@ -33,14 +33,22 @@ struct RootView: View {
             }
     }
 
+    /// Lapsed-session prompts dismissed this launch. A lapse asks once per
+    /// launch and then gets out of the way — see `sessionLapsed`.
+    @State private var lapsePromptDismissed = false
+
     /// Driven by the environment rather than a local flag, so it closes on its
     /// own the moment a sign-in lands. Suppressed when a DEBUG launch argument
     /// picked a tab: those runs are for screenshotting a screen, and a sheet
     /// over it would make every one of them a picture of this prompt.
     private var signInPromptShown: Binding<Bool> {
         Binding(
-            get: { environment.shouldPromptSignIn && LaunchArguments.value(for: "-initialTab") == nil },
-            set: { _ in }
+            get: {
+                guard LaunchArguments.value(for: "-initialTab") == nil else { return false }
+                return environment.requiresSignIn
+                    || (environment.sessionLapsed && !lapsePromptDismissed)
+            },
+            set: { shown in if !shown { lapsePromptDismissed = true } }
         )
     }
 
