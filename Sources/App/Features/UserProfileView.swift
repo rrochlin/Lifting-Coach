@@ -31,6 +31,7 @@ struct UserProfileView: View {
                 referenceSection
                 accountSection
                 dataSection
+                buildFooter
             }
             .listStyle(.plain)
             .screenGround()
@@ -57,6 +58,18 @@ struct UserProfileView: View {
                 #endif
             }
         }
+    }
+
+    /// Which build this is, quietly, at the foot of the screen. See `BuildInfo`
+    /// for why it's here at all. Selectable so it can be pasted into a note.
+    private var buildFooter: some View {
+        Text(BuildInfo.current.summary)
+            .font(Theme.caption)
+            .foregroundStyle(Theme.inkMuted)
+            .textSelection(.enabled)
+            .frame(maxWidth: .infinity)
+            .padding(.top, 8)
+            .panelRow()
     }
 
     @ViewBuilder

@@ -18,9 +18,25 @@
 #     exists — beside the key they belong to, and outside any repo. Exporting
 #     them in the environment works too, which is how CI supplies them.
 #
-# The build number is the commit count, so it rises on its own and can't
-# collide with one already uploaded. The marketing version comes from
-# project.yml.
+# The build number defaults to the commit count, and with --upload it is
+# checked against App Store Connect *before* archiving. The count alone used to
+# be the whole story, on the claim that a number derived from history "can't
+# collide with one already uploaded". That holds on one branch and fails across
+# them: `git rev-list --count HEAD` counts the branch you're on, so two branches
+# reach the same number with different code, and a branch that's behind another
+# produces a number lower than one already shipped. Build 72 was cut from a
+# feature branch while main counted differently, and nothing noticed. So:
+#
+#   - Tools/asc-latest-build.py asks App Store Connect for the highest build
+#     already uploaded, and this refuses anything not above it — in seconds,
+#     rather than after a full archive has been built and rejected.
+#   - BUILD_NUMBER=<n> overrides the count for the one case it's wrong (shipping
+#     from a branch behind main). It goes through the same check.
+#   - The commit is stamped into Info.plist as LCGitCommit and shown on Profile,
+#     so any installed build can say which code it is. That was the question
+#     that couldn't be answered about build 68.
+#
+# The marketing version comes from project.yml.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -28,15 +44,46 @@ cd "$(dirname "$0")/.."
 TEAM_ID=33G44VZ97Z
 BUILD_DIR=/tmp/lifting-coach-archive
 ARCHIVE="$BUILD_DIR/LiftingCoach.xcarchive"
-BUILD_NUMBER=$(git rev-list --count HEAD)
+BUNDLE_ID=com.rrochlin.LiftingCoach
+BUILD_NUMBER=${BUILD_NUMBER:-$(git rev-list --count HEAD)}
+COMMIT=$(git rev-parse --short HEAD)
+UPLOAD=false
+[[ "${1:-}" == "--upload" ]] && UPLOAD=true
 
 if [[ -n "$(git status --porcelain)" ]]; then
     # Not fatal — but a TestFlight build that doesn't match a commit is one you
-    # can't come back to when a tester reports something.
+    # can't come back to when a tester reports something. The stamp says so
+    # rather than naming a commit the binary doesn't actually match.
     echo "warning: working tree is dirty; this build won't match any commit" >&2
+    COMMIT="$COMMIT-dirty"
 fi
 
-echo "==> build $BUILD_NUMBER (commit $(git rev-parse --short HEAD))"
+if $UPLOAD; then
+    # Sourced before anything is built, so a missing credential or a build
+    # number App Store Connect will refuse fails now rather than after the
+    # archive. An already-exported value (CI, or a one-off on the command line)
+    # wins over the file rather than being silently overwritten by it.
+    CREDENTIALS="$HOME/.appstoreconnect/credentials.env"
+    if [[ -z "${ASC_KEY_ID:-}" || -z "${ASC_ISSUER_ID:-}" ]] && [[ -f "$CREDENTIALS" ]]; then
+        # shellcheck source=/dev/null
+        source "$CREDENTIALS"
+    fi
+    : "${ASC_KEY_ID:?set ASC_KEY_ID, or put it in ~/.appstoreconnect/credentials.env}"
+    : "${ASC_ISSUER_ID:?set ASC_ISSUER_ID, or put it in ~/.appstoreconnect/credentials.env}"
+    export ASC_KEY_ID ASC_ISSUER_ID
+
+    LATEST=$(Tools/asc-latest-build.py "$BUNDLE_ID")
+    if (( BUILD_NUMBER <= LATEST )); then
+        echo "error: build $BUILD_NUMBER is not above $LATEST, the highest already in App Store Connect." >&2
+        echo "  The build number is the commit count of the branch you're on, so this" >&2
+        echo "  usually means the branch is behind the one the last build came from." >&2
+        echo "  Ship from an up-to-date main, or override: BUILD_NUMBER=$((LATEST + 1)) $0 --upload" >&2
+        exit 1
+    fi
+    echo "==> App Store Connect is at build $LATEST; $BUILD_NUMBER is clear"
+fi
+
+echo "==> build $BUILD_NUMBER (commit $COMMIT)"
 
 xcodegen generate
 rm -rf "$BUILD_DIR"
@@ -45,6 +92,7 @@ xcodebuild -project LiftingCoach.xcodeproj -scheme LiftingCoach \
     -configuration Release -destination 'generic/platform=iOS' \
     -archivePath "$ARCHIVE" -allowProvisioningUpdates \
     DEVELOPMENT_TEAM="$TEAM_ID" CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+    LC_GIT_COMMIT="$COMMIT" \
     archive
 
 cat > "$BUILD_DIR/ExportOptions.plist" <<PLIST
@@ -69,21 +117,10 @@ xcodebuild -exportArchive -archivePath "$ARCHIVE" \
 IPA="$BUILD_DIR/export/LiftingCoach.ipa"
 echo "==> exported $IPA"
 
-if [[ "${1:-}" != "--upload" ]]; then
+if ! $UPLOAD; then
     echo "==> stopping before upload; re-run with --upload to send it"
     exit 0
 fi
-
-# Sourced late, so an already-exported value (CI, or a one-off on the command
-# line) wins over the file rather than being silently overwritten by it.
-CREDENTIALS="$HOME/.appstoreconnect/credentials.env"
-if [[ -z "${ASC_KEY_ID:-}" || -z "${ASC_ISSUER_ID:-}" ]] && [[ -f "$CREDENTIALS" ]]; then
-    # shellcheck source=/dev/null
-    source "$CREDENTIALS"
-fi
-
-: "${ASC_KEY_ID:?set ASC_KEY_ID, or put it in ~/.appstoreconnect/credentials.env}"
-: "${ASC_ISSUER_ID:?set ASC_ISSUER_ID, or put it in ~/.appstoreconnect/credentials.env}"
 
 xcrun altool --validate-app -f "$IPA" -t ios \
     --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
