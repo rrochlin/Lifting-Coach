@@ -1,5 +1,7 @@
 import Foundation
+import AuthenticationServices
 import Observation
+import SwiftUI
 import OSLog
 import LiftingCoachModel
 import LiftingCoachPersistence
@@ -265,6 +267,53 @@ public final class AppEnvironment {
         recordSync(outcome)
     }
 
+    /// The one place the Hosted UI is presented, for Profile and the launch
+    /// prompt alike. Ephemeral, so no cookie outlives the sign-in: signing out
+    /// on the phone means signed out, not one tap from back in.
+    @MainActor
+    public func signIn(with webSession: WebAuthenticationSession) async throws {
+        try await signIn { url, scheme in
+            try await webSession.authenticate(
+                using: url, callbackURLScheme: scheme, preferredBrowserSession: .ephemeral
+            )
+        }
+        keepsLocal = false
+    }
+
+    // MARK: The launch prompt
+
+    /// The lifter chose to keep this phone local, from the launch prompt.
+    /// Remembered so the prompt asks once rather than every launch; signing in
+    /// from Profile later clears it.
+    public var keepsLocal: Bool {
+        get {
+            access(keyPath: \.keepsLocal)
+            return UserDefaults.standard.bool(forKey: Self.keepsLocalKey)
+        }
+        set {
+            withMutation(keyPath: \.keepsLocal) {
+                UserDefaults.standard.set(newValue, forKey: Self.keepsLocalKey)
+            }
+        }
+    }
+    private static let keepsLocalKey = "account.keepsLocal"
+
+    /// Set once the first `refreshCloud()` has answered, so the prompt doesn't
+    /// flash up for the instant before the Keychain is read.
+    public private(set) var hasCheckedSession = false
+
+    /// Ask at launch whenever there's a backend, nobody is signed in, and the
+    /// lifter hasn't said to keep this phone local.
+    ///
+    /// Covers two cases with one rule. A first launch, where backups exist and
+    /// nothing else on screen says so. And a lapsed session — Cognito's refresh
+    /// token lasts thirty days from sign-in (INFRA-SPEC D3) — where backups
+    /// would otherwise stop with nothing saying they had. The app stays fully
+    /// usable without an account: this asks, it never gates.
+    public var shouldPromptSignIn: Bool {
+        backend.isAvailable && hasCheckedSession && cloud.session == nil && !keepsLocal
+    }
+
     /// Signs out locally. The database stays bound to the account — signing
     /// back in as the same person resumes backups; anyone else is refused.
     @MainActor
@@ -324,6 +373,7 @@ public final class AppEnvironment {
         cloud.hasConflict = await snapshotSync.hasConflict
         cloud.failure = await snapshotSync.lastFailure
         cloud.restoreStaged = PendingRestore.pending() != nil
+        hasCheckedSession = true
         if cloud.session != nil {
             cloud.remote = try? await backend.latestSnapshot()
         } else {

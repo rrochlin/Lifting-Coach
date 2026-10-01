@@ -170,17 +170,7 @@ struct AccountSection: View {
     }
 
     private func signIn() async throws {
-        let session = webAuthenticationSession
-        try await environment.signIn { url, scheme in
-            // Ephemeral: no cookie outlives the sign-in, so signing out on the
-            // phone means signed out, not "one tap from back in as whoever
-            // last used Safari's session".
-            try await session.authenticate(
-                using: url,
-                callbackURLScheme: scheme,
-                preferredBrowserSession: .ephemeral
-            )
-        }
+        try await environment.signIn(with: webAuthenticationSession)
     }
 
     private func run(_ work: @escaping @MainActor () async throws -> Void) {
