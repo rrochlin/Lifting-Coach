@@ -15,25 +15,27 @@ public final class AppDatabase: Sendable {
         try Self.migrator.migrate(writer)
     }
 
+    /// Where the app's database lives. Public so a restore can replace the file
+    /// at launch, before anything has opened it — `SnapshotImporter.install`
+    /// swaps the file underneath, which is only safe with no connection open.
+    public static func defaultURL(fileManager: FileManager = .default) throws -> URL {
+        let support = try fileManager.url(
+            for: .applicationSupportDirectory,
+            in: .userDomainMask,
+            appropriateFor: nil,
+            create: true
+        )
+        let directory = support.appendingPathComponent("LiftingCoach", isDirectory: true)
+        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory.appendingPathComponent("db.sqlite")
+    }
+
     /// Opens (or creates) the database at the app's standard on-device location.
     public static func onDisk(
         at url: URL? = nil,
         fileManager: FileManager = .default
     ) throws -> AppDatabase {
-        let dbURL: URL
-        if let url {
-            dbURL = url
-        } else {
-            let support = try fileManager.url(
-                for: .applicationSupportDirectory,
-                in: .userDomainMask,
-                appropriateFor: nil,
-                create: true
-            )
-            let directory = support.appendingPathComponent("LiftingCoach", isDirectory: true)
-            try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-            dbURL = directory.appendingPathComponent("db.sqlite")
-        }
+        let dbURL = try url ?? defaultURL(fileManager: fileManager)
 
         var config = Configuration()
         config.foreignKeysEnabled = true

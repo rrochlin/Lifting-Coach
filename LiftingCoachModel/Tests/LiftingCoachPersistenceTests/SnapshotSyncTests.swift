@@ -8,20 +8,33 @@ import LiftingCoachModel
 private final class RecordingUploader: @unchecked Sendable {
     private let lock = NSLock()
     private var _uploads: [SnapshotExporter.Snapshot] = []
+    private var _conditions: [SnapshotSync.UploadCondition] = []
     private var _failNext = false
+    private var _conflictNext = false
 
     var uploads: [SnapshotExporter.Snapshot] { lock.withLock { _uploads } }
+    var conditions: [SnapshotSync.UploadCondition] { lock.withLock { _conditions } }
     var count: Int { lock.withLock { _uploads.count } }
 
     func failNextUpload() { lock.withLock { _failNext = true } }
+    /// As S3 does when another device wrote since: refuse the precondition.
+    func refuseNextPrecondition() { lock.withLock { _conflictNext = true } }
 
-    func upload(_ snapshot: SnapshotExporter.Snapshot) throws {
+    /// Returns an etag derived from the upload count, so a test can tell which
+    /// write the next precondition is pinned to.
+    func upload(_ snapshot: SnapshotExporter.Snapshot, _ condition: SnapshotSync.UploadCondition) throws -> String {
         try lock.withLock {
+            _conditions.append(condition)
+            if _conflictNext {
+                _conflictNext = false
+                throw SnapshotConflict()
+            }
             if _failNext {
                 _failNext = false
                 throw UploadFailure.refused
             }
             _uploads.append(snapshot)
+            return "\"etag-\(_uploads.count)\""
         }
     }
 
@@ -53,7 +66,7 @@ private func makeHarness(account: String? = "abc-123") throws -> Harness {
         watermarks: watermarks,
         workingDirectory: directory.appendingPathComponent("outbox"),
         account: { account },
-        upload: { try uploader.upload($0) }
+        upload: { try uploader.upload($0, $1) }
     )
     return Harness(
         database: database,
@@ -215,5 +228,74 @@ struct SnapshotSyncTests {
         let outbox = harness.directory.appendingPathComponent("outbox")
         let leftovers = try FileManager.default.contentsOfDirectory(atPath: outbox.path)
         #expect(leftovers.isEmpty)
+    }
+
+    // MARK: Conditional writes
+
+    @Test("The first upload may only create; later ones are pinned to the last etag")
+    func uploadsAreConditional() async throws {
+        let harness = try makeHarness()
+        try await harness.sync.syncIfNeeded(.signedIn)
+        try logAWorkout(harness, named: "Squat")
+        await harness.sync.markChanged()
+        try await harness.sync.syncIfNeeded(.workoutEnded)
+
+        #expect(harness.uploader.conditions == [.firstUpload, .unchangedSince(etag: "\"etag-1\"")])
+        #expect(harness.watermarks.etag(for: "abc-123") == "\"etag-2\"")
+    }
+
+    /// The reinstall case. A fresh install signs in, its first upload may only
+    /// create, the cloud already holds the real backup — and the empty log on
+    /// this phone must not replace it.
+    @Test("A refused precondition stops sync until the lifter decides")
+    func conflictWaitsForADecision() async throws {
+        let harness = try makeHarness()
+        harness.uploader.refuseNextPrecondition()
+
+        let outcome = try await harness.sync.syncIfNeeded(.signedIn)
+        #expect(outcome == .skipped(.cloudCopyChanged))
+        #expect(await harness.sync.hasConflict)
+        // A state, not a failure: nothing for a status line to call an error.
+        #expect(await harness.sync.lastFailure == nil)
+
+        // And it stays stopped: every later trigger would otherwise re-export
+        // a megabyte to be refused again.
+        try logAWorkout(harness, named: "Bench")
+        await harness.sync.markChanged()
+        #expect(try await harness.sync.syncIfNeeded(.workoutEnded) == .skipped(.cloudCopyChanged))
+        #expect(harness.uploader.conditions.count == 1)
+        #expect(harness.uploader.count == 0)
+    }
+
+    @Test("Choosing to overwrite uploads unconditionally and resumes sync")
+    func overwriteResolvesTheConflict() async throws {
+        let harness = try makeHarness()
+        harness.uploader.refuseNextPrecondition()
+        try await harness.sync.syncIfNeeded(.signedIn)
+
+        let outcome = try await harness.sync.overwriteCloudCopy()
+        guard case .uploaded = outcome else {
+            Issue.record("expected an upload, got \(outcome)")
+            return
+        }
+        #expect(harness.uploader.conditions.last == .overwrite)
+        #expect(await harness.sync.hasConflict == false)
+
+        // Back to ordinary conditional writes, pinned to the overwrite.
+        try logAWorkout(harness, named: "Deadlift")
+        await harness.sync.markChanged()
+        try await harness.sync.syncIfNeeded(.workoutEnded)
+        #expect(harness.uploader.conditions.last == .unchangedSince(etag: "\"etag-1\""))
+    }
+
+    /// Right after a restore the device knows the cloud version it holds
+    /// without having exported it — so the next upload is due, and pinned.
+    @Test("An etag with no digest uploads, pinned to that etag")
+    func afterARestore() async throws {
+        let harness = try makeHarness()
+        harness.watermarks.setWatermark(nil, etag: "\"restored\"", for: "abc-123")
+
+        try await harness.sync.syncIfNeeded(.enteringBackground)
+        #expect(harness.uploader.conditions == [.unchangedSince(etag: "\"restored\"")])
     }
 }

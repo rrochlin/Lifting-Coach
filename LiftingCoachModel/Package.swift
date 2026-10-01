@@ -7,6 +7,7 @@ let package = Package(
     products: [
         .library(name: "LiftingCoachModel", targets: ["LiftingCoachModel"]),
         .library(name: "LiftingCoachPersistence", targets: ["LiftingCoachPersistence"]),
+        .library(name: "LiftingCoachCloud", targets: ["LiftingCoachCloud"]),
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift", from: "7.0.0"),
@@ -44,6 +45,16 @@ let package = Package(
         .testTarget(
             name: "LiftingCoachPersistenceTests",
             dependencies: ["LiftingCoachPersistence"]
+        ),
+
+        // The phone's side of phase 2: Cognito sign-in, identity-pool
+        // credentials, and signed S3 requests. Foundation and CryptoKit only —
+        // no AWS SDK, no Amplify — so it's testable here with no simulator,
+        // and runnable from the command line against the real account.
+        .target(name: "LiftingCoachCloud"),
+        .testTarget(
+            name: "LiftingCoachCloudTests",
+            dependencies: ["LiftingCoachCloud"]
         ),
 
         // A dev tool, not part of the app. Writes a real snapshot and prints

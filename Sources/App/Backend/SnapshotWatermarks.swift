@@ -14,7 +14,7 @@ import LiftingCoachPersistence
 ///
 /// `@unchecked` because `UserDefaults` predates `Sendable` and has never been
 /// annotated, not because anything here is unsafe: it's documented as thread
-/// safe, and this reads and writes one string.
+/// safe, and this reads and writes two strings.
 public struct UserDefaultsWatermarkStore: SnapshotWatermarkStore, @unchecked Sendable {
     private let defaults: UserDefaults
 
@@ -26,8 +26,22 @@ public struct UserDefaultsWatermarkStore: SnapshotWatermarkStore, @unchecked Sen
         defaults.string(forKey: Self.key(account))
     }
 
-    public func setWatermark(_ sha256: String, for account: String) {
+    public func etag(for account: String) -> String? {
+        defaults.string(forKey: Self.etagKey(account))
+    }
+
+    /// Losing the etag is not like losing the digest. Without it the next
+    /// upload is made as a *first* upload, which S3 refuses because the object
+    /// exists — so a cleared store surfaces as "the cloud copy changed", and the
+    /// lifter is asked rather than anything being overwritten. The safe
+    /// direction again, at the cost of a question.
+    public func setWatermark(_ sha256: String?, etag: String?, for account: String) {
         defaults.set(sha256, forKey: Self.key(account))
+        defaults.set(etag, forKey: Self.etagKey(account))
+    }
+
+    private static func etagKey(_ account: String) -> String {
+        "snapshot.etag.\(account)"
     }
 
     /// Keyed by account, so signing in as somebody else can't inherit a claim

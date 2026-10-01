@@ -27,6 +27,17 @@ import Foundation
 /// trigger finds the snapshot still un-uploaded and tries again — which is the
 /// same code path as the first attempt rather than a second one written to
 /// recover from it.
+///
+/// **Every upload is conditional** (INFRA-SPEC §8). The first one for an account
+/// may only *create* the object; every later one may only replace the version
+/// this device last wrote. When S3 refuses, another device uploaded — or this
+/// phone was reinstalled and the cloud holds a backup it doesn't know about —
+/// and sync stops and waits rather than retrying on every trigger, because the
+/// answer is the lifter's to give: keep the cloud copy (restore it) or replace
+/// it with this phone's (`overwriteCloudCopy()`). Detection of a lost update,
+/// not mutual exclusion — and the case it catches most often on a dev phone is
+/// the reinstall, where a blind upload would have replaced years of backup with
+/// an empty log.
 public actor SnapshotSync {
     /// What prompted a sync. Carried for diagnostics only — no trigger is
     /// treated differently from any other, which is what keeps "when do we
@@ -43,6 +54,17 @@ public actor SnapshotSync {
         case openingCoachChat
     }
 
+    /// The precondition an upload is made under. Mirrors the cloud layer's own
+    /// type without depending on it, so persistence stays free of networking.
+    public enum UploadCondition: Sendable, Equatable {
+        /// Only if nothing exists yet.
+        case firstUpload
+        /// Only if the object is still the version this device last wrote.
+        case unchangedSince(etag: String)
+        /// Replace whatever is there. Only ever the lifter's explicit choice.
+        case overwrite
+    }
+
     public enum Outcome: Sendable, Equatable {
         case uploaded(byteCount: Int, sha256: String)
         case skipped(Reason)
@@ -57,6 +79,9 @@ public actor SnapshotSync {
         /// Something reported a change, but the database exports to exactly the
         /// bytes already in the bucket.
         case identicalToLastUpload
+        /// The cloud copy changed since this device last wrote it, and nothing
+        /// uploads until the lifter decides what to do about that.
+        case cloudCopyChanged
     }
 
     private let database: AppDatabase
@@ -68,9 +93,16 @@ public actor SnapshotSync {
     /// and "are we signed in" have the same answer here and the same
     /// consequence.
     private let account: @Sendable () async -> String?
-    private let upload: @Sendable (SnapshotExporter.Snapshot) async throws -> Void
+    /// Uploads under a precondition and returns the new etag. Throws
+    /// `SnapshotConflict` when the precondition is refused.
+    private let upload: @Sendable (SnapshotExporter.Snapshot, UploadCondition) async throws -> String
 
     private var hasChanged = false
+
+    /// Set when S3 refuses a conditional write, and cleared only by a decision.
+    /// In memory on purpose: a relaunch tries again, which is right, because a
+    /// restore — the other way out — completes at launch.
+    public private(set) var hasConflict = false
 
     /// Why the last sync failed, or `nil` if the last one didn't.
     ///
@@ -86,7 +118,7 @@ public actor SnapshotSync {
         workingDirectory: URL,
         fileManager: FileManager = .default,
         account: @escaping @Sendable () async -> String?,
-        upload: @escaping @Sendable (SnapshotExporter.Snapshot) async throws -> Void
+        upload: @escaping @Sendable (SnapshotExporter.Snapshot, UploadCondition) async throws -> String
     ) {
         self.database = database
         self.watermarks = watermarks
@@ -114,6 +146,7 @@ public actor SnapshotSync {
     @discardableResult
     public func syncIfNeeded(_ trigger: Trigger) async throws -> Outcome {
         guard let account = await account() else { return .skipped(.noAccount) }
+        guard !hasConflict else { return .skipped(.cloudCopyChanged) }
 
         // A first upload for this account is always due, whatever the flag says
         // — signing in on a phone that already holds five years of training is
@@ -123,15 +156,35 @@ public actor SnapshotSync {
         let lastUploaded = watermarks.watermark(for: account)
         guard hasChanged || lastUploaded == nil else { return .skipped(.nothingChanged) }
 
+        let condition: UploadCondition = watermarks.etag(for: account)
+            .map { .unchangedSince(etag: $0) } ?? .firstUpload
+        return try await attempt(account: account, lastUploaded: lastUploaded, condition: condition)
+    }
+
+    /// The lifter chose this phone's data over the cloud copy. Uploads
+    /// unconditionally — whether or not anything changed, since the point is to
+    /// replace what's there — and clears the conflict.
+    @discardableResult
+    public func overwriteCloudCopy() async throws -> Outcome {
+        guard let account = await account() else { return .skipped(.noAccount) }
+        hasConflict = false
+        return try await attempt(account: account, lastUploaded: nil, condition: .overwrite)
+    }
+
+    private func attempt(account: String, lastUploaded: String?, condition: UploadCondition) async throws -> Outcome {
         do {
-            return try await run(account: account, lastUploaded: lastUploaded)
+            return try await run(account: account, lastUploaded: lastUploaded, condition: condition)
+        } catch is SnapshotConflict {
+            // Not a failure: a state, and the lifter's to resolve.
+            hasConflict = true
+            return .skipped(.cloudCopyChanged)
         } catch {
             lastFailure = error.localizedDescription
             throw error
         }
     }
 
-    private func run(account: String, lastUploaded: String?) async throws -> Outcome {
+    private func run(account: String, lastUploaded: String?, condition: UploadCondition) async throws -> Outcome {
 
         let snapshot = try SnapshotExporter(database).export(
             to: workingDirectory,
@@ -150,11 +203,11 @@ public actor SnapshotSync {
             return .skipped(.identicalToLastUpload)
         }
 
-        try await upload(snapshot)
+        let etag = try await upload(snapshot, condition)
 
         // Only after the upload lands. A failure leaves both the flag and the
         // watermark alone, so the next trigger retries by the ordinary path.
-        watermarks.setWatermark(snapshot.sha256, for: account)
+        watermarks.setWatermark(snapshot.sha256, etag: etag, for: account)
         hasChanged = false
         lastFailure = nil
         return .uploaded(byteCount: snapshot.byteCount, sha256: snapshot.sha256)
@@ -170,22 +223,41 @@ public actor SnapshotSync {
 /// object, not part of the training log — `UserDefaults` is the right home, and
 /// losing it costs one redundant upload rather than any data.
 public protocol SnapshotWatermarkStore: Sendable {
+    /// The digest of the last upload, or `nil`. `nil` with an etag present is
+    /// a real state: right after a restore, this device knows which cloud
+    /// version it holds without having exported it itself.
     func watermark(for account: String) -> String?
-    func setWatermark(_ sha256: String, for account: String)
+    /// The etag S3 returned for this device's last write — the precondition
+    /// for the next one.
+    func etag(for account: String) -> String?
+    func setWatermark(_ sha256: String?, etag: String?, for account: String)
+}
+
+/// Thrown by an upload whose precondition S3 refused. See `SnapshotSync`.
+public struct SnapshotConflict: Error, Equatable {
+    public init() {}
 }
 
 /// An in-memory watermark store, for tests and previews.
 public final class InMemoryWatermarkStore: SnapshotWatermarkStore, @unchecked Sendable {
     private let lock = NSLock()
-    private var storage: [String: String] = [:]
+    private var digests: [String: String] = [:]
+    private var etags: [String: String] = [:]
 
     public init() {}
 
     public func watermark(for account: String) -> String? {
-        lock.withLock { storage[account] }
+        lock.withLock { digests[account] }
     }
 
-    public func setWatermark(_ sha256: String, for account: String) {
-        lock.withLock { storage[account] = sha256 }
+    public func etag(for account: String) -> String? {
+        lock.withLock { etags[account] }
+    }
+
+    public func setWatermark(_ sha256: String?, etag: String?, for account: String) {
+        lock.withLock {
+            digests[account] = sha256
+            etags[account] = etag
+        }
     }
 }

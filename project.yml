@@ -22,6 +22,8 @@ targets:
         product: LiftingCoachModel
       - package: LiftingCoachModel
         product: LiftingCoachPersistence
+      - package: LiftingCoachModel
+        product: LiftingCoachCloud
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.rrochlin.LiftingCoach

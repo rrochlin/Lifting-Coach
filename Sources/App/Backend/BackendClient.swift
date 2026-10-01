@@ -22,32 +22,49 @@ import LiftingCoachPersistence
 ///   a block *on the device*. Core Tenets §1 and §8 are this handoff.
 /// - **coach** — a websocket to a Bedrock-backed Lambda.
 ///
-/// Phase 1 ships `UnavailableBackend`. Phase 2 swaps in a real implementation at
-/// `AppEnvironment.live()` and nothing in the view layer changes.
+/// `CognitoBackend` is the real one. `UnavailableBackend` is the preview and
+/// test double, and throws rather than quietly returning nothing.
 public protocol BackendClient: Sendable {
     var isAvailable: Bool { get }
 
     // MARK: Auth (Cognito)
-    func signIn() async throws -> AuthSession
-    func signOut() async throws
+
+    /// Signs in through Cognito's Hosted UI, which offers email and Sign in
+    /// with Apple on one page.
+    ///
+    /// `authenticate` presents the page and returns the redirect it ended on.
+    /// It's supplied by the view — SwiftUI's `webAuthenticationSession` — so
+    /// the backend never needs a window to present from, and a test can answer
+    /// with a canned redirect.
+    func signIn(
+        using authenticate: @Sendable (_ url: URL, _ callbackScheme: String) async throws -> URL
+    ) async throws -> AuthSession
+
+    func signOut() async
+
+    /// Who is signed in, without touching the network. Present for as long as
+    /// a refresh token is held — an hour-old id token is renewed when it's
+    /// next needed, not treated as being signed out.
     var currentSession: AuthSession? { get async }
 
     // MARK: Snapshot (S3)
 
-    /// Uploads the exported snapshot and returns what the server now holds.
+    /// Uploads under a precondition and returns the etag S3 assigned.
     ///
     /// The phone writes to S3 itself, with temporary credentials from a Cognito
     /// identity pool scoped to its own `users/{sub}/` prefix — there is no
-    /// service in front of the bucket to ask permission from. Nothing here can
-    /// be refused for *what the file contains*: the server records the schema
-    /// version by opening the object, so a snapshot from a newer build is
-    /// stored and flagged rather than rejected, and a backup is never lost to a
-    /// Lambda that hasn't been redeployed yet.
-    @discardableResult
-    func uploadSnapshot(_ snapshot: SnapshotExporter.Snapshot) async throws -> SnapshotDescriptor
+    /// service in front of the bucket. A refused precondition throws
+    /// `SnapshotConflict`, which `SnapshotSync` turns into a question for the
+    /// lifter. Nothing here can be refused for *what the file contains*: the
+    /// server records the schema version by opening the object.
+    func uploadSnapshot(
+        _ snapshot: SnapshotExporter.Snapshot,
+        condition: SnapshotSync.UploadCondition
+    ) async throws -> String
 
-    /// What the server holds, without downloading it. `nil` on an account that
-    /// has never uploaded.
+    /// What the cloud holds, from a HEAD. `nil` on an account that has never
+    /// uploaded. The phone has no DynamoDB access by design (INFRA-SPEC §6),
+    /// so this is the object's own metadata, not the server's index.
     func latestSnapshot() async throws -> SnapshotDescriptor?
 
     /// Downloads the stored snapshot to `destination`, gzipped as uploaded.
@@ -77,49 +94,35 @@ public protocol BackendClient: Sendable {
 
 /// A signed-in lifter.
 ///
-/// `subject` is the Cognito `sub` and is the key everything server-side is
-/// filed under — the S3 prefix and every DynamoDB item. It's a string, which is
-/// what makes `Overview.md`'s old question about binary-UUID key types moot.
-/// `userId` stays the local `User.id`, because Cognito replaces the identity,
-/// not the storage.
+/// `subject` is the Cognito user pool `sub` and is the key everything
+/// server-side is filed under — the S3 prefix and every DynamoDB item. It is
+/// *not* the identity pool's identity id, which is a different value and the
+/// one mistake that would 403 every upload.
 public struct AuthSession: Codable, Hashable, Sendable {
-    public var userId: UUID
     public var subject: String
-    public var email: String
-    public var expiresAt: Date
+    /// May be an Apple private-relay address. Nothing keys on it.
+    public var email: String?
 
-    public init(userId: UUID, subject: String, email: String, expiresAt: Date) {
-        self.userId = userId
+    public init(subject: String, email: String?) {
         self.subject = subject
         self.email = email
-        self.expiresAt = expiresAt
     }
 }
 
-/// What the server holds for one user, without the file itself.
+/// What the cloud holds for one user, from the object itself.
 ///
-/// This is `snapshotMeta` in DynamoDB. `rowCounts` is here for the same reason
-/// it's on the export: it makes "the upload succeeded but the file is wrong" a
-/// state something can actually notice.
+/// Deliberately thinner than the server's `snapshotMeta`: the phone reads the
+/// object's own metadata with a HEAD, because it holds no DynamoDB permission —
+/// the index is the server's to read, and the coach's (2.2), not the device's.
 public struct SnapshotDescriptor: Codable, Hashable, Sendable {
     public var etag: String
-    public var schemaVersion: String
     public var byteCount: Int
-    public var uploadedAt: Date
-    public var rowCounts: [String: Int]
+    public var uploadedAt: Date?
 
-    public init(
-        etag: String,
-        schemaVersion: String,
-        byteCount: Int,
-        uploadedAt: Date,
-        rowCounts: [String: Int]
-    ) {
+    public init(etag: String, byteCount: Int, uploadedAt: Date?) {
         self.etag = etag
-        self.schemaVersion = schemaVersion
         self.byteCount = byteCount
         self.uploadedAt = uploadedAt
-        self.rowCounts = rowCounts
     }
 }
 
@@ -173,22 +176,22 @@ public struct UnavailableBackend: BackendClient {
 
     public var isAvailable: Bool { false }
 
-    public func signIn() async throws -> AuthSession {
+    public func signIn(
+        using authenticate: @Sendable (URL, String) async throws -> URL
+    ) async throws -> AuthSession {
         throw BackendError.notImplementedUntilPhase2
     }
 
-    public func signOut() async throws {
-        throw BackendError.notImplementedUntilPhase2
-    }
+    public func signOut() async {}
 
     public var currentSession: AuthSession? {
         get async { nil }
     }
 
-    @discardableResult
     public func uploadSnapshot(
-        _ snapshot: SnapshotExporter.Snapshot
-    ) async throws -> SnapshotDescriptor {
+        _ snapshot: SnapshotExporter.Snapshot,
+        condition: SnapshotSync.UploadCondition
+    ) async throws -> String {
         throw BackendError.notImplementedUntilPhase2
     }
 
