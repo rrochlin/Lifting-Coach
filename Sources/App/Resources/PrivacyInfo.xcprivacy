@@ -2,32 +2,84 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- Phase 1 is local-first and offline: no analytics, no network calls, no
-	     third-party SDKs. Nothing leaves the phone, so there is nothing to
-	     declare as collected and no tracking domains.
+	<!-- Phase 2 backs the training log up to the developer's own AWS account
+	     once the lifter signs in, which is the first time anything in this app
+	     reaches us — so this is the first build that collects. Before it, this
+	     array was empty, and that was correct: Profile's data export hands a
+	     file to the share sheet, and Apple's "collect" turns on whether WE
+	     receive the data, not on whether bytes leave the phone.
 
-	     Profile's data export does NOT change this, and that question is worth
-	     answering here because it will be asked again. Apple's definition of
-	     "collect" is transmitting data off the device in a way that lets US or
-	     our partners access it — it turns on who receives the data, not on
-	     whether bytes leave the phone. The export hands a file to
-	     UIActivityViewController; the system delivers it wherever the lifter
-	     picked, and the app makes no network call at all.
+	     Four types, all Linked = true because everything server-side is keyed
+	     by the Cognito sub — that is the design, not something to minimise.
+	     Tracking is false throughout: nothing is joined to third-party data or
+	     used for advertising. Purpose is app functionality (backup, and the
+	     coach in phase 2.2).
 
-	     The trigger for changing this file is exact: the first build that
-	     uploads a snapshot to S3. Then four types get declared, all
-	     Linked = true because everything server-side is keyed by the Cognito
-	     sub — see server/INFRA-SPEC.md §9.2, which holds the entries ready to
-	     paste and explains why pre-declaring them would be wrong.
+	       Fitness       workouts, sets, loads, the plan
+	       Health        bodyweight
+	       EmailAddress  held by Cognito for sign-in (may be an Apple relay)
+	       UserID        the Cognito sub
 
-	     ITSAppUsesNonExemptEncryption in project.yml does NOT move with it;
-	     TLS is exempt encryption. §9.2 again. -->
+	     Nothing is collected from a lifter who never signs in.
+
+	     ITSAppUsesNonExemptEncryption in project.yml does NOT change with this:
+	     TLS is exempt encryption, and SSE-KMS is server-side. See
+	     server/INFRA-SPEC.md §9.2. -->
 	<key>NSPrivacyTracking</key>
 	<false/>
 	<key>NSPrivacyTrackingDomains</key>
 	<array/>
 	<key>NSPrivacyCollectedDataTypes</key>
-	<array/>
+	<array>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeFitness</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeHealth</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeEmailAddress</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyCollectedDataType</key>
+			<string>NSPrivacyCollectedDataTypeUserID</string>
+			<key>NSPrivacyCollectedDataTypeLinked</key>
+			<true/>
+			<key>NSPrivacyCollectedDataTypeTracking</key>
+			<false/>
+			<key>NSPrivacyCollectedDataTypePurposes</key>
+			<array>
+				<string>NSPrivacyCollectedDataTypePurposeAppFunctionality</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSPrivacyAccessedAPITypes</key>
 	<array>
 		<dict>

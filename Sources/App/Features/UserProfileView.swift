@@ -29,7 +29,7 @@ struct UserProfileView: View {
             List {
                 unitsSection
                 referenceSection
-                accountSection
+                AccountSection()
                 dataSection
                 buildFooter
             }
@@ -117,26 +117,6 @@ struct UserProfileView: View {
             )
         }
         .buttonStyle(.plain)
-    }
-
-    @ViewBuilder
-    private var accountSection: some View {
-        SectionLabel(text: "account").panelRow()
-
-        Panel {
-            VStack(alignment: .leading, spacing: 9) {
-                Readout(
-                    label: "status",
-                    value: environment.backend.isAvailable ? "Signed in" : "Local only",
-                    accent: environment.backend.isAvailable ? Theme.ink : Theme.inkMuted
-                )
-                Rectangle().fill(Theme.hairline).frame(height: 1)
-                Text("Sign in, SSO, and account deletion need the phase 2 backend.")
-                    .font(Theme.caption)
-                    .foregroundStyle(Theme.inkMuted)
-            }
-        }
-        .panelRow()
     }
 
     /// The catalog, readable.

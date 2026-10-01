@@ -1,5 +1,8 @@
 import Foundation
+import AuthenticationServices
 import Observation
+import SwiftUI
+import OSLog
 import LiftingCoachModel
 import LiftingCoachPersistence
 
@@ -10,6 +13,11 @@ import LiftingCoachPersistence
 /// client themselves — which is what makes the phase 2 swap (a real
 /// `BackendClient` in place of `UnavailableBackend`) a one-line change here
 /// rather than a hunt through the view layer.
+///
+/// `@MainActor` because it exists to serve views, and because its upload
+/// triggers hand work to the `SnapshotSync` actor and come back to update
+/// `cloud` — which is only sound if one isolation domain owns this object.
+@MainActor
 @Observable
 public final class AppEnvironment {
     public let database: AppDatabase
@@ -29,9 +37,17 @@ public final class AppEnvironment {
     /// at launch and treated as fixed for the session.
     public private(set) var currentUser: User?
 
-    /// The seam where the phase 2 AWS backend lands. Nothing is wired up behind
-    /// it yet — see `Backend/BackendClient.swift`.
+    /// Cognito and S3 — see `Backend/CognitoBackend.swift`. Previews and tests
+    /// get `UnavailableBackend`.
     public let backend: any BackendClient
+
+    /// What Profile shows about the cloud copy. Refreshed after anything that
+    /// could change it, rather than polled.
+    public private(set) var cloud = CloudStatus()
+
+    /// Kept so a restore staged from Profile can name the account it's for,
+    /// and so the launch-time restore can write the right watermark.
+    private let watermarks: any SnapshotWatermarkStore
 
     /// Decides when the database is worth uploading. See `SnapshotSync` — the
     /// short version is that it costs nothing until there's an account, because
@@ -51,6 +67,7 @@ public final class AppEnvironment {
         self.exporter = DataExporter(database)
         self.exerciseStats = ExerciseStatsStore(database)
         self.backend = backend
+        self.watermarks = watermarks
         self.snapshotSync = SnapshotSync(
             database: database,
             watermarks: watermarks,
@@ -61,14 +78,25 @@ public final class AppEnvironment {
             // authorised to PUT it, and an expired session can't upload however
             // firmly the `user` row says whose log this is.
             account: { await backend.currentSession?.subject },
-            upload: { try await backend.uploadSnapshot($0) }
+            upload: { try await backend.uploadSnapshot($0, condition: $1) }
         )
     }
 
-    /// The real app: on-disk SQLite, no backend.
-    public static func live() throws -> AppEnvironment {
+    /// The real app: on-disk SQLite, backed up to S3 once signed in.
+    ///
+    /// A restore staged on Profile is applied here, **before** the database is
+    /// opened — the only moment its file can be swapped safely. See
+    /// `PendingRestore`.
+    public static func live(deviceID: String) throws -> AppEnvironment {
+        let watermarks = UserDefaultsWatermarkStore()
+        let restore = PendingRestore.applyIfStaged(watermarks: watermarks)
         let database = try AppDatabase.onDisk()
-        let environment = AppEnvironment(database: database, backend: UnavailableBackend())
+        let environment = AppEnvironment(
+            database: database,
+            backend: CognitoBackend(deviceID: deviceID),
+            watermarks: watermarks
+        )
+        environment.cloud.launchRestore = restore
         try environment.bootstrap()
         return environment
     }
@@ -180,9 +208,10 @@ public final class AppEnvironment {
     /// call site.
     public func snapshotDidChange(_ trigger: SnapshotSync.Trigger) {
         let sync = snapshotSync
-        Task {
+        Task { @MainActor in
             await sync.markChanged()
-            try? await sync.syncIfNeeded(trigger)
+            let outcome = try? await sync.syncIfNeeded(trigger)
+            self.recordSync(outcome)
         }
     }
 
@@ -193,8 +222,174 @@ public final class AppEnvironment {
     /// the app sees dozens of times a day.
     public func snapshotSyncIfNeeded(_ trigger: SnapshotSync.Trigger) {
         let sync = snapshotSync
-        Task { try? await sync.syncIfNeeded(trigger) }
+        Task { @MainActor in
+            let outcome = try? await sync.syncIfNeeded(trigger)
+            self.recordSync(outcome)
+        }
     }
+
+    /// The awaitable form of the background trigger, so the caller can hold a
+    /// background task open exactly as long as the upload takes.
+    @MainActor
+    public func syncBeforeSuspending() async {
+        let outcome = try? await snapshotSync.syncIfNeeded(.enteringBackground)
+        recordSync(outcome)
+    }
+
+    // MARK: Account and cloud copy
+
+    /// Signs in, then binds this database to the account.
+    ///
+    /// The binding is the guard `Overview.md` and INFRA-SPEC §3.2 rely on: a
+    /// database that already belongs to one account refuses a second, because
+    /// adopting a log under another identity would upload one person's training
+    /// into somebody else's backup. Email and Sign in with Apple are *separate*
+    /// accounts in Cognito, so switching method on an existing install lands
+    /// here — and is signed straight back out with the reason, rather than left
+    /// half-signed-in.
+    @MainActor
+    public func signIn(
+        using authenticate: @Sendable (URL, String) async throws -> URL
+    ) async throws {
+        let session = try await backend.signIn(using: authenticate)
+        guard let user = currentUser else { return }
+        do {
+            try users.bind(cognitoSub: session.subject, to: user.id)
+        } catch AccountBindingError.boundToAnotherAccount {
+            await backend.signOut()
+            await refreshCloud()
+            throw AccountError.boundToAnotherAccount
+        }
+        await refreshCloud()
+        // The first upload for an account is always due; this is where a
+        // reinstalled phone discovers the cloud already has a backup.
+        let outcome = try? await snapshotSync.syncIfNeeded(.signedIn)
+        recordSync(outcome)
+    }
+
+    /// The one place the Hosted UI is presented, for Profile and the launch
+    /// prompt alike. Ephemeral, so no cookie outlives the sign-in: signing out
+    /// on the phone means signed out, not one tap from back in.
+    @MainActor
+    public func signIn(with webSession: WebAuthenticationSession) async throws {
+        try await signIn { url, scheme in
+            try await webSession.authenticate(
+                using: url, callbackURLScheme: scheme, preferredBrowserSession: .ephemeral
+            )
+        }
+    }
+
+    // MARK: Sign-in at launch
+
+    /// Set once the first `refreshCloud()` has answered, so nothing flashes up
+    /// for the instant before the Keychain is read.
+    public private(set) var hasCheckedSession = false
+
+    /// Whether this database has ever been bound to an account.
+    private var hasBeenSignedIn: Bool {
+        guard let user = currentUser,
+              let binding = try? users.accountBinding(for: user.id)
+        else { return false }
+        return binding != nil
+    }
+
+    /// **Sign-in is part of the app, not an option.** A database never bound to
+    /// an account can't be used until it is — the app was offline-only during
+    /// phase 1 for simplicity of development, not as a product position.
+    ///
+    /// Only for a phone that has *never* signed in. That's always a first
+    /// launch or a fresh install, both of which had network a moment ago.
+    public var requiresSignIn: Bool {
+        backend.isAvailable && hasCheckedSession && cloud.session == nil && !hasBeenSignedIn
+    }
+
+    /// A session that has lapsed — thirty days from sign-in (INFRA-SPEC D3) —
+    /// asks again but **never blocks**. Gating here would mean a lifter in a
+    /// basement gym with no signal couldn't log the set in front of them. The
+    /// log is local; only the upload waits.
+    public var sessionLapsed: Bool {
+        backend.isAvailable && hasCheckedSession && cloud.session == nil && hasBeenSignedIn
+    }
+
+    /// Signs out locally. The database stays bound to the account — signing
+    /// back in as the same person resumes backups; anyone else is refused.
+    @MainActor
+    public func signOut() async {
+        await backend.signOut()
+        await refreshCloud()
+    }
+
+    /// Uploads now if anything changed since the last backup.
+    @MainActor
+    public func backUpNow() async {
+        do {
+            recordSync(try await snapshotSync.syncIfNeeded(.lifterUpdated))
+        } catch {
+            await refreshCloud()
+        }
+    }
+
+    /// The lifter chose this phone's data over the cloud copy.
+    @MainActor
+    public func replaceCloudCopy() async {
+        do {
+            recordSync(try await snapshotSync.overwriteCloudCopy())
+        } catch {
+            await refreshCloud()
+        }
+    }
+
+    /// Downloads the cloud copy and stages it to replace this phone's database
+    /// at the next launch. Refuses now, with the reason, if that would delete
+    /// workouts this phone has and the backup doesn't.
+    @MainActor
+    public func stageRestore() async throws {
+        guard let account = await backend.currentSession?.subject else { throw CloudActionError.notSignedIn }
+        PendingRestore.discard()
+        let directory = try PendingRestore.directory()
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let archive = try PendingRestore.archiveURL()
+        let remote = try await backend.downloadSnapshot(to: archive)
+
+        let importer = SnapshotImporter()
+        let prepared = try importer.prepare(archive, into: directory, named: "check")
+        defer { try? FileManager.default.removeItem(at: prepared.url) }
+        let assessment = try importer.assess(prepared, against: try AppDatabase.defaultURL())
+        guard assessment.isSafe else {
+            PendingRestore.discard()
+            throw CloudActionError.restoreWouldDiscard(assessment.localOnlyCount)
+        }
+        try PendingRestore(account: account, etag: remote.etag).stage()
+        cloud.restoreStaged = true
+    }
+
+    /// Re-reads the session, the sync state and what the cloud holds.
+    @MainActor
+    public func refreshCloud() async {
+        cloud.session = await backend.currentSession
+        cloud.hasConflict = await snapshotSync.hasConflict
+        cloud.failure = await snapshotSync.lastFailure
+        cloud.restoreStaged = PendingRestore.pending() != nil
+        hasCheckedSession = true
+        if cloud.session != nil {
+            cloud.remote = try? await backend.latestSnapshot()
+        } else {
+            cloud.remote = nil
+        }
+    }
+
+    @MainActor
+    private func recordSync(_ outcome: SnapshotSync.Outcome?) {
+        if case .uploaded = outcome { cloud.lastBackup = Date() }
+        Task {
+            await refreshCloud()
+            // Outcome and failure only — never a token, a key or a body.
+            Self.log.info("sync: \(String(describing: outcome), privacy: .public) conflict=\(self.cloud.hasConflict) failure=\(self.cloud.failure ?? "none", privacy: .public)")
+        }
+    }
+
+    /// `log stream --predicate 'subsystem == "com.rrochlin.LiftingCoach"'`
+    private static let log = Logger(subsystem: "com.rrochlin.LiftingCoach", category: "cloud")
 
     /// Deliberately no longer seeded into the app database.
     ///

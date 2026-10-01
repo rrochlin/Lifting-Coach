@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 import LiftingCoachModel
 import LiftingCoachPersistence
 
@@ -13,7 +14,10 @@ struct LiftingCoachApp: App {
         // crash deliberately while phase 1 is single-user and internal — revisit
         // with a real recovery path before anyone else installs this.
         do {
-            _environment = State(initialValue: try AppEnvironment.live())
+            // Advisory, sent as S3 object metadata so a log line can name the
+            // handset. Per-vendor, so it identifies nothing outside this app.
+            let deviceID = UIDevice.current.identifierForVendor?.uuidString ?? "unknown"
+            _environment = State(initialValue: try AppEnvironment.live(deviceID: deviceID))
         } catch {
             fatalError("Could not open the workout database: \(error)")
         }
@@ -40,7 +44,17 @@ struct LiftingCoachApp: App {
                     // flag before it exports anything, which matters because
                     // backgrounding happens dozens of times a day.
                     guard phase == .background else { return }
-                    environment.snapshotSyncIfNeeded(.enteringBackground)
+                    // Backgrounding is when an upload is most likely to be cut
+                    // off — the phone is headed for a pocket. Asking for the
+                    // background-task allowance gives a megabyte over cellular
+                    // time to land; without it the app is suspended within
+                    // seconds and the safety net has a hole in it.
+                    let app = UIApplication.shared
+                    let task = app.beginBackgroundTask(withName: "snapshot-upload")
+                    Task {
+                        await environment.syncBeforeSuspending()
+                        app.endBackgroundTask(task)
+                    }
                 }
         }
     }
