@@ -423,12 +423,25 @@ Tools/testflight.sh            # archive + export, stops before upload
 Tools/testflight.sh --upload   # and send it
 ```
 
-- **The build number is `git rev-list --count HEAD`**, passed as
-  `CURRENT_PROJECT_VERSION` on the xcodebuild invocation. App Store Connect
-  rejects a build number it has already seen for a version, and a number derived
-  from history can't be forgotten, reused, or left un-bumped. The marketing
-  version is `MARKETING_VERSION` in `project.yml` — the only place it lives, since
-  `Info.plist` now reads both from build settings.
+- **The build number defaults to `git rev-list --count HEAD`, and `--upload`
+  checks it against App Store Connect before archiving.** This file used to say
+  a number derived from history "can't be forgotten, reused, or left
+  un-bumped" — true on one branch, false across them. The count is per branch:
+  build 72 came from `midlift-feedback-aug` while `main` counted a different
+  history, and a branch behind another produces a number lower than one already
+  shipped. `Tools/asc-latest-build.py` asks App Store Connect for the highest
+  build it holds (read-only, `openssl` + `curl`, no dependencies) and the script
+  refuses anything not above it — in seconds, not after a full archive.
+  `BUILD_NUMBER=<n>` overrides the count for shipping from a branch behind
+  `main`, and goes through the same check. The marketing version is
+  `MARKETING_VERSION` in `project.yml` — the only place it lives.
+- **Every TestFlight build carries its commit** as `LCGitCommit` in
+  `Info.plist`, shown at the foot of Profile as `0.1.0 (103) · a1b2c3d`
+  (`BuildInfo`). It was added because "did build 68 carry `v14_cognitoSub`?"
+  had no answer: `testflight.sh` printed the SHA and threw it away, and the
+  lineage had to be inferred from a commit timestamp 2m48s before an upload.
+  A dirty tree stamps `-dirty`; local and simulator builds read `unknown`
+  rather than claiming a commit nobody stamped.
 - **Uploading needs an App Store Connect API key**: the `.p8` at
   `~/.appstoreconnect/private_keys/AuthKey_<KEYID>.p8`, plus `ASC_KEY_ID` and
   `ASC_ISSUER_ID` — which live in `~/.appstoreconnect/credentials.env`

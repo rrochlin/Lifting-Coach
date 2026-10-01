@@ -27,6 +27,10 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.rrochlin.LiftingCoach
         MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: "1"
+        # The commit a build was made from, read back by `BuildInfo` and shown
+        # on Profile. Only Tools/testflight.sh knows it and overrides this;
+        # every other build honestly says "unknown" rather than guessing.
+        LC_GIT_COMMIT: "unknown"
         SWIFT_VERSION: "6.0"
         # Phase 1 is portrait-only on iPhone; revisit if an iPad planner view lands.
         TARGETED_DEVICE_FAMILY: "1"
@@ -50,11 +54,12 @@ targets:
         CFBundleDisplayName: Lifting Coach
         # Both read from build settings so project.yml is the single source of
         # truth for the version. The build number is overridden on the command
-        # line by Tools/testflight.sh, which uses the commit count — App Store
-        # Connect rejects a build number it has already seen, and a number
-        # derived from history can't be forgotten or reused.
+        # line by Tools/testflight.sh, which uses the commit count and checks it
+        # against App Store Connect before archiving — see that script for why
+        # the count alone isn't enough.
         CFBundleShortVersionString: "$(MARKETING_VERSION)"
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        LCGitCommit: "$(LC_GIT_COMMIT)"
         UILaunchScreen: {}
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
