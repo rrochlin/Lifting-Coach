@@ -1,6 +1,7 @@
-# Ships `server/` to its two Lambdas: the one that indexes uploaded snapshots
-# and the one that deletes an account. One package, two handlers — each
-# function's handler setting (Terraform's) picks which entry point it runs.
+# Ships `server/` to its three Lambdas: the one that indexes uploaded
+# snapshots, the one that deletes an account, and the user pool's Sign in with
+# Apple triggers. One package, three handlers — each function's handler
+# setting (Terraform's) picks which entry point it runs.
 #
 # **This workflow updates code and never configuration.** Runtime, memory,
 # timeout, architecture, handler, environment and the S3 trigger all belong to
@@ -39,7 +40,7 @@ env:
   AWS_REGION: us-west-2
   # Space-separated. Every one must exist before this runs on main — the
   # Terraform that creates a function lands first, the code second.
-  FUNCTION_NAMES: lift-coach-prod-index-snapshot lift-coach-prod-delete-account
+  FUNCTION_NAMES: lift-coach-prod-index-snapshot lift-coach-prod-delete-account lift-coach-prod-apple-sign-in
 
 # Two deploys of the same function must not race. Queued rather than
 # cancelled: a half-finished code update is worse than a redundant one.
@@ -144,20 +145,32 @@ jobs:
           echo "If 'sub' does match that pattern, then the ARN in the"
           echo "AWS_DEPLOY_ROLE_ARN secret points at a different role."
 
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
       - name: Build the package
-        working-directory: server/src
         run: |
           set -euo pipefail
-          # Zipped from `server/src`, so `liftcoach_server/` sits at the root of
-          # the archive. The deployed handler is
-          # `liftcoach_server.handlers.index_snapshot`, and zipping from
-          # `server/` instead buries the package one level down and produces
-          # `Runtime.ImportModuleError: No module named 'liftcoach_server'` —
-          # which is what the placeholder function failed with, so it is a real
-          # mistake rather than a hypothetical one.
-          zip -qr /tmp/function.zip liftcoach_server \
-            -x '*__pycache__*' '*.pyc'
-          unzip -l /tmp/function.zip
+          # `liftcoach_server/` at the root of the archive. The deployed
+          # handlers are `liftcoach_server.handlers.*`, and burying the package
+          # one level down produces `Runtime.ImportModuleError: No module named
+          # 'liftcoach_server'` — which is what the placeholder function failed
+          # with, so it is a real mistake rather than a hypothetical one.
+          rm -rf /tmp/package && mkdir -p /tmp/package
+          cp -R server/src/liftcoach_server /tmp/package/
+
+          # The one runtime dependency, `cryptography` (INFRA-SPEC §3.5), as
+          # wheels for the *Lambda's* platform — arm64 Linux, Python 3.12 — not
+          # this runner's. `--only-binary` because a source build here would
+          # compile for x86_64 and fail at import in Lambda. boto3 is not
+          # installed: every Lambda runtime ships it.
+          uv export --project server --no-dev --no-hashes --no-emit-project -o /tmp/requirements.txt
+          uv pip install --target /tmp/package -r /tmp/requirements.txt \
+            --python-platform aarch64-manylinux_2_28 --python-version 3.12 --only-binary :all:
+
+          cd /tmp/package
+          zip -qr /tmp/function.zip . -x '*__pycache__*' '*.pyc' 'bin/*'
+          unzip -l /tmp/function.zip | tail -1
 
       - name: Update the function code
         run: |

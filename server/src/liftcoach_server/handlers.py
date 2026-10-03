@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
-from . import accounts, snapshots
+from . import accounts, apple, auth_triggers, snapshots
 from .errors import UnreadableSnapshot
 from .inspection import inspect
 from .snapshots import MetaStore, SnapshotMeta
@@ -181,6 +181,7 @@ class AccountDeps:
     accounts: accounts.Accounts
     versions: accounts.SnapshotVersions
     meta: MetaStore
+    apple_grants: apple.AppleGrants
 
 
 _account_deps: AccountDeps | None = None
@@ -204,7 +205,7 @@ def account_dependencies() -> AccountDeps:
 
 
 def delete_account(event: Event, context: Any = None) -> dict[str, Any]:
-    """`{"accessToken": "..."}` → `{"deleted": true, "objectVersions": n}`.
+    """`{"accessToken", "appleAuthorizationCode"}` → `{"deleted": true, "objectVersions": n}`.
 
     A refused token is an *answer*, `{"deleted": false, "reason":
     "signInRequired"}`, rather than a raise: Lambda reports a raised exception
@@ -213,16 +214,56 @@ def delete_account(event: Event, context: Any = None) -> dict[str, Any]:
     call, the lifter sees "try again", and every step is safe to repeat.
     """
     deps = account_dependencies()
-    token = str((event or {}).get("accessToken") or "")
+    payload = event or {}
     try:
         report = accounts.delete_account(
-            token, accounts=deps.accounts, versions=deps.versions, meta=deps.meta
+            str(payload.get("accessToken") or ""),
+            str(payload.get("appleAuthorizationCode") or ""),
+            accounts=deps.accounts,
+            versions=deps.versions,
+            meta=deps.meta,
+            apple_grants=deps.apple_grants,
         )
     except accounts.InvalidToken as refusal:
         print(f"delete_account refused: {refusal.message}")
         return {"deleted": False, "reason": "signInRequired"}
+    except accounts.AppleReconfirmationRequired as refusal:
+        print(f"delete_account refused: {refusal.message}")
+        return {"deleted": False, "reason": "appleReconfirmationRequired"}
+    except accounts.AppleAccountMismatch as refusal:
+        print(f"delete_account refused: {refusal.message}")
+        return {"deleted": False, "reason": "appleAccountMismatch"}
 
     # The sub and a count, never the token. Enough to answer "did it run, and
     # for whom" from the log group.
     print(f"delete_account: {report.subject} removed, {report.object_versions} object versions")
     return report.as_body()
+
+
+# ── Sign in with Apple: the user pool's triggers ─────────────────────────────
+
+
+@dataclass
+class AppleSignInDeps:
+    keys: apple.AppleKeys
+    #: The bundle id. A token minted for any other app is refused.
+    audience: str
+
+
+_apple_deps: AppleSignInDeps | None = None
+
+
+def configure_apple_sign_in(deps: AppleSignInDeps | None) -> None:
+    global _apple_deps
+    _apple_deps = deps
+
+
+def apple_sign_in(event: Event, context: Any = None) -> Event:
+    """Every trigger on the user pool — see `auth_triggers`. Built once per
+    container so Apple's keys stay cached between sign-ins."""
+    global _apple_deps
+    if _apple_deps is None:
+        _apple_deps = AppleSignInDeps(
+            keys=apple.HttpAppleKeys(), audience=os.environ["APPLE_BUNDLE_ID"]
+        )
+    return auth_triggers.handle(event, _apple_deps)

@@ -1,4 +1,4 @@
-import AuthenticationServices
+import LiftingCoachCloud
 import SwiftUI
 
 /// Profile's account and backup section: sign in, see what the cloud holds, and
@@ -13,7 +13,6 @@ import SwiftUI
 /// (Core Tenets §1).
 struct AccountSection: View {
     @Environment(AppEnvironment.self) private var environment
-    @Environment(\.webAuthenticationSession) private var webAuthenticationSession
 
     @State private var isWorking = false
     @State private var message: String?
@@ -74,10 +73,15 @@ struct AccountSection: View {
         .themedConfirm(
             isPresented: $confirmDelete,
             title: "Delete your account?",
-            message: "Your account and every cloud backup of your training log are deleted, permanently — including older versions. This can't be undone. You'll sign in once more to confirm it's you.\n\nThe training log on this phone stays. The next account you sign in with will back it up.",
-            confirmLabel: "Delete"
+            message: "Your account and every cloud backup of your training log are deleted, permanently — including older versions — and this app's access to your Apple ID is revoked. This can't be undone.\n\nNext, Apple asks you to confirm it's you.\n\nThe training log on this phone stays. The next time you sign in, it's backed up to a new account.",
+            confirmLabel: "Continue"
         ) {
-            run { try await environment.deleteAccount(with: webAuthenticationSession) }
+            // Apple's sheet comes straight after the dialog, so it reads as the
+            // second half of one decision rather than an unexplained sign-in.
+            run {
+                let apple = try await AppleAuthorization.confirm()
+                try await environment.deleteAccount(confirmedWith: apple)
+            }
         }
     }
 
@@ -85,12 +89,15 @@ struct AccountSection: View {
 
     private var signedOut: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Readout(label: "status", value: "Local only", accent: Theme.inkMuted)
+            Readout(label: "status", value: "Not signed in", accent: Theme.inkMuted)
             Rectangle().fill(Theme.hairline).frame(height: 1)
-            actionButton(isWorking ? "SIGNING IN…" : "SIGN IN", icon: "person.crop.circle") {
-                run { try await signIn() }
+            AppleSignInButton { apple in
+                run { try await environment.signIn(with: apple) }
+            } onError: { error in
+                message = error.localizedDescription
             }
-            Text("Backs your training log up to the cloud after each workout. Email and Sign in with Apple are separate accounts — pick one and keep using it.")
+            .disabled(isWorking)
+            Text("Backs your training log up to the cloud after each workout.")
                 .font(Theme.caption)
                 .foregroundStyle(Theme.inkMuted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -99,7 +106,7 @@ struct AccountSection: View {
 
     private func signedIn(_ session: AuthSession) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Readout(label: "signed in", value: session.email ?? String(session.subject.prefix(8)), accent: Theme.ink)
+            Readout(label: "signed in", value: session.email ?? "Apple ID", accent: Theme.ink)
             Rectangle().fill(Theme.hairline).frame(height: 1)
             Readout(label: "backup", value: backupSummary, accent: cloud.remote == nil ? Theme.inkMuted : Theme.ink)
             if cloud.restoreStaged {
@@ -194,10 +201,6 @@ struct AccountSection: View {
         return " from \(date.formatted(date: .abbreviated, time: .shortened))"
     }
 
-    private func signIn() async throws {
-        try await environment.signIn(with: webAuthenticationSession)
-    }
-
     private func run(_ work: @escaping @MainActor () async throws -> Void) {
         guard !isWorking else { return }
         isWorking = true
@@ -206,8 +209,8 @@ struct AccountSection: View {
             defer { isWorking = false }
             do {
                 try await work()
-            } catch let error as ASWebAuthenticationSessionError where error.code == .canceledLogin {
-                // Backing out of the sign-in page isn't an error worth a word.
+            } catch where AppleAuthorization.isCancellation(error) {
+                // Backing out of Apple's sheet isn't an error worth a word.
             } catch {
                 message = error.localizedDescription
             }

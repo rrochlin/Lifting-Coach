@@ -22,9 +22,12 @@ land beside it later.
 cd server && uv sync && uv run pytest
 ```
 
-Python 3.11+, standard library only. `boto3` is a dev dependency rather than a
-runtime one because every Lambda runtime already provides it — vendoring a copy
-of what the platform ships would be shipping a second copy to keep updated.
+Python 3.11+. One runtime dependency, `cryptography`, for Sign in with Apple —
+verifying Apple's RS256 identity tokens and signing the ES256 client secret
+revocation needs (`INFRA-SPEC.md` §3.5); those are primitives this project
+doesn't write by hand. It is imported lazily, so the indexer never loads it,
+and `deploy-server.yml` bundles it as arm64 wheels. `boto3` is a dev dependency
+rather than a runtime one because every Lambda runtime already provides it.
 `sqlite3` and `gzip` being stdlib is what lets the indexer read a snapshot with
 no build step at all.
 
@@ -36,9 +39,13 @@ tag carrying the user pool `sub` to exactly `users/${sub}/*`. There is no API in
 front of the bucket, nothing mints a URL, and no code in this package
 authorises a request — IAM does that, before any of this runs.
 
-**One Lambda, on the way in.** `ObjectCreated` fires `index_snapshot`, which
+**Three Lambdas, one package.** `ObjectCreated` fires `index_snapshot`, which
 downloads the object *at the version the event named*, opens it, and records
-what it found. `INFRA-SPEC.md` is the full resource list.
+what it found. `delete_account` is the one thing the phone asks for directly
+(Lambda `Invoke`, no URL): it revokes the app's Apple grant, deletes every
+snapshot version and the index item, then the Cognito user. `apple_sign_in` is
+the user pool's triggers, verifying native Sign in with Apple tokens.
+`INFRA-SPEC.md` is the full resource list.
 
 ```
 phone ──(Cognito identity pool credentials)──► s3://…/users/{sub}/snapshot.sqlite.gz
@@ -137,9 +144,6 @@ and both matter to code in this directory:
   written by the real handler. Until the first deploy lands, every property here
   is proved by tests and none by production.
 - **The chat and the query tools** (2.2, 2.3).
-- **Account deletion.** App Review requires an in-app path once accounts exist,
-  and on a versioned bucket the obvious implementation deletes nothing — it
-  writes a delete marker over versions that stay readable. `INFRA-SPEC.md` §9.4
-  settles it: enumerate the versions and delete them, plus the `snapshotMeta`
-  item and the Cognito user. §9.2–9.5 hold the rest of the compliance work the
-  first cloud build can't ship without.
+- ~~**Account deletion.**~~ Built — `accounts.py`, INFRA-SPEC §9.4, with
+  Apple grant revocation from §3.5. §9.2–9.5 hold the rest of the compliance
+  work (privacy questionnaire, policy URL).

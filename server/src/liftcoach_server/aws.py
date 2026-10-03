@@ -222,14 +222,18 @@ class CognitoAccounts:
                 raise InvalidToken(exc.response.get("Error", {}).get("Message", code)) from None
             raise
 
-    def subject(self, access_token: str) -> str:
-        from .accounts import InvalidToken
+    def user(self, access_token: str) -> Any:
+        from .accounts import AccountUser, InvalidToken
 
         response = self._call("get_user", access_token)
-        for attribute in response.get("UserAttributes") or []:
-            if attribute.get("Name") == "sub":
-                return str(attribute.get("Value", ""))
-        raise InvalidToken("Cognito returned a user with no sub")
+        attributes = {
+            str(a.get("Name")): str(a.get("Value", "")) for a in response.get("UserAttributes") or []
+        }
+        if not attributes.get("sub"):
+            raise InvalidToken("Cognito returned a user with no sub")
+        # With `username_attributes = ["email"]` the email attribute *is* the
+        # username the phone chose; `Username` is Cognito's generated id.
+        return AccountUser(subject=attributes["sub"], username=attributes.get("email", ""))
 
     def delete(self, access_token: str) -> None:
         self._call("delete_user", access_token)
@@ -295,12 +299,60 @@ def build_dependencies(bucket: str, meta_table: str) -> Any:
     return Deps(objects=S3Objects(bucket), meta=DynamoMetaStore(meta_table))
 
 
+class SSMAppleSecret:
+    """Mints Apple's client secret from the Sign in with Apple key in SSM.
+
+    The key and its id are §3.2's two parameters, read once per container.
+    The deletion role can read exactly those two parameters and decrypt only
+    through SSM (`kms:ViaService`).
+    """
+
+    def __init__(
+        self, team_id: str, client_id: str, key_id_param: str, key_param: str, client: Any | None = None
+    ) -> None:
+        self._team_id = team_id
+        self._client_id = client_id
+        self._key_id_param = key_id_param
+        self._key_param = key_param
+        self._client = client
+        self._loaded: tuple[str, str] | None = None
+
+    def __call__(self) -> str:
+        from .apple import client_secret
+
+        if self._loaded is None:
+            if self._client is None:
+                import boto3
+
+                self._client = boto3.client("ssm")
+            key_id = self._client.get_parameter(Name=self._key_id_param)["Parameter"]["Value"]
+            pem = self._client.get_parameter(Name=self._key_param, WithDecryption=True)["Parameter"][
+                "Value"
+            ]
+            self._loaded = (key_id.strip(), pem)
+        key_id, pem = self._loaded
+        return client_secret(self._team_id, key_id, self._client_id, pem)
+
+
 def build_account_dependencies(bucket: str, meta_table: str) -> Any:
     """The deletion function's composition root."""
+    import os
+
+    from .apple import AppleRevoker
     from .handlers import AccountDeps
 
+    bundle_id = os.environ["APPLE_BUNDLE_ID"]
     return AccountDeps(
         accounts=CognitoAccounts(),
         versions=S3Versions(bucket),
         meta=DynamoMetaStore(meta_table),
+        apple_grants=AppleRevoker(
+            client_id=bundle_id,
+            secret=SSMAppleSecret(
+                team_id=os.environ["APPLE_TEAM_ID"],
+                client_id=bundle_id,
+                key_id_param=os.environ["APPLE_KEY_ID_PARAM"],
+                key_param=os.environ["APPLE_PRIVATE_KEY_PARAM"],
+            ),
+        ),
     )

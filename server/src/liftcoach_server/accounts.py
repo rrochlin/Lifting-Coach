@@ -13,6 +13,12 @@ expired or revoked fails that call and nothing is deleted. The `sub` that comes
 back is the same one the phone's IAM policy keys its prefix on, which is why it
 can name what to delete.
 
+**Apple first.** An app offering Sign in with Apple must revoke the user's
+Apple grant when their account is deleted. The phone sends a fresh
+authorization code from the confirmation sheet; it is exchanged and revoked
+*before* anything is deleted, so a refusal there costs nothing and the lifter
+just confirms again (INFRA-SPEC §3.5).
+
 **What.** On a versioned bucket a plain delete only writes a marker, and every
 earlier version stays readable for §4's 30 days. "Deleted" that means "in 30
 days" is the true-on-a-technicality this project keeps refusing, so every
@@ -32,6 +38,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
+from . import apple
 from .errors import ServiceError
 from .snapshots import MetaStore
 
@@ -45,11 +52,28 @@ class InvalidToken(ServiceError):
     """
 
 
+class AppleReconfirmationRequired(ServiceError):
+    """No usable Apple authorization code: missing, expired or already used.
+    Nothing was deleted; the phone asks the lifter to confirm with Apple again."""
+
+
+class AppleAccountMismatch(ServiceError):
+    """The Apple confirmation was a different Apple ID from this account's."""
+
+
+@dataclass(frozen=True)
+class AccountUser:
+    subject: str
+    #: The Cognito username, email-shaped: `apple.username_for(appleSub)` for
+    #: every account the app creates.
+    username: str
+
+
 class Accounts(Protocol):
     """The user pool, as seen through one access token."""
 
-    def subject(self, access_token: str) -> str:
-        """The `sub` the token belongs to. Raises `InvalidToken`."""
+    def user(self, access_token: str) -> AccountUser:
+        """Who the token belongs to. Raises `InvalidToken`."""
         ...
 
     def delete(self, access_token: str) -> None:
@@ -92,19 +116,40 @@ def user_prefix(subject: str) -> str:
 
 def delete_account(
     access_token: str,
+    apple_authorization_code: str,
     accounts: Accounts,
     versions: SnapshotVersions,
     meta: MetaStore,
+    apple_grants: apple.AppleGrants,
 ) -> DeletionReport:
     """Deletes the account `access_token` belongs to, and all it holds.
 
-    Raises `InvalidToken` before touching anything if Cognito refuses the
-    token. Any other failure propagates; every step is safe to repeat.
+    Raises before touching anything if Cognito refuses the token
+    (`InvalidToken`), if Apple refuses the code (`AppleReconfirmationRequired`)
+    or if the code is another Apple ID's (`AppleAccountMismatch`). Any later
+    failure propagates; every step after revocation is safe to repeat.
     """
     if not access_token:
         raise InvalidToken("No access token")
 
-    subject = accounts.subject(access_token)
+    user = accounts.user(access_token)
+    subject = user.subject
+
+    apple_subject = apple.subject_from_username(user.username)
+    if apple_subject is not None:
+        if not apple_authorization_code:
+            raise AppleReconfirmationRequired("No Apple authorization code")
+        try:
+            revoked = apple_grants.revoke(apple_authorization_code)
+        except apple.AppleGrantUnusable as refusal:
+            raise AppleReconfirmationRequired(refusal.message) from None
+        if revoked != apple_subject:
+            # Checked after the revoke, because only the exchange says whose
+            # code it is. Revoking a grant the lifter just re-made for another
+            # Apple ID costs them one more confirmation; deleting this account
+            # on the strength of somebody else's Apple ID costs much more.
+            raise AppleAccountMismatch("That Apple ID isn't this account's")
+
     removed = versions.delete_all(user_prefix(subject))
     meta.delete(subject)
     accounts.delete(access_token)

@@ -4,8 +4,9 @@ import LiftingCoachPersistence
 
 /// The phase 2 backend: Cognito for identity, S3 for the snapshot.
 ///
-/// Composes the four pieces in `LiftingCoachCloud` — Hosted UI sign-in, token
-/// refresh, identity-pool credentials, signed S3 requests — and owns the state
+/// Composes the pieces in `LiftingCoachCloud` — native Sign in with Apple into
+/// the user pool, token refresh, identity-pool credentials, signed S3 requests,
+/// account deletion — and owns the state
 /// between them: the tokens (Keychain) and the current AWS credentials
 /// (memory only; they last an hour and are cheap to re-mint).
 ///
@@ -13,7 +14,7 @@ import LiftingCoachPersistence
 /// be signing in or out on Profile, and a token refresh racing a sign-out must
 /// not write the old tokens back.
 actor CognitoBackend: BackendClient {
-    private let hostedUI: HostedUI
+    private let userPool: UserPoolAuth
     private let identityPool: IdentityPool
     private let bucket: SnapshotBucket
     private let deletion: AccountDeletion
@@ -34,7 +35,7 @@ actor CognitoBackend: BackendClient {
     private var uploadsInFlight = 0
 
     init(config: CloudConfig = .production, deviceID: String, tokenStore: TokenStore = TokenStore()) {
-        hostedUI = HostedUI(config: config)
+        userPool = UserPoolAuth(config: config)
         identityPool = IdentityPool(config: config)
         bucket = SnapshotBucket(config: config)
         deletion = AccountDeletion(config: config)
@@ -47,24 +48,17 @@ actor CognitoBackend: BackendClient {
 
     // MARK: Auth
 
-    func signIn(
-        using authenticate: @Sendable (URL, String) async throws -> URL
-    ) async throws -> AuthSession {
-        let attempt = HostedUI.Attempt()
-        let callback = try await authenticate(
-            hostedUI.authorizeURL(for: attempt), hostedUI.config.callbackScheme
-        )
-        let code = try hostedUI.code(from: callback, for: attempt)
-        let signedIn = try await hostedUI.exchange(code: code, for: attempt)
+    func signIn(with apple: AppleCredential) async throws -> AuthSession {
+        let signedIn = try await userPool.signIn(apple)
         let claims = try IDTokenClaims(jwt: signedIn.idToken)
         tokens = signedIn
         credentials = nil
         tokenStore.save(signedIn)
-        return AuthSession(subject: claims.subject, email: claims.email)
+        return AuthSession(subject: claims.subject, email: signedIn.displayEmail)
     }
 
-    /// Local only. The Hosted UI session was ephemeral, so there's no browser
-    /// cookie to clear, and the refresh token simply stops being held — the
+    /// Local only. There's no browser session to clear — sign-in is Apple's
+    /// native sheet — and the refresh token simply stops being held, so the
     /// next sign-in is a fresh one.
     func signOut() async {
         tokens = nil
@@ -74,33 +68,26 @@ actor CognitoBackend: BackendClient {
 
     var currentSession: AuthSession? {
         guard !isDeletingAccount, let tokens, let claims = try? IDTokenClaims(jwt: tokens.idToken) else { return nil }
-        return AuthSession(subject: claims.subject, email: claims.email)
+        return AuthSession(subject: claims.subject, email: tokens.displayEmail)
     }
 
     // MARK: Account deletion
 
-    func deleteAccount(
-        using authenticate: @Sendable (URL, String) async throws -> URL
-    ) async throws -> String {
+    func deleteAccount(confirmedWith apple: AppleCredential) async throws -> String {
         guard let shown = currentSession?.subject else { throw CloudError.notSignedIn }
         isDeletingAccount = true
         defer { isDeletingAccount = false }
 
-        // Sign in again: the confirmation, and a token with the admin scope.
-        // A cancel here throws out of the whole deletion with nothing done.
-        let attempt = HostedUI.Attempt()
-        let callback = try await authenticate(
-            hostedUI.authorizeURL(for: attempt), hostedUI.config.callbackScheme
-        )
-        let code = try hostedUI.code(from: callback, for: attempt)
-        let fresh = try await hostedUI.exchange(code: code, for: attempt)
+        // Sign in again with the confirmation: proves it's the same account and
+        // gives a fresh access token for the server to verify.
+        let fresh = try await userPool.signIn(apple)
         let subject = try IDTokenClaims(jwt: fresh.idToken).subject
         guard subject == shown else { throw AccountDeletionError.differentAccount }
         tokens = fresh
         credentials = nil
         tokenStore.save(fresh)
 
-        // The sign-in took seconds, so this is normally already zero.
+        // Apple's sheet took seconds, so this is normally already zero.
         var waited = 0
         while uploadsInFlight > 0, waited < 300 {
             try await Task.sleep(for: .milliseconds(100))
@@ -108,7 +95,9 @@ actor CognitoBackend: BackendClient {
         }
 
         let aws = try await identityPool.credentials(idToken: fresh.idToken)
-        try await deletion.delete(accessToken: fresh.accessToken, credentials: aws)
+        try await deletion.delete(
+            accessToken: fresh.accessToken, appleAuthorizationCode: apple.authorizationCode, credentials: aws
+        )
 
         tokens = nil
         credentials = nil
@@ -186,7 +175,8 @@ actor CognitoBackend: BackendClient {
         if current.expiresAt.timeIntervalSinceNow < margin {
             guard let refreshToken = current.refreshToken else { throw CloudError.signInExpired }
             do {
-                current = try await hostedUI.refresh(refreshToken)
+                current = try await userPool.refresh(refreshToken)
+                current.displayEmail = tokens?.displayEmail
             } catch CloudError.signInExpired {
                 await signOut()
                 throw CloudError.signInExpired

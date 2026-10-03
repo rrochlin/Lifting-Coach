@@ -1,4 +1,5 @@
 import Foundation
+import LiftingCoachCloud
 import LiftingCoachModel
 import LiftingCoachPersistence
 
@@ -29,16 +30,12 @@ public protocol BackendClient: Sendable {
 
     // MARK: Auth (Cognito)
 
-    /// Signs in through Cognito's Hosted UI, which offers email and Sign in
-    /// with Apple on one page.
+    /// Signs in with a native Sign in with Apple credential — INFRA-SPEC §3.5.
     ///
-    /// `authenticate` presents the page and returns the redirect it ended on.
-    /// It's supplied by the view — SwiftUI's `webAuthenticationSession` — so
-    /// the backend never needs a window to present from, and a test can answer
-    /// with a canned redirect.
-    func signIn(
-        using authenticate: @Sendable (_ url: URL, _ callbackScheme: String) async throws -> URL
-    ) async throws -> AuthSession
+    /// The view runs Apple's sheet (`AppleSignInButton`) and hands over what it
+    /// returned, so the backend never needs a window to present from and a
+    /// test can pass a canned credential.
+    func signIn(with apple: AppleCredential) async throws -> AuthSession
 
     func signOut() async
 
@@ -50,16 +47,15 @@ public protocol BackendClient: Sendable {
     /// Deletes the account and everything the cloud holds for it, then signs
     /// out. Returns the `sub` that was deleted.
     ///
-    /// **Asks the lifter to sign in again first**, through the same
-    /// `authenticate` as `signIn`. It's the conventional confirmation for an
-    /// act that can't be undone, and it's also what guarantees a fresh access
-    /// token carrying the scope the server needs to verify it. Throws
-    /// `AccountDeletionError.differentAccount` if that sign-in names somebody
+    /// `apple` is a **fresh** confirmation from Apple's sheet, taken right
+    /// after the lifter confirmed. It does three jobs: it's the conventional
+    /// re-confirmation for an act that can't be undone, it signs in again so
+    /// the access token is fresh, and its authorization code is what the
+    /// server needs to revoke the app's Apple grant (Apple requires it).
+    /// Throws `AccountDeletionError.differentAccount` if it names somebody
     /// other than who is signed in now. Uploads are refused from the moment
     /// this starts, so nothing can recreate the snapshot behind it.
-    func deleteAccount(
-        using authenticate: @Sendable (_ url: URL, _ callbackScheme: String) async throws -> URL
-    ) async throws -> String
+    func deleteAccount(confirmedWith apple: AppleCredential) async throws -> String
 
     // MARK: Snapshot (S3)
 
@@ -190,9 +186,7 @@ public struct UnavailableBackend: BackendClient {
 
     public var isAvailable: Bool { false }
 
-    public func signIn(
-        using authenticate: @Sendable (URL, String) async throws -> URL
-    ) async throws -> AuthSession {
+    public func signIn(with apple: AppleCredential) async throws -> AuthSession {
         throw BackendError.notImplementedUntilPhase2
     }
 
@@ -202,9 +196,7 @@ public struct UnavailableBackend: BackendClient {
         get async { nil }
     }
 
-    public func deleteAccount(
-        using authenticate: @Sendable (URL, String) async throws -> URL
-    ) async throws -> String {
+    public func deleteAccount(confirmedWith apple: AppleCredential) async throws -> String {
         throw BackendError.notImplementedUntilPhase2
     }
 

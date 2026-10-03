@@ -26,7 +26,6 @@ public enum CloudError: Error, Equatable, LocalizedError {
     case notHTTP
     case malformedToken
     case signInRejected(String)
-    case signInStateMismatch
     /// The refresh token has lapsed — thirty days after sign-in, by design.
     case signInExpired
     case notSignedIn
@@ -35,6 +34,11 @@ public enum CloudError: Error, Equatable, LocalizedError {
     /// or this one was reinstalled and the cloud copy predates it. Not an error
     /// to retry — a decision for the lifter (INFRA-SPEC §8).
     case cloudCopyChanged
+    /// Apple refused the authorization code from the confirmation sheet:
+    /// expired (five minutes) or already used. Nothing was deleted.
+    case appleReconfirmationRequired
+    /// The confirmation was a different Apple ID from this account's.
+    case appleAccountMismatch
     case http(Int, String)
 
     public var errorDescription: String? {
@@ -42,10 +46,11 @@ public enum CloudError: Error, Equatable, LocalizedError {
         case .notHTTP: "The server's reply wasn't HTTP."
         case .malformedToken: "The sign-in token couldn't be read."
         case .signInRejected(let reason): "Sign-in didn't complete: \(reason)"
-        case .signInStateMismatch: "That sign-in reply wasn't for this attempt."
         case .signInExpired: "Your sign-in has expired. Sign in again to resume backups."
         case .notSignedIn: "Not signed in."
         case .cloudCopyChanged: "The cloud backup changed since this phone last uploaded."
+        case .appleReconfirmationRequired: "Apple's confirmation expired before it reached the server. Nothing was deleted — try again."
+        case .appleAccountMismatch: "That was a different Apple ID from this account's, so nothing was deleted."
         case .http(let status, let body): "The server answered \(status). \(body.prefix(200))"
         }
     }
