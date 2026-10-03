@@ -248,3 +248,48 @@ Not broken — wanted, and bigger than a fix.
 - **Reorder exercises within one superset.** `moveGroup` reorders whole groups
   and `superset`/`ungroup` form and dissolve them, but nothing swaps the two
   lifts inside a pair.
+- **Cardio is logged as time, not sets × reps** (02-10-26). A treadmill run is
+  "30:00 · 3.1 mi", and today the tracker only offers weight and reps, so it
+  can't record one at all. The storage already exists:
+  `WorkoutSet.duration`/`distance` landed in `v13_setDurationDistance` for the
+  75 imported walks, bikes, swims and planks, and `SetSummaryLine` already
+  renders them. What's missing is entry: the set row has to know which fields a
+  lift takes (strength: weight × reps; cardio: duration, optionally distance;
+  a plank: duration alone), and that wants to be **authored on the exercise**,
+  not inferred from its name — the catalog's `category` (`cardio`, 14 entries
+  such as *Running, Treadmill*) is a starting point, not the answer, since a
+  plank is `strength` there. Then the planner: `PlannedSet` deliberately has no
+  duration field because nothing prescribed one — this is the thing that would.
+  Rest timers and `AchievedMaxUpdate` both need to stay out of the way of a
+  cardio set (no weight, so no max; probably no rest countdown).
+- **The organisation of a workout may need a full rework** (02-10-26). Owner's
+  note, stated as broadly as it was given: how a workout is structured and
+  navigated — exercises, groups, sets, and how they're laid out on the tracker
+  and planner — isn't working, and patching it a control at a time may be the
+  wrong scale of fix. **Needs a design conversation before any code**: which
+  screens, what feels wrong in use, and what the replacement shape is. Worth
+  starting from the 20-08-26 gym-floor list above, since several of those
+  (reorder as a mode, supersets in a pair, the planner's row-per-set) are
+  symptoms of the same structure.
+- **The catalog is hard to navigate, and it's unclear which entry is which
+  lift** (02-10-26). 873 vendored entries with near-duplicates the lifter can't
+  tell apart: 56 squats, including *Barbell Squat* beside *Barbell Full Squat*,
+  and *Hack Squat* beside *Barbell Hack Squat*; 21 bench presses. Search ranks
+  well (see CLAUDE.md's `ExerciseSearch` numbers) but ranking doesn't answer
+  "which of these two is the one I do". Directions, none chosen: browse by
+  movement or muscle rather than only search; say on the row what tells an
+  entry apart from its neighbours (equipment, grip, range) instead of only its
+  name; surface the lifts you actually train first everywhere, not just in
+  search; and possibly **curate** — hide or merge entries nobody trains. That
+  last one is a judgment, so it would be authored and recorded once (the
+  `Block1.json` / `aliases` pattern), never a similarity heuristic deciding two
+  entries are the same lift (see the name-matching rule in CLAUDE.md).
+- **Tighten the wording across the app** (02-10-26). A lot of on-screen text
+  is too verbose: explanations under controls, confirmation dialogs, empty
+  states and sign-in/account copy run to two or three sentences where one
+  would do. A pass over every screen: say the one thing the lifter needs at
+  that moment, cut the reasoning (it belongs in CLAUDE.md and the code, not on
+  screen), and keep what's load-bearing — what a destructive action deletes
+  and what it keeps, and that RPE is exertion rather than reps in reserve
+  (Core Tenets §3). Worth doing as one pass rather than piecemeal, so the
+  voice ends up consistent.
