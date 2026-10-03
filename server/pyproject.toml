@@ -3,12 +3,14 @@ name = "liftcoach-server"
 version = "0.1.0"
 description = "The server half of Lifting Coach: it reads the phone's snapshot and never writes it."
 requires-python = ">=3.11"
-# No runtime dependencies to install. Everything here is standard library
-# except the AWS calls, and `boto3` is already present in every Lambda runtime
-# — vendoring it would ship a copy of what the platform provides. It's a dev
-# dependency so `aws.py` is importable in a test run, and `aws.py` is the only
-# module that touches it.
-dependencies = []
+# One runtime dependency: `cryptography`, for Sign in with Apple's RS256
+# verification and ES256 client secret (INFRA-SPEC §3.5) — primitives this
+# project doesn't write by hand. Bundled into the deployment zip as aarch64
+# wheels by deploy-server.yml, and imported lazily so the indexer never loads
+# it. `boto3` is already present in every Lambda runtime — vendoring it would
+# ship a copy of what the platform provides. It's a dev dependency so `aws.py`
+# is importable in a test run, and `aws.py` is the only module that touches it.
+dependencies = ["cryptography>=43"]
 
 [dependency-groups]
 dev = ["pytest>=8", "boto3>=1.34"]

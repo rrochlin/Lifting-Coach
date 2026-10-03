@@ -45,7 +45,7 @@ This also makes two Core Tenets structural rather than conventional. §8 ("an AI
 
 ### Components
 
-- **Cognito** (via the Swift Amplify package) handles auth, including Sign in with Apple. It replaces the *identity* `UserStore.localUser()` invents today, not the storage.
+- **Cognito** handles identity, and the only way in is **native Sign in with Apple** — Apple's button and system sheet, turned into ordinary user pool tokens by Cognito's custom-auth triggers, which verify Apple's token (`server/INFRA-SPEC.md` §3.5). No Amplify (the client is hand-written against the Cognito and S3 APIs) and no Hosted UI or email sign-in. It replaces the *identity* `UserStore.localUser()` invents, not the storage.
 - **API Gateway** is the entry point: sign-in, presigned snapshot upload/download, and the chat websocket.
 - **S3** holds the per-user snapshot. Bucket versioning is on, which makes point-in-time restore a property of the design rather than a feature to build.
 - **DynamoDB holds metadata, never the domain**: `wsConnections` (TTL'd), `deviceLease`, `conversations`, `draftPlans`, `snapshotMeta` (etag, schema version, uploaded-at, row counts).

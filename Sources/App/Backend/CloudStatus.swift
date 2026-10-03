@@ -25,10 +25,9 @@ public enum AccountError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .boundToAnotherAccount:
-            // Email and Sign in with Apple are separate accounts, which is the
-            // usual way to land here — so the message names that, not just
-            // the refusal.
-            "This phone's training log already belongs to a different account. If you signed in before with the other method — email or Apple — sign in that way instead."
+            // Since sign-in became Apple-only, the way here is a different
+            // Apple ID — so the message names that, not just the refusal.
+            "This phone's training log already belongs to a different account. Sign in with the Apple ID you used before."
         }
     }
 }
@@ -53,7 +52,7 @@ public enum AccountDeletionError: LocalizedError {
     public var errorDescription: String? {
         switch self {
         case .differentAccount:
-            "That sign-in was a different account, so nothing was deleted. Sign in with the account shown here — email or Apple, whichever you used."
+            "That was a different Apple ID from the one signed in here, so nothing was deleted."
         }
     }
 }

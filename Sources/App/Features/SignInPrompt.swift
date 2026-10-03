@@ -1,12 +1,13 @@
-import AuthenticationServices
+import LiftingCoachCloud
 import SwiftUI
 
 /// Sign-in at launch, in two forms.
 ///
 /// **Required** on a phone that has never signed in: full screen, nothing to
 /// dismiss. Sign-in is part of the app — phase 1 was offline only to keep
-/// development simple — and Apple's or Cognito's page needs one pass through
-/// it; after that the session refreshes itself silently.
+/// development simple — and it is Sign in with Apple, natively: Apple's own
+/// button and the system sheet, never a browser (INFRA-SPEC §3.5). One pass
+/// through it, and the session refreshes itself silently after that.
 ///
 /// **Asked, never required** when a session has lapsed (thirty days from
 /// sign-in, INFRA-SPEC D3). Blocking there would lock a lifter in a basement
@@ -15,7 +16,6 @@ import SwiftUI
 /// and `sessionLapsed`.
 struct SignInPrompt: View {
     @Environment(AppEnvironment.self) private var environment
-    @Environment(\.webAuthenticationSession) private var webAuthenticationSession
     @Environment(\.dismiss) private var dismiss
 
     @State private var isWorking = false
@@ -43,7 +43,7 @@ struct SignInPrompt: View {
                 .foregroundStyle(Theme.inkMuted)
                 .fixedSize(horizontal: false, vertical: true)
 
-            Text("Email and Sign in with Apple are separate accounts — pick one and keep using it.")
+            Text("Your log lives on this phone; the cloud copy is a backup, so logging a set never waits on a connection.")
                 .font(Theme.caption)
                 .foregroundStyle(Theme.inkMuted)
                 .fixedSize(horizontal: false, vertical: true)
@@ -57,19 +57,21 @@ struct SignInPrompt: View {
 
             Spacer()
 
-            Button {
-                signIn()
-            } label: {
-                Text(isWorking ? "SIGNING IN…" : "SIGN IN")
-                    .font(Theme.label).tracking(1.2)
-                    .foregroundStyle(Theme.void)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .background(isWorking ? Theme.inkMuted : Theme.signal)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
+            if isWorking {
+                // Apple's sheet is done; this is Cognito and the first backup
+                // check. Shown in place of the button so it can't be tapped twice.
+                HStack(spacing: 10) {
+                    ProgressView().tint(Theme.signal)
+                    Text("SIGNING IN…").font(Theme.label).tracking(1.2).foregroundStyle(Theme.inkMuted)
+                }
+                .frame(maxWidth: .infinity, minHeight: 50)
+            } else {
+                AppleSignInButton(label: isLapse ? .continue : .signIn) { apple in
+                    signIn(apple)
+                } onError: { error in
+                    message = error.localizedDescription
+                }
             }
-            .buttonStyle(.plain)
-            .disabled(isWorking)
 
             if isLapse {
                 Button {
@@ -97,16 +99,14 @@ struct SignInPrompt: View {
         .interactiveDismissDisabled(isWorking || !isLapse)
     }
 
-    private func signIn() {
+    private func signIn(_ apple: AppleCredential) {
         isWorking = true
         message = nil
         Task { @MainActor in
             defer { isWorking = false }
             do {
-                try await environment.signIn(with: webAuthenticationSession)
+                try await environment.signIn(with: apple)
                 dismiss()
-            } catch let error as ASWebAuthenticationSessionError where error.code == .canceledLogin {
-                // Backed out of the page; stay here and let them choose again.
             } catch {
                 message = error.localizedDescription
             }

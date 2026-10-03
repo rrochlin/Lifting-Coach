@@ -1,5 +1,5 @@
 import Foundation
-import AuthenticationServices
+import LiftingCoachCloud
 import Observation
 import SwiftUI
 import OSLog
@@ -246,12 +246,11 @@ public final class AppEnvironment {
     /// into somebody else's backup. Email and Sign in with Apple are *separate*
     /// accounts in Cognito, so switching method on an existing install lands
     /// here — and is signed straight back out with the reason, rather than left
-    /// half-signed-in.
+    /// half-signed-in. Since sign-in became Apple-only (INFRA-SPEC §3.5) the
+    /// usual way here is a different Apple ID.
     @MainActor
-    public func signIn(
-        using authenticate: @Sendable (URL, String) async throws -> URL
-    ) async throws {
-        let session = try await backend.signIn(using: authenticate)
+    public func signIn(with apple: AppleCredential) async throws {
+        let session = try await backend.signIn(with: apple)
         guard let user = currentUser else { return }
         do {
             try users.bind(cognitoSub: session.subject, to: user.id)
@@ -265,18 +264,6 @@ public final class AppEnvironment {
         // reinstalled phone discovers the cloud already has a backup.
         let outcome = try? await snapshotSync.syncIfNeeded(.signedIn)
         recordSync(outcome)
-    }
-
-    /// The one place the Hosted UI is presented, for Profile and the launch
-    /// prompt alike. Ephemeral, so no cookie outlives the sign-in: signing out
-    /// on the phone means signed out, not one tap from back in.
-    @MainActor
-    public func signIn(with webSession: WebAuthenticationSession) async throws {
-        try await signIn { url, scheme in
-            try await webSession.authenticate(
-                using: url, callbackURLScheme: scheme, preferredBrowserSession: .ephemeral
-            )
-        }
     }
 
     // MARK: Sign-in at launch
@@ -329,12 +316,8 @@ public final class AppEnvironment {
     /// out of its own log. The required sign-in then appears, and the next
     /// account backs this log up as its first upload.
     @MainActor
-    public func deleteAccount(with webSession: WebAuthenticationSession) async throws {
-        let deleted = try await backend.deleteAccount { url, scheme in
-            try await webSession.authenticate(
-                using: url, callbackURLScheme: scheme, preferredBrowserSession: .ephemeral
-            )
-        }
+    public func deleteAccount(confirmedWith apple: AppleCredential) async throws {
+        let deleted = try await backend.deleteAccount(confirmedWith: apple)
         if let user = currentUser {
             try users.releaseDeletedAccount(deleted, from: user.id)
         }

@@ -23,82 +23,128 @@ final class FakeTransport: HTTPTransport, @unchecked Sendable {
 let fakeCredentials = AWSCredentials(accessKeyID: "AKID", secretAccessKey: "secret",
                                      sessionToken: "session", expiration: .distantFuture)
 
-@Suite("Hosted UI")
-struct HostedUITests {
-    @Test("The PKCE challenge matches RFC 7636's worked example")
-    func pkceVector() {
-        let attempt = HostedUI.Attempt(verifier: "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk", state: "s")
-        #expect(attempt.challenge == "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM")
+/// A JWT-shaped string carrying `claims`, unsigned — the phone never verifies
+/// a token, so these tests don't need a real signature.
+func jwt(_ claims: [String: Any]) -> String {
+    let payload = try! JSONSerialization.data(withJSONObject: claims).base64EncodedString()
+        .replacingOccurrences(of: "+", with: "-").replacingOccurrences(of: "/", with: "_")
+        .replacingOccurrences(of: "=", with: "")
+    return "e30.\(payload).sig"
+}
+
+func json(_ object: [String: Any]) -> Data {
+    try! JSONSerialization.data(withJSONObject: object)
+}
+
+func body(_ request: URLRequest) -> [String: Any] {
+    (try? JSONSerialization.jsonObject(with: request.httpBody ?? Data())) as? [String: Any] ?? [:]
+}
+
+let appleSub = "001234.0123456789abcdef0123456789abcdef.0123"
+let apple = AppleCredential(
+    identityToken: jwt(["sub": appleSub, "email": "lifter@privaterelay.appleid.com"]),
+    authorizationCode: "code", rawNonce: "raw"
+)
+let authResult = json(["AuthenticationResult": [
+    "IdToken": "i", "AccessToken": "a", "RefreshToken": "r", "ExpiresIn": 3600,
+]])
+
+@Suite("User pool sign-in")
+struct UserPoolAuthTests {
+    @Test("The username is derived from Apple's sub, never the lifter's email")
+    func username() {
+        #expect(UserPoolAuth.username(forAppleSubject: appleSub) ==
+            "001234.0123456789abcdef0123456789abcdef.0123@apple.lift-coach.invalid")
     }
 
-    @Test("The authorize URL carries the challenge, never the verifier")
-    func authorizeURL() {
-        let attempt = HostedUI.Attempt(verifier: "secret-verifier", state: "abc")
-        let url = HostedUI().authorizeURL(for: attempt).absoluteString
-        #expect(url.hasPrefix("https://lift-coach-prod.auth.us-west-2.amazoncognito.com/oauth2/authorize?"))
-        #expect(url.contains("code_challenge=\(attempt.challenge)"))
-        #expect(url.contains("code_challenge_method=S256"))
-        #expect(url.contains("state=abc"))
-        #expect(!url.contains("secret-verifier"))
-        // No identity_provider: the Hosted UI offers email and Apple both.
-        #expect(!url.contains("identity_provider"))
+    @Test("The nonce Apple embeds is the lowercase hex SHA-256 of the one the server is sent")
+    func nonce() {
+        // SHA-256("abc"), FIPS 180-2's first test vector.
+        #expect(AppleNonce(raw: "abc").hashed ==
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
     }
 
-    @Test("A redirect for a different attempt is refused")
-    func stateMismatch() {
-        let attempt = HostedUI.Attempt(verifier: "v", state: "mine")
-        let callback = URL(string: "liftcoach://callback?code=abc&state=theirs")!
-        #expect(throws: CloudError.signInStateMismatch) {
-            try HostedUI().code(from: callback, for: attempt)
-        }
-    }
+    @Test("First sign-in: sign up, then answer the challenge with Apple's token")
+    func firstSignIn() async throws {
+        let transport = FakeTransport([
+            (200, [:], json(["UserConfirmed": true])),
+            (200, [:], json(["ChallengeName": "CUSTOM_CHALLENGE", "Session": "s1"])),
+            (200, [:], authResult),
+        ])
+        let tokens = try await UserPoolAuth(transport: transport).signIn(apple)
 
-    @Test("A redirect carrying an error surfaces it")
-    func callbackError() {
-        let attempt = HostedUI.Attempt(verifier: "v", state: "s")
-        let callback = URL(string: "liftcoach://callback?error=access_denied&error_description=cancelled&state=s")!
-        #expect(throws: CloudError.signInRejected("cancelled")) {
-            try HostedUI().code(from: callback, for: attempt)
-        }
-    }
-
-    @Test("The token exchange sends the verifier, and a refresh keeps the old refresh token")
-    func exchangeAndRefresh() async throws {
-        let body = Data(#"{"id_token":"i","access_token":"a","refresh_token":"r","expires_in":3600}"#.utf8)
-        let refreshed = Data(#"{"id_token":"i2","access_token":"a2","expires_in":3600}"#.utf8)
-        let transport = FakeTransport([(200, [:], body), (200, [:], refreshed)])
-        let ui = HostedUI(transport: transport)
-        let attempt = HostedUI.Attempt(verifier: "the-verifier", state: "s")
-
-        let tokens = try await ui.exchange(code: "c", for: attempt)
         #expect(tokens.refreshToken == "r")
-        let form = String(decoding: transport.sent[0].httpBody!, as: UTF8.self)
-        #expect(form.contains("code_verifier=the-verifier"))
-        #expect(form.contains("redirect_uri=liftcoach%3A%2F%2Fcallback"))
+        #expect(tokens.displayEmail == "lifter@privaterelay.appleid.com")
+        let targets = transport.sent.map { $0.value(forHTTPHeaderField: "X-Amz-Target") }
+        #expect(targets == [
+            "AWSCognitoIdentityProviderService.SignUp",
+            "AWSCognitoIdentityProviderService.InitiateAuth",
+            "AWSCognitoIdentityProviderService.RespondToAuthChallenge",
+        ])
+        let username = UserPoolAuth.username(forAppleSubject: appleSub)
+        let signUp = body(transport.sent[0])
+        #expect(signUp["Username"] as? String == username)
+        #expect((signUp["ClientMetadata"] as? [String: String]) ==
+            ["appleIdentityToken": apple.identityToken, "appleNonce": "raw"])
+        let answer = body(transport.sent[2])
+        #expect(answer["Session"] as? String == "s1")
+        #expect((answer["ChallengeResponses"] as? [String: String]) ==
+            ["USERNAME": username, "ANSWER": apple.identityToken])
+        #expect((answer["ClientMetadata"] as? [String: String]) == ["appleNonce": "raw"])
+    }
 
-        // Cognito doesn't rotate refresh tokens; losing it here would sign the
-        // lifter out on the first refresh.
-        let next = try await ui.refresh("r")
+    @Test("An existing account is the normal case, not an error")
+    func returningSignIn() async throws {
+        let transport = FakeTransport([
+            (400, [:], json(["__type": "UsernameExistsException", "message": "User already exists"])),
+            (200, [:], json(["ChallengeName": "CUSTOM_CHALLENGE", "Session": "s1"])),
+            (200, [:], authResult),
+        ])
+        let tokens = try await UserPoolAuth(transport: transport).signIn(apple)
+        #expect(tokens.idToken == "i")
+    }
+
+    @Test("A trigger's refusal surfaces as a sign-in failure")
+    func refused() async {
+        let transport = FakeTransport([
+            (400, [:], json(["__type": "UserLambdaValidationException",
+                             "message": "PreSignUp failed with error Nonce mismatch."])),
+        ])
+        await #expect(throws: CognitoIdentityProviderError.self) {
+            try await UserPoolAuth(transport: transport).signIn(apple)
+        }
+    }
+
+    @Test("A refresh keeps the refresh token; a lapsed one reads as an expired sign-in")
+    func refresh() async throws {
+        let refreshed = json(["AuthenticationResult": ["IdToken": "i2", "AccessToken": "a2", "ExpiresIn": 3600]])
+        let transport = FakeTransport([
+            (200, [:], refreshed),
+            (400, [:], json(["__type": "NotAuthorizedException", "message": "Refresh Token has expired"])),
+        ])
+        let auth = UserPoolAuth(transport: transport)
+        let next = try await auth.refresh("r")
         #expect(next.idToken == "i2")
         #expect(next.refreshToken == "r")
-    }
-
-    @Test("A lapsed refresh token reads as an expired sign-in")
-    func refreshExpired() async {
-        let transport = FakeTransport([(400, [:], Data(#"{"error":"invalid_grant"}"#.utf8))])
-        await #expect(throws: CloudError.signInExpired) {
-            try await HostedUI(transport: transport).refresh("old")
-        }
+        #expect((body(transport.sent[0])["AuthFlow"] as? String) == "REFRESH_TOKEN_AUTH")
+        await #expect(throws: CloudError.signInExpired) { try await auth.refresh("old") }
     }
 
     @Test("Id token claims are read from the payload")
     func claims() throws {
         // {"sub":"a8f1","email":"x@y.z","exp":2000000000}, base64url, unpadded.
-        let jwt = "e30.eyJzdWIiOiJhOGYxIiwiZW1haWwiOiJ4QHkueiIsImV4cCI6MjAwMDAwMDAwMH0.sig"
-        let claims = try IDTokenClaims(jwt: jwt)
+        let token = "e30.eyJzdWIiOiJhOGYxIiwiZW1haWwiOiJ4QHkueiIsImV4cCI6MjAwMDAwMDAwMH0.sig"
+        let claims = try IDTokenClaims(jwt: token)
         #expect(claims.subject == "a8f1")
         #expect(claims.email == "x@y.z")
         #expect(claims.expiresAt == Date(timeIntervalSince1970: 2_000_000_000))
+    }
+
+    @Test("Tokens stored before displayEmail existed still load")
+    func storedTokensDecode() throws {
+        let old = Data(#"{"idToken":"i","accessToken":"a","refreshToken":"r","expiresAt":0}"#.utf8)
+        let tokens = try JSONDecoder().decode(CognitoTokens.self, from: old)
+        #expect(tokens.displayEmail == nil)
     }
 }
 
@@ -168,15 +214,11 @@ struct SnapshotBucketTests {
 
 @Suite("Account deletion")
 struct AccountDeletionTests {
-    private func json(_ object: [String: Any]) -> Data {
-        try! JSONSerialization.data(withJSONObject: object)
-    }
-
     @Test("Deletion is a signed Lambda Invoke carrying the access token")
     func request() async throws {
         let transport = FakeTransport([(200, [:], json(["deleted": true, "objectVersions": 3]))])
         let removed = try await AccountDeletion(transport: transport)
-            .delete(accessToken: "access-token", credentials: fakeCredentials)
+            .delete(accessToken: "access-token", appleAuthorizationCode: "apple-code", credentials: fakeCredentials)
 
         #expect(removed == 3)
         let sent = try #require(transport.sent.first)
@@ -186,8 +228,8 @@ struct AccountDeletionTests {
         let auth = sent.value(forHTTPHeaderField: "Authorization") ?? ""
         #expect(auth.contains("/us-west-2/lambda/aws4_request"))
         #expect(sent.value(forHTTPHeaderField: "X-Amz-Security-Token") == "session")
-        let body = try JSONSerialization.jsonObject(with: sent.httpBody ?? Data()) as? [String: String]
-        #expect(body == ["accessToken": "access-token"])
+        let payload = try JSONSerialization.jsonObject(with: sent.httpBody ?? Data()) as? [String: String]
+        #expect(payload == ["accessToken": "access-token", "appleAuthorizationCode": "apple-code"])
     }
 
     /// Lambda answers 200 for an invocation that ran, including one that
@@ -199,7 +241,7 @@ struct AccountDeletionTests {
                                         json(["errorMessage": "boom"]))])
         await #expect(throws: CloudError.self) {
             try await AccountDeletion(transport: transport)
-                .delete(accessToken: "t", credentials: fakeCredentials)
+                .delete(accessToken: "t", appleAuthorizationCode: "c", credentials: fakeCredentials)
         }
     }
 
@@ -208,7 +250,7 @@ struct AccountDeletionTests {
         let transport = FakeTransport([(200, [:], json(["deleted": false, "reason": "signInRequired"]))])
         await #expect(throws: CloudError.signInExpired) {
             try await AccountDeletion(transport: transport)
-                .delete(accessToken: "t", credentials: fakeCredentials)
+                .delete(accessToken: "t", appleAuthorizationCode: "c", credentials: fakeCredentials)
         }
     }
 
@@ -217,15 +259,19 @@ struct AccountDeletionTests {
         let transport = FakeTransport([(403, [:], Data("AccessDenied".utf8))])
         await #expect(throws: CloudError.http(403, "AccessDenied")) {
             try await AccountDeletion(transport: transport)
-                .delete(accessToken: "t", credentials: fakeCredentials)
+                .delete(accessToken: "t", appleAuthorizationCode: "c", credentials: fakeCredentials)
         }
     }
 
-    /// The server verifies the access token with Cognito's `GetUser`, which
-    /// needs this scope. Without it every deletion is refused.
-    @Test("Sign-in asks for the scope deletion depends on")
-    func adminScope() {
-        let url = HostedUI().authorizeURL(for: HostedUI.Attempt()).absoluteString
-        #expect(url.contains("aws.cognito.signin.user.admin"))
+    @Test("Apple refusing the confirmation, or a different Apple ID, deletes nothing and says why")
+    func appleRefusals() async {
+        for (reason, error) in [("appleReconfirmationRequired", CloudError.appleReconfirmationRequired),
+                                ("appleAccountMismatch", CloudError.appleAccountMismatch)] {
+            let transport = FakeTransport([(200, [:], json(["deleted": false, "reason": reason]))])
+            await #expect(throws: error) {
+                try await AccountDeletion(transport: transport)
+                    .delete(accessToken: "t", appleAuthorizationCode: "c", credentials: fakeCredentials)
+            }
+        }
     }
 }

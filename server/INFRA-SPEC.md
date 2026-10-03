@@ -133,14 +133,16 @@ else here can be wrong and cost an afternoon.
   phone's own `v14_cognitoSub` binding are filed under. Destroying the pool
   doesn't lose a login; it orphans the data permanently and silently, because a
   re-created pool issues a different `sub` for the same email address.
-- No Lambda triggers. `amazing-adventure` has a post-confirmation hook to seed a
-  user row; there's nothing to seed here — the phone is the system of record and
+- ~~No Lambda triggers.~~ **Four, since §3.5** — pre-sign-up and the three
+  custom-auth triggers, all one function, all about verifying Apple's token.
+  Still nothing that *seeds* anything: the phone is the system of record and
   the first upload creates everything server-side.
 
 **`aws_cognito_user_pool_client`** — `${local.prefix}-ios`.
 - `generate_secret = false`. A native app can't keep a secret, and Amplify's
   iOS SRP flow assumes a public client.
-- `explicit_auth_flows = ["ALLOW_USER_SRP_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"]`.
+- `explicit_auth_flows = ["ALLOW_USER_SRP_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"]`
+  — **becomes `["ALLOW_CUSTOM_AUTH", "ALLOW_REFRESH_TOKEN_AUTH"]` in §3.5**.
   **No `ALLOW_USER_PASSWORD_AUTH`** — that flow puts the password in the request
   rather than proving knowledge of it, and nothing here needs it.
 - `prevent_user_existence_errors = "ENABLED"`.
@@ -160,6 +162,13 @@ having them pasted into a checked-in `amplifyconfiguration.json`.
 it gates AI access by role. There is one lifter.
 
 ### 3.2 Sign in with Apple
+
+> **Superseded as the app's sign-in by §3.5 (2026-10-02).** The app no longer
+> opens the Hosted UI: Sign in with Apple is native, in the app, and email
+> sign-in is dropped. What follows is kept because it describes resources that
+> are still deployed until §3.5's step B retires them, and because the
+> prerequisites — the App ID capability, the key and its two SSM parameters —
+> are reused by §3.5 for token revocation.
 
 **Prerequisites, none of which Terraform can create** — do these first or the
 apply fails at the identity provider:
@@ -454,6 +463,149 @@ What is **absent**, and should stay absent:
 The KMS grants belong here rather than anywhere else, and they're the most
 likely source of a confusing failure: without them the phone gets a 403 from S3
 on a request that looked perfectly well-formed, and the error names the bucket.
+
+### 3.5 Sign-in, in the app: native Sign in with Apple
+
+**Decided (2026-10-02, owner's call): sign-in is Sign in with Apple, native,
+and nothing else.** No browser sheet, no Hosted UI, no email or password. The
+lifter taps Apple's own button and confirms with Face ID in the system sheet;
+deleting the account is the same sheet again. Three reasons, in order of
+weight:
+
+1. **Cohesion.** The Hosted UI is a web page on a `lift-coach-prod.auth…`
+   domain in a browser sheet, offering a choice (email *or* Apple) that turned
+   out to be two separate accounts (§3.2's box). It read as leaving the app,
+   and at deletion it read as "why am I signing in?".
+2. **Apple's revocation rule.** An app offering Sign in with Apple must revoke
+   the user's Apple tokens through Apple's REST API when the account is
+   deleted. Through the Hosted UI, Cognito holds those tokens and never
+   revokes them, so §9.4 as first built would not have passed review. A native
+   authorization hands the app an **authorization code**, which is what
+   revocation needs.
+3. **Email bought nothing.** On an iPhone-only app everyone has an Apple ID.
+   Guideline 4.8 requires Apple sign-in *when other social logins are offered*;
+   nothing requires an email option. Dropping it removes a password to forget,
+   a verification email, and the two-accounts trap.
+
+**Still one user pool, one `sub`, one design.** The native token is turned into
+ordinary user pool tokens by Cognito's **custom authentication** flow, so the
+identity pool, the principal tag, the S3 prefix, `v14_cognitoSub` and every
+DynamoDB key are untouched. The alternative — handing Apple's token straight
+to the *identity pool* as a login provider — was rejected: it has no user pool
+`sub` at all, and the whole of §3.3 keys on one.
+
+#### The flow
+
+1. **Phone → Apple.** `ASAuthorizationAppleIDRequest` with scope `email` and
+   `nonce = hex(SHA-256(rawNonce))`, `rawNonce` fresh per attempt. Returns an
+   **identity token** (an Apple-signed JWT: `iss` `https://appleid.apple.com`,
+   `aud` the bundle id `com.rrochlin.LiftingCoach`, `sub` Apple's stable user
+   id, `email`, `nonce`) and a one-time **authorization code** (5 minutes).
+2. **Phone → Cognito `SignUp`** (unsigned JSON 1.1, public client) with
+   `Username = <appleSub>@apple.lift-coach.invalid`, a random throwaway
+   password, the same value as the `email` attribute, and `ClientMetadata`
+   carrying the identity token and the raw nonce. **`UsernameExistsException`
+   is the normal case** on every sign-in after the first, and means "go on".
+   Sign-up is tried first because `prevent_user_existence_errors` makes a
+   custom-auth attempt against a missing user indistinguishable from a wrong
+   answer.
+3. **Phone → `InitiateAuth`** `CUSTOM_AUTH` with that username, then
+   **`RespondToAuthChallenge`** `CUSTOM_CHALLENGE` with the identity token as
+   the answer and the raw nonce in `ClientMetadata`. Returns id, access and
+   refresh tokens — the same tokens the Hosted UI returned, so everything
+   downstream of sign-in is unchanged.
+4. **Refresh** is `InitiateAuth` `REFRESH_TOKEN_AUTH`; same 30-day lifetime
+   (D3). No Apple involvement after sign-in.
+
+**The username is derived from Apple's `sub`, not the lifter's email, and that
+is the important decision here.** The pool has `username_attributes =
+["email"]` — immutable since creation — so a username must be email-shaped.
+Using the real address would make the account follow the address: a lifter who
+changes their Apple ID email would sign in as a stranger to their own backup,
+and `UserStore.bind` would then (correctly) refuse that stranger the phone. The
+Apple `sub` is stable for the life of the Apple ID per developer team. The
+`.invalid` TLD (RFC 2606) guarantees the address can never receive mail and
+can never collide with a real one; Cognito sends nothing to it, because the
+pre-sign-up trigger marks it verified. The address the lifter recognises
+(`email` in Apple's token, possibly a private-relay forwarder) is kept **on the
+phone only**, beside the tokens, for Profile to show.
+
+#### `${prefix}-apple-sign-in` — the four triggers, one function
+
+`python3.12`, `arm64`, handler `liftcoach_server.handlers.apple_sign_in`,
+**timeout 5 s** (Cognito's own ceiling for a trigger), memory 512 MB (cold
+starts import `cryptography`), reserved concurrency 5. Env: `APPLE_BUNDLE_ID =
+com.rrochlin.LiftingCoach`. Role: the logs policy and nothing else — it reads
+Apple's public keys over HTTPS and touches no AWS resource. 14-day log group.
+
+| trigger | does |
+| --- | --- |
+| `PreSignUp_SignUp` | Verifies the identity token in `clientMetadata` (signature against Apple's JWKS, `iss`, `aud`, `exp`, nonce) and that the requested username is exactly the one derived from the token's `sub`. Then `autoConfirmUser` and `autoVerifyEmail`. Anything else raises, which refuses the sign-up. |
+| `PreSignUp_ExternalProvider`, `PreSignUp_AdminCreateUser` | `ExternalProvider` is **refused** — that's the Hosted UI's Apple federation, retired. `AdminCreateUser` is allowed (an operator in the console). |
+| `DefineAuthChallenge_Authentication` | One `CUSTOM_CHALLENGE`; tokens if it was answered correctly; fail otherwise, and fail any session that tried a different challenge first. |
+| `CreateAuthChallenge_Authentication` | No secret to issue — the answer is a token Apple signed. Public parameters say which kind of answer is wanted. |
+| `VerifyAuthChallengeResponse_Authentication` | Same verification as pre-sign-up, against the *existing* user: the token's `sub` must derive this user's username. |
+
+**Signature verification uses the `cryptography` package**, which ends the
+"standard library plus boto3" rule from §5 for a reason worth stating: RS256
+verification and ES256 signing (below) are cryptographic primitives, and this
+project's line is that we don't write those. `cryptography` is bundled into the
+deployment zip — aarch64 manylinux wheels, no layer — and imported lazily, so
+the indexer never pays for it.
+
+#### Revocation at deletion — §9.4's missing step
+
+Deleting asks the lifter to confirm with Apple again, which yields a fresh
+authorization code. The phone sends it to `delete_account` beside the access
+token. **Before deleting anything**, the function exchanges the code at
+`https://appleid.apple.com/auth/token` (client id = the bundle id, client
+secret = an ES256 JWT signed with the Sign in with Apple key from §3.2's SSM
+parameters), checks the returned token's `sub` is the account being deleted,
+and revokes the refresh token at `/auth/revoke`. Revoking first means a failure
+there deletes nothing and the lifter simply tries again; revoking last would
+leave a deleted account whose Apple link nobody can reach any more.
+
+Additions to the deletion function: env `APPLE_BUNDLE_ID`, `APPLE_TEAM_ID =
+33G44VZ97Z`, `APPLE_KEY_ID_PARAM = /lift-coach-prod/apple/key-id`,
+`APPLE_PRIVATE_KEY_PARAM = /lift-coach-prod/apple/signin-key`; grants
+`ssm:GetParameter` on exactly those two parameter ARNs and `kms:Decrypt` on the
+`aws/ssm` key conditioned on `kms:ViaService = ssm.us-west-2.amazonaws.com`.
+
+**Prerequisite to check by hand:** the Sign in with Apple key's *Primary App
+ID* (developer portal → Keys → the key → Configure) must be
+`com.rrochlin.LiftingCoach`. The key was made for the Services ID, which is
+grouped under that App ID, so it should be — but a key grouped elsewhere fails
+the code exchange with `invalid_client`, which names neither the key nor the
+group.
+
+#### Terraform, in two steps
+
+**Step A — add native sign-in (ships with the app build that uses it):**
+
+- `aws_lambda_function.apple_sign_in` and its role/log group, as above; placeholder
+  zip + `ignore_changes`, like every function here.
+- On `aws_cognito_user_pool.main`: `lambda_config { pre_sign_up,
+  define_auth_challenge, create_auth_challenge, verify_auth_challenge_response }`
+  all pointing at that function, plus an `aws_lambda_permission` for
+  `cognito-idp.amazonaws.com` with `source_arn` the pool ARN.
+- On the client: `explicit_auth_flows = ["ALLOW_CUSTOM_AUTH",
+  "ALLOW_REFRESH_TOKEN_AUTH"]`. **SRP goes**: no password anyone knows should
+  be usable, and the throwaway one from `SignUp` must not become a back door.
+- The deletion function's env and grants above.
+
+**Step B — retire the Hosted UI (after step A is verified on a phone):**
+remove `aws_cognito_identity_provider.apple`, the user pool domain, the
+client's OAuth block (`supported_identity_providers`, `allowed_oauth_*`,
+callback/logout URLs) and the hosted-UI SSM parameter. **Keep both Apple SSM
+parameters** — revocation reads them. Not done in A because A is the one that
+needs verifying, and an apply that both adds the new path and removes the old
+leaves nothing to fall back to if the new one fails on the first try.
+
+Build 111 and earlier sign in through the Hosted UI, and step A's
+`PreSignUp_ExternalProvider` refusal stops them creating an account. That is
+intended: there are no federated users left (the only one was deleted on
+2026-10-02), and an old build making a fresh account would only make an
+orphan the new build can't reach.
 
 ---
 
@@ -988,6 +1140,14 @@ Three decisions the paragraphs above left open:
   irreversible act, and also what guarantees a token carrying the new scope —
   a refreshed token keeps the scopes it was first granted. A sign-in naming a
   different account deletes nothing.
+
+**Revised by §3.5.** The re-confirmation is now the native Apple sheet rather
+than the Hosted UI, and it also produces the authorization code that **Apple
+token revocation** needs — a step this section originally missed, and which
+App Review requires of any app offering Sign in with Apple. The function now
+revokes first, then deletes versions, meta and user. Tokens from `InitiateAuth`
+always carry `aws.cognito.signin.user.admin`, so the OAuth scope this section
+added becomes unnecessary once step B removes the OAuth config.
 
 Order on the server is data first, user last (versions → meta → `DeleteUser`):
 every step is idempotent and the token works until the last one, so a call that

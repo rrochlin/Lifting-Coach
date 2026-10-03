@@ -12,8 +12,8 @@ from __future__ import annotations
 import pytest
 from botocore.exceptions import ClientError
 
-from liftcoach_server import accounts, handlers
-from liftcoach_server.accounts import InvalidToken, user_prefix
+from liftcoach_server import accounts, apple, handlers
+from liftcoach_server.accounts import AccountUser, InvalidToken, user_prefix
 from liftcoach_server.aws import CognitoAccounts, S3Versions
 from liftcoach_server.snapshots import InMemoryMetaStore, SnapshotMeta, object_key
 
@@ -27,15 +27,33 @@ class FakeAccounts:
         self.tokens = dict(tokens)
         self.log = log
 
-    def subject(self, access_token: str) -> str:
+    def user(self, access_token: str) -> AccountUser:
         if access_token not in self.tokens:
             raise InvalidToken("Invalid Access Token")
-        return self.tokens[access_token]
+        subject = self.tokens[access_token]
+        # Each test user is an Apple user whose Apple sub is `apple-<sub>`.
+        return AccountUser(subject=subject, username=apple.username_for(f"apple-{subject}"))
 
     def delete(self, access_token: str) -> None:
-        self.subject(access_token)
+        self.user(access_token)
         self.log.append("user")
         del self.tokens[access_token]
+
+
+class FakeGrants:
+    """Apple's token endpoint: codes map to the Apple sub they belong to."""
+
+    def __init__(self, log: list[str]) -> None:
+        self.codes = {"code-a": "apple-sub-a", "code-b": "apple-sub-b"}
+        self.log = log
+        self.revoked: list[str] = []
+
+    def revoke(self, authorization_code: str) -> str:
+        if authorization_code not in self.codes:
+            raise apple.AppleGrantUnusable("invalid_grant")
+        self.log.append("apple")
+        self.revoked.append(authorization_code)
+        return self.codes.pop(authorization_code)
 
 
 class FakeVersions:
@@ -77,6 +95,9 @@ def recorded(subject: str) -> SnapshotMeta:
     )
 
 
+A = {"accessToken": "token-a", "appleAuthorizationCode": "code-a"}
+
+
 @pytest.fixture
 def log() -> list[str]:
     return []
@@ -88,6 +109,7 @@ def world(log: list[str]) -> handlers.AccountDeps:
         accounts=FakeAccounts({"token-a": "sub-a", "token-b": "sub-b"}, log),
         versions=FakeVersions(log),
         meta=LoggingMeta(log),
+        apple_grants=FakeGrants(log),
     )
     deps.versions.versions = {
         object_key("sub-a"): ["v1", "v2", "marker"],
@@ -106,17 +128,18 @@ def world(log: list[str]) -> handlers.AccountDeps:
 
 
 def test_it_deletes_everything_the_account_holds(world: handlers.AccountDeps) -> None:
-    assert handlers.delete_account({"accessToken": "token-a"}) == {
+    assert handlers.delete_account({"accessToken": "token-a", "appleAuthorizationCode": "code-a"}) == {
         "deleted": True,
         "objectVersions": 3,
     }
     assert object_key("sub-a") not in world.versions.versions
     assert world.meta.read("sub-a") is None
     assert "token-a" not in world.accounts.tokens
+    assert world.apple_grants.revoked == ["code-a"]
 
 
 def test_it_touches_no_other_account(world: handlers.AccountDeps) -> None:
-    handlers.delete_account({"accessToken": "token-a"})
+    handlers.delete_account(A)
 
     assert world.versions.versions[object_key("sub-b")] == ["v1"]
     # The prefix carries a trailing slash, so `users/sub-a` can't reach
@@ -126,11 +149,32 @@ def test_it_touches_no_other_account(world: handlers.AccountDeps) -> None:
     assert world.meta.read("sub-ab") is not None
 
 
-def test_the_user_goes_last(world: handlers.AccountDeps, log: list[str]) -> None:
-    """Until the user is deleted the token still works, which is what makes a
-    half-finished deletion repeatable."""
-    handlers.delete_account({"accessToken": "token-a"})
-    assert log == ["versions", "meta", "user"]
+def test_apple_goes_first_and_the_user_last(world: handlers.AccountDeps, log: list[str]) -> None:
+    """Revoking first means Apple refusing costs nothing. Until the user is
+    deleted the token still works, which is what makes a half-finished deletion
+    repeatable."""
+    handlers.delete_account(A)
+    assert log == ["apple", "versions", "meta", "user"]
+
+
+@pytest.mark.parametrize("code", ["", "expired-code"])
+def test_no_usable_apple_code_deletes_nothing(world: handlers.AccountDeps, log: list[str], code: str) -> None:
+    assert handlers.delete_account({"accessToken": "token-a", "appleAuthorizationCode": code}) == {
+        "deleted": False,
+        "reason": "appleReconfirmationRequired",
+    }
+    assert log == []
+    assert len(world.versions.versions) == 3
+
+
+def test_another_apple_ids_code_deletes_nothing(world: handlers.AccountDeps) -> None:
+    """Signed in as account A, confirmed with B's Apple ID."""
+    assert handlers.delete_account({"accessToken": "token-a", "appleAuthorizationCode": "code-b"}) == {
+        "deleted": False,
+        "reason": "appleAccountMismatch",
+    }
+    assert object_key("sub-a") in world.versions.versions
+    assert "token-a" in world.accounts.tokens
 
 
 @pytest.mark.parametrize("event", [{"accessToken": "forged"}, {"accessToken": ""}, {}, None])
@@ -143,17 +187,21 @@ def test_a_refused_token_deletes_nothing(world: handlers.AccountDeps, log: list[
 def test_a_failure_part_way_can_be_repeated(world: handlers.AccountDeps) -> None:
     world.versions.fail_next = True
     with pytest.raises(RuntimeError):
-        handlers.delete_account({"accessToken": "token-a"})
+        handlers.delete_account(A)
 
-    # Nothing irreversible happened: the token still works.
+    # Nothing irreversible happened to the data: the token still works, and a
+    # retry with a fresh Apple confirmation finishes the job.
     assert "token-a" in world.accounts.tokens
-    assert handlers.delete_account({"accessToken": "token-a"})["deleted"] is True
+    world.apple_grants.codes["code-a2"] = "apple-sub-a"
+    assert handlers.delete_account(
+        {"accessToken": "token-a", "appleAuthorizationCode": "code-a2"}
+    )["deleted"] is True
     assert object_key("sub-a") not in world.versions.versions
 
 
 def test_a_second_call_after_success_is_refused_harmlessly(world: handlers.AccountDeps) -> None:
-    handlers.delete_account({"accessToken": "token-a"})
-    assert handlers.delete_account({"accessToken": "token-a"})["deleted"] is False
+    handlers.delete_account(A)
+    assert handlers.delete_account(A)["deleted"] is False
 
 
 @pytest.mark.parametrize("subject", ["", "a/b"])
@@ -190,28 +238,29 @@ class FakeCognito:
         return {}
 
 
-def test_cognito_reports_the_sub_attribute_not_the_username() -> None:
-    """Federated users' usernames are `signinwithapple_…`; the prefix is keyed
-    on `sub`."""
-    assert CognitoAccounts(FakeCognito()).subject("t") == "sub-a"
+def test_cognito_reports_the_sub_and_the_email_shaped_username() -> None:
+    """`Username` is Cognito's generated id; the prefix keys on `sub`, and the
+    username the phone chose lives in the email attribute."""
+    user = CognitoAccounts(FakeCognito()).user("t")
+    assert user == AccountUser(subject="sub-a", username="x@example.com")
 
 
 @pytest.mark.parametrize("code", ["NotAuthorizedException", "UserNotFoundException"])
 def test_cognito_refusals_mean_sign_in_again(code: str) -> None:
     with pytest.raises(InvalidToken):
-        CognitoAccounts(FakeCognito(raises=client_error(code))).subject("t")
+        CognitoAccounts(FakeCognito(raises=client_error(code))).user("t")
 
 
 def test_other_cognito_errors_are_not_mistaken_for_refusals() -> None:
     """Throttling is transient; reporting it as "sign in again" would send the
     lifter through a sign-in that can't help."""
     with pytest.raises(ClientError):
-        CognitoAccounts(FakeCognito(raises=client_error("TooManyRequestsException"))).subject("t")
+        CognitoAccounts(FakeCognito(raises=client_error("TooManyRequestsException"))).user("t")
 
 
 def test_a_user_with_no_sub_is_refused() -> None:
     with pytest.raises(InvalidToken):
-        CognitoAccounts(FakeCognito(attributes=[])).subject("t")
+        CognitoAccounts(FakeCognito(attributes=[])).user("t")
 
 
 class FakePaginator:

@@ -10,5 +10,12 @@
 	     the alert shipped at the default level until now. -->
 	<key>com.apple.developer.usernotifications.time-sensitive</key>
 	<true/>
+	<!-- Native Sign in with Apple: the system sheet rather than a browser
+	     (server/INFRA-SPEC.md §3.5). The App ID has had the capability since
+	     the Hosted UI federation needed it; this is the app claiming it. -->
+	<key>com.apple.developer.applesignin</key>
+	<array>
+		<string>Default</string>
+	</array>
 </dict>
 </plist>

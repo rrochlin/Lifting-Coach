@@ -12,8 +12,9 @@ import Foundation
 ///
 /// **The access token is what decides whose account goes**, not the IAM
 /// signature. The function hands it to Cognito's `GetUser`, which validates it
-/// and names the `sub`; the token needs the `aws.cognito.signin.user.admin`
-/// scope for that, which is why `HostedUI` asks for it. See INFRA-SPEC §9.4.
+/// and names the `sub`. The Apple authorization code beside it is what the
+/// function uses to revoke the app's Sign in with Apple grant first, as Apple
+/// requires. See INFRA-SPEC §3.5 and §9.4.
 public struct AccountDeletion: Sendable {
     public let config: CloudConfig
     let transport: HTTPTransport
@@ -31,12 +32,20 @@ public struct AccountDeletion: Sendable {
 
     /// Deletes the account and returns how many object versions went with it.
     ///
-    /// Throws `.signInExpired` when the function refused the token, and
-    /// `.http` for anything else — every step on the server is safe to repeat,
-    /// so the answer to a failure is to try again.
+    /// Throws `.signInExpired` when the function refused the access token,
+    /// `.appleReconfirmationRequired` when Apple refused the code (it lasts
+    /// five minutes and works once), `.appleAccountMismatch` when the code was
+    /// another Apple ID's, and `.http` for anything else. Nothing is deleted
+    /// in any of those cases but the last, and every step after revocation is
+    /// safe to repeat.
     @discardableResult
-    public func delete(accessToken: String, credentials: AWSCredentials) async throws -> Int {
-        let body = try JSONSerialization.data(withJSONObject: ["accessToken": accessToken])
+    public func delete(
+        accessToken: String, appleAuthorizationCode: String, credentials: AWSCredentials
+    ) async throws -> Int {
+        let body = try JSONSerialization.data(withJSONObject: [
+            "accessToken": accessToken,
+            "appleAuthorizationCode": appleAuthorizationCode,
+        ])
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.httpBody = body
@@ -57,8 +66,12 @@ public struct AccountDeletion: Sendable {
 
         let reply = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
         guard reply["deleted"] as? Bool == true else {
-            if reply["reason"] as? String == "signInRequired" { throw CloudError.signInExpired }
-            throw CloudError.http(200, String(decoding: data, as: UTF8.self))
+            switch reply["reason"] as? String {
+            case "signInRequired": throw CloudError.signInExpired
+            case "appleReconfirmationRequired": throw CloudError.appleReconfirmationRequired
+            case "appleAccountMismatch": throw CloudError.appleAccountMismatch
+            default: throw CloudError.http(200, String(decoding: data, as: UTF8.self))
+            }
         }
         return reply["objectVersions"] as? Int ?? 0
     }
