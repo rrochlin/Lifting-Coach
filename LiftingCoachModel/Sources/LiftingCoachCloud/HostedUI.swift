@@ -95,6 +95,14 @@ public struct HostedUI: Sendable {
         }
     }
 
+    /// `aws.cognito.signin.user.admin` is what lets the access token speak for
+    /// its own user to Cognito — `GetUser` and `DeleteUser`, which is how the
+    /// deletion function learns whose account it is deleting without any
+    /// signature check of its own (`AccountDeletion`). It must also be in the
+    /// app client's `allowed_oauth_scopes`, or Cognito refuses the whole
+    /// sign-in with `invalid_scope`.
+    public static let scopes = "openid email profile aws.cognito.signin.user.admin"
+
     /// No `identity_provider` parameter, deliberately: the Hosted UI then
     /// offers both email and Sign in with Apple, and the lifter picks.
     public func authorizeURL(for attempt: Attempt) -> URL {
@@ -105,7 +113,7 @@ public struct HostedUI: Sendable {
         components.queryItems = [
             URLQueryItem(name: "client_id", value: config.clientID),
             URLQueryItem(name: "response_type", value: "code"),
-            URLQueryItem(name: "scope", value: "openid email profile"),
+            URLQueryItem(name: "scope", value: Self.scopes),
             URLQueryItem(name: "redirect_uri", value: config.redirectURI),
             URLQueryItem(name: "state", value: attempt.state),
             URLQueryItem(name: "code_challenge", value: attempt.challenge),

@@ -181,6 +181,11 @@ class MetaStore(Protocol):
 
     def write(self, meta: SnapshotMeta) -> None: ...
 
+    def delete(self, subject: str) -> None:
+        """Removes the account's item. A missing item is not an error —
+        deletion is repeated after a partial failure (`accounts.py`)."""
+        ...
+
 
 class InMemoryMetaStore:
     """A metadata store for tests and local runs."""
@@ -196,3 +201,6 @@ class InMemoryMetaStore:
         if existing is not None and existing.uploaded_at > meta.uploaded_at:
             return
         self._items[meta.subject] = meta
+
+    def delete(self, subject: str) -> None:
+        self._items.pop(subject, None)

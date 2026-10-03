@@ -179,9 +179,10 @@ public struct UserStore: Sendable {
     /// whole file, and the binding arrives with the snapshot rather than being
     /// patched here.
     ///
-    /// Nothing unbinds. Signing out deliberately leaves the note in place: if
+    /// Signing out never unbinds. It deliberately leaves the note in place: if
     /// it were cleared, the next sign-in as somebody else would find an unbound
     /// database and silently take over the log this refusal exists to protect.
+    /// The one release is `releaseDeletedAccount` below.
     public func bind(cognitoSub: String, to userId: UUID) throws {
         try database.writer.write { db in
             let existing = try String.fetchOne(
@@ -198,6 +199,26 @@ public struct UserStore: Sendable {
             try db.execute(
                 sql: "UPDATE user SET cognitoSub = ? WHERE id = ?",
                 arguments: [cognitoSub, userId.uuidString]
+            )
+        }
+    }
+
+    /// Releases the binding to an account that **no longer exists**.
+    ///
+    /// The only way a binding ends. After the lifter deletes their account the
+    /// note names nobody — and since every sign-in is refused against it, the
+    /// phone would be locked out of the app for good, holding a training log
+    /// that is the lifter's own. Cleared, the next sign-in binds this log to
+    /// whichever account the lifter makes next, which the deletion screen says
+    /// in as many words.
+    ///
+    /// Conditional on the sub, so a stale call can't release a binding that
+    /// has since moved on.
+    public func releaseDeletedAccount(_ cognitoSub: String, from userId: UUID) throws {
+        try database.writer.write { db in
+            try db.execute(
+                sql: "UPDATE user SET cognitoSub = NULL WHERE id = ? AND cognitoSub = ?",
+                arguments: [userId.uuidString, cognitoSub]
             )
         }
     }

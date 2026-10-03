@@ -964,6 +964,56 @@ specified now rather than during review: the S3 prefix and all its versions, the
 `snapshotMeta` item, the Cognito user, and — once 2.2 and 2.3 exist —
 `conversations` and `draft-plans`.
 
+**Built (2026-10-02).** `server/`'s `accounts.py` + `handlers.delete_account`,
+the phone's `AccountDeletion` (LiftingCoachCloud) and Profile's DELETE ACCOUNT.
+Three decisions the paragraphs above left open:
+
+- **The phone calls Lambda's `Invoke` API directly**, SigV4-signed with the
+  identity-pool credentials it already uploads with. No function URL, no API
+  Gateway, no public endpoint — §8's "no service in front of anything" holds.
+  The phone role gains exactly `lambda:InvokeFunction` on
+  `${prefix}-delete-account`, and nothing else in Lambda.
+- **Cognito verifies the caller, not our code.** The payload is
+  `{"accessToken": …}`; the function calls `GetUser` with it, which validates
+  signature, expiry and revocation server-side and returns the `sub`. No JWKS,
+  no RSA, no crypto here to get wrong — the same instinct as reading the file
+  rather than trusting its metadata. `GetUser`/`DeleteUser` are authorised by
+  the token itself, so the deletion role holds **no Cognito permission at all**
+  and there is no `AdminDeleteUser` that could be pointed at someone else. The
+  cost is one scope: `aws.cognito.signin.user.admin` in the app client's
+  `allowed_oauth_scopes` and in the app's authorize request. **The client
+  change must apply before a build requesting the scope ships**, or Cognito
+  refuses every sign-in with `invalid_scope`.
+- **The lifter signs in again to delete.** The conventional confirmation for an
+  irreversible act, and also what guarantees a token carrying the new scope —
+  a refreshed token keeps the scopes it was first granted. A sign-in naming a
+  different account deletes nothing.
+
+Order on the server is data first, user last (versions → meta → `DeleteUser`):
+every step is idempotent and the token works until the last one, so a call that
+dies halfway is simply repeated. On the phone, uploads are refused from the
+moment deletion starts and any PUT in flight is waited out, so nothing recreates
+the snapshot behind it. **The phone's own log stays** — it's the lifter's and
+it's local — and the database is released from the deleted account
+(`UserStore.releaseDeletedAccount`), since a binding to nobody would refuse
+every future sign-in.
+
+The identity pool *identity* is not deleted. It holds no data — only the link
+from a login to an id — and `server_side_token_check` (§3.3) stops it minting
+credentials once the user is gone.
+
+Deletion function, `${prefix}-delete-account`: `python3.12`, `arm64`, handler
+`liftcoach_server.handlers.delete_account`, timeout 30s, memory 256 MB,
+reserved concurrency 2, same env as the indexer, 14-day log group.
+
+| grant | on |
+| --- | --- |
+| `s3:ListBucketVersions` | the bucket, conditioned on `s3:prefix` `users/*` |
+| `s3:DeleteObjectVersion` | `${bucket_arn}/users/*` |
+| `dynamodb:DeleteItem` | the meta table |
+
+No `kms:*` — deleting a version never decrypts it.
+
 ### 9.5 Health data has extra rules
 
 Guideline 5.1.3 forbids using health and fitness data for advertising or

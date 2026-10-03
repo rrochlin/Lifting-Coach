@@ -1,4 +1,6 @@
-# Ships `server/` to the one Lambda that indexes uploaded snapshots.
+# Ships `server/` to its two Lambdas: the one that indexes uploaded snapshots
+# and the one that deletes an account. One package, two handlers — each
+# function's handler setting (Terraform's) picks which entry point it runs.
 #
 # **This workflow updates code and never configuration.** Runtime, memory,
 # timeout, architecture, handler, environment and the S3 trigger all belong to
@@ -35,7 +37,9 @@ env:
   # (INFRA-SPEC §2) and an unset secret would expand to an empty string, which
   # fails in a way that names neither the secret nor the region.
   AWS_REGION: us-west-2
-  FUNCTION_NAME: lift-coach-prod-index-snapshot
+  # Space-separated. Every one must exist before this runs on main — the
+  # Terraform that creates a function lands first, the code second.
+  FUNCTION_NAMES: lift-coach-prod-index-snapshot lift-coach-prod-delete-account
 
 # Two deploys of the same function must not race. Queued rather than
 # cancelled: a half-finished code update is worse than a redundant one.
@@ -161,11 +165,13 @@ jobs:
           # No `--architectures`, no configuration flags: Terraform owns those.
           # Nothing is vendored either — the package has no runtime
           # dependencies, and every Lambda runtime already ships boto3.
-          aws lambda update-function-code \
-            --function-name "$FUNCTION_NAME" \
-            --zip-file fileb:///tmp/function.zip \
-            --query 'FunctionName' --output text
-          aws lambda wait function-updated-v2 --function-name "$FUNCTION_NAME"
+          for name in $FUNCTION_NAMES; do
+            aws lambda update-function-code \
+              --function-name "$name" \
+              --zip-file fileb:///tmp/function.zip \
+              --query 'FunctionName' --output text
+            aws lambda wait function-updated-v2 --function-name "$name"
+          done
 
       - name: Confirm the deployed bytes are the built bytes
         run: |
@@ -176,14 +182,16 @@ jobs:
           # against the file we just built turns "the API said yes" into
           # "the function is running this commit's code".
           expected="$(openssl dgst -sha256 -binary /tmp/function.zip | base64)"
-          actual="$(aws lambda get-function \
-            --function-name "$FUNCTION_NAME" \
-            --query 'Configuration.CodeSha256' --output text)"
+          for name in $FUNCTION_NAMES; do
+            actual="$(aws lambda get-function \
+              --function-name "$name" \
+              --query 'Configuration.CodeSha256' --output text)"
 
-          if [ "$expected" != "$actual" ]; then
-            echo "::error::Deployed code does not match the build."
-            echo "  built:    $expected"
-            echo "  deployed: $actual"
-            exit 1
-          fi
-          echo "$FUNCTION_NAME is running $expected"
+            if [ "$expected" != "$actual" ]; then
+              echo "::error::$name: deployed code does not match the build."
+              echo "  built:    $expected"
+              echo "  deployed: $actual"
+              exit 1
+            fi
+            echo "$name is running $expected"
+          done

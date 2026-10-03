@@ -47,6 +47,28 @@ struct AccountBindingTests {
         #expect(try users.accountBinding(for: user.id) == "abc-123")
     }
 
+    /// A deleted account names nobody. Left bound, every future sign-in is
+    /// refused and the phone is locked out of its own log.
+    @Test("Deleting the account releases the binding, so a new account can sign in")
+    func deletionReleasesTheBinding() throws {
+        let (users, user) = try makeStore()
+        try users.bind(cognitoSub: "abc-123", to: user.id)
+
+        try users.releaseDeletedAccount("abc-123", from: user.id)
+        #expect(try users.accountBinding(for: user.id) == nil)
+        try users.bind(cognitoSub: "xyz-789", to: user.id)
+        #expect(try users.accountBinding(for: user.id) == "xyz-789")
+    }
+
+    @Test("Releasing names the account, so a stale call can't free someone else's binding")
+    func releaseIsConditional() throws {
+        let (users, user) = try makeStore()
+        try users.bind(cognitoSub: "abc-123", to: user.id)
+
+        try users.releaseDeletedAccount("someone-else", from: user.id)
+        #expect(try users.accountBinding(for: user.id) == "abc-123")
+    }
+
     /// `UserRow` deliberately doesn't carry `cognitoSub`, so `save(_:)` writes
     /// every other column and leaves the binding alone. That is load-bearing
     /// rather than incidental — saving a bodyweight or a renamed lifter must

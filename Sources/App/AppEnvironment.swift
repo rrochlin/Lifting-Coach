@@ -319,6 +319,34 @@ public final class AppEnvironment {
         await refreshCloud()
     }
 
+    /// Deletes the account and everything the cloud holds for it — every
+    /// version of the snapshot, the server's index of it, and the Cognito user
+    /// (INFRA-SPEC §9.4). **This phone's training log stays**: it's the
+    /// lifter's, it's local, and the deletion screen says so.
+    ///
+    /// Afterwards the database is released from the deleted account, since a
+    /// binding to nobody would refuse every future sign-in and lock the phone
+    /// out of its own log. The required sign-in then appears, and the next
+    /// account backs this log up as its first upload.
+    @MainActor
+    public func deleteAccount(with webSession: WebAuthenticationSession) async throws {
+        let deleted = try await backend.deleteAccount { url, scheme in
+            try await webSession.authenticate(
+                using: url, callbackURLScheme: scheme, preferredBrowserSession: .ephemeral
+            )
+        }
+        if let user = currentUser {
+            try users.releaseDeletedAccount(deleted, from: user.id)
+        }
+        await snapshotSync.forgetAccount(deleted)
+        // A restore staged from the deleted backup would apply at next launch
+        // a copy of data the lifter just asked to have destroyed.
+        PendingRestore.discard()
+        cloud = CloudStatus()
+        await refreshCloud()
+        Self.log.info("account deleted")
+    }
+
     /// Uploads now if anything changed since the last backup.
     @MainActor
     public func backUpNow() async {
