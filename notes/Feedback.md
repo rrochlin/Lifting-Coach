@@ -284,3 +284,12 @@ Not broken — wanted, and bigger than a fix.
   last one is a judgment, so it would be authored and recorded once (the
   `Block1.json` / `aliases` pattern), never a similarity heuristic deciding two
   entries are the same lift (see the name-matching rule in CLAUDE.md).
+- **Tighten the wording across the app** (02-10-26). A lot of on-screen text
+  is too verbose: explanations under controls, confirmation dialogs, empty
+  states and sign-in/account copy run to two or three sentences where one
+  would do. A pass over every screen: say the one thing the lifter needs at
+  that moment, cut the reasoning (it belongs in CLAUDE.md and the code, not on
+  screen), and keep what's load-bearing — what a destructive action deletes
+  and what it keeps, and that RPE is exertion rather than reps in reserve
+  (Core Tenets §3). Worth doing as one pass rather than piecemeal, so the
+  voice ends up consistent.
