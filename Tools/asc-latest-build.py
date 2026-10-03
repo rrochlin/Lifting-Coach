@@ -2,6 +2,11 @@
 """Prints the highest build number App Store Connect already holds for the app.
 
     Tools/asc-latest-build.py com.rrochlin.LiftingCoach
+    Tools/asc-latest-build.py --marketing com.rrochlin.LiftingCoach
+
+`--marketing` prints the highest *marketing version* instead (`0.2.0`), or
+`0.0.0` when there is none — `testflight.sh` uses it to make every upload
+decide whether it's a new release (see the versioning note there).
 
 Prints 0 when the app exists but has no builds. Exits non-zero, with the reason
 on stderr, for anything else — a missing key, an unregistered bundle id, an API
@@ -110,9 +115,12 @@ def get(url: str, bearer: str) -> dict:
 
 
 def main() -> None:
-    if len(sys.argv) != 2:
-        fail("usage: asc-latest-build.py <bundle-id>")
-    bundle_id = sys.argv[1]
+    args = sys.argv[1:]
+    marketing = "--marketing" in args
+    args = [a for a in args if a != "--marketing"]
+    if len(args) != 1:
+        fail("usage: asc-latest-build.py [--marketing] <bundle-id>")
+    bundle_id = args[0]
 
     key_id = os.environ.get("ASC_KEY_ID", "")
     issuer = os.environ.get("ASC_ISSUER_ID", "")
@@ -129,6 +137,10 @@ def main() -> None:
     if not apps:
         fail(f"no app registered in App Store Connect for {bundle_id}")
     app_id = apps[0]["id"]
+
+    if marketing:
+        print(highest_marketing_version(app_id, bearer))
+        return
 
     # Every build of the app, across marketing versions, paged. The maximum is
     # taken numerically: build numbers are strings in the API, and "99" sorts
@@ -147,6 +159,28 @@ def main() -> None:
         url = page.get("links", {}).get("next")
 
     print(highest)
+
+
+def highest_marketing_version(app_id: str, bearer: str) -> str:
+    """The highest `CFBundleShortVersionString` any build was uploaded under.
+
+    TestFlight files builds under a *pre-release version* per marketing
+    version, so this lists those. Compared as integers per component — as
+    text, "0.10.0" would sort below "0.9.0".
+    """
+    query = urllib.parse.urlencode(
+        {"filter[app]": app_id, "fields[preReleaseVersions]": "version", "limit": 200}
+    )
+    url: str | None = f"{API}/v1/preReleaseVersions?{query}"
+    best: tuple[int, ...] = (0, 0, 0)
+    while url:
+        page = get(url, bearer)
+        for entry in page["data"]:
+            parts = entry["attributes"]["version"].split(".")
+            if all(p.isdigit() for p in parts):
+                best = max(best, tuple(int(p) for p in parts))
+        url = page.get("links", {}).get("next")
+    return ".".join(str(p) for p in best)
 
 
 if __name__ == "__main__":

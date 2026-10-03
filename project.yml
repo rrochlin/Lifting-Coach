@@ -27,7 +27,7 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.rrochlin.LiftingCoach
-        MARKETING_VERSION: "0.1.0"
+        MARKETING_VERSION: "0.2.0"
         CURRENT_PROJECT_VERSION: "1"
         # The commit a build was made from, read back by `BuildInfo` and shown
         # on Profile. Only Tools/testflight.sh knows it and overrides this;

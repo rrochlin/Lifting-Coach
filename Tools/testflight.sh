@@ -2,8 +2,9 @@
 #
 # Archives, exports and uploads a build to TestFlight.
 #
-#   Tools/testflight.sh            # archive + export, stop before upload
-#   Tools/testflight.sh --upload   # and upload to App Store Connect
+#   Tools/testflight.sh                           # archive + export, stop before upload
+#   Tools/testflight.sh --upload                  # and upload — a new marketing version
+#   Tools/testflight.sh --upload --same-version   # another build of the current one
 #
 # Needs, once:
 #   - The app registered in App Store Connect against com.rrochlin.LiftingCoach.
@@ -36,7 +37,21 @@
 #     so any installed build can say which code it is. That was the question
 #     that couldn't be answered about build 68.
 #
-# The marketing version comes from project.yml.
+# The marketing version comes from project.yml (MARKETING_VERSION), and with
+# --upload every build has to decide what it is. App Store Connect is asked for
+# the highest version already uploaded:
+#
+#   - Lower than that is refused — versions only go forward.
+#   - The same is refused unless --same-version says this is another build of
+#     that release. The build number moved on every upload for a month while
+#     the version sat at 0.1.0, because nothing ever asked; this is the asking.
+#   - Higher is a new release and goes through.
+#
+# Semantic versions, decided by what a lifter would notice: the minor for new
+# features or behaviour (0.2.0 was cloud backup and Sign in with Apple), the
+# patch for fixes only, 1.0.0 for the App Store launch. Bump it in project.yml
+# in the PR that makes the release, so the version change is reviewed with the
+# work it names.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -48,7 +63,20 @@ BUNDLE_ID=com.rrochlin.LiftingCoach
 BUILD_NUMBER=${BUILD_NUMBER:-$(git rev-list --count HEAD)}
 COMMIT=$(git rev-parse --short HEAD)
 UPLOAD=false
-[[ "${1:-}" == "--upload" ]] && UPLOAD=true
+SAME_VERSION=false
+for arg in "$@"; do
+    case "$arg" in
+        --upload) UPLOAD=true ;;
+        --same-version) SAME_VERSION=true ;;
+        *) echo "error: unknown argument $arg" >&2; exit 2 ;;
+    esac
+done
+
+VERSION=$(sed -nE 's/^ *MARKETING_VERSION: *"?([0-9]+\.[0-9]+\.[0-9]+)"?.*/\1/p' project.yml | head -1)
+if [[ -z "$VERSION" ]]; then
+    echo "error: no x.y.z MARKETING_VERSION in project.yml" >&2
+    exit 1
+fi
 
 if [[ -n "$(git status --porcelain)" ]]; then
     # Not fatal — but a TestFlight build that doesn't match a commit is one you
@@ -81,9 +109,24 @@ if $UPLOAD; then
         exit 1
     fi
     echo "==> App Store Connect is at build $LATEST; $BUILD_NUMBER is clear"
+
+    SHIPPED=$(Tools/asc-latest-build.py --marketing "$BUNDLE_ID")
+    # `sort -V` orders version strings component by component.
+    HIGHEST=$(printf '%s\n%s\n' "$SHIPPED" "$VERSION" | sort -V | tail -1)
+    if [[ "$VERSION" != "$HIGHEST" ]]; then
+        echo "error: version $VERSION is below $SHIPPED, already in App Store Connect." >&2
+        exit 1
+    fi
+    if [[ "$VERSION" == "$SHIPPED" ]] && ! $SAME_VERSION; then
+        echo "error: $VERSION is already in App Store Connect." >&2
+        echo "  A new release? Bump MARKETING_VERSION in project.yml — minor for" >&2
+        echo "  features, patch for fixes. Another build of $VERSION? Add --same-version." >&2
+        exit 1
+    fi
+    echo "==> App Store Connect is at version $SHIPPED; shipping $VERSION"
 fi
 
-echo "==> build $BUILD_NUMBER (commit $COMMIT)"
+echo "==> version $VERSION, build $BUILD_NUMBER (commit $COMMIT)"
 
 xcodegen generate
 rm -rf "$BUILD_DIR"
@@ -92,6 +135,7 @@ xcodebuild -project LiftingCoach.xcodeproj -scheme LiftingCoach \
     -configuration Release -destination 'generic/platform=iOS' \
     -archivePath "$ARCHIVE" -allowProvisioningUpdates \
     DEVELOPMENT_TEAM="$TEAM_ID" CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+    MARKETING_VERSION="$VERSION" \
     LC_GIT_COMMIT="$COMMIT" \
     archive
 
