@@ -443,6 +443,13 @@ Tools/testflight.sh --upload   # and send it
   `BUILD_NUMBER=<n>` overrides the count for shipping from a branch behind
   `main`, and goes through the same check. The marketing version is
   `MARKETING_VERSION` in `project.yml` — the only place it lives.
+- **Every upload decides its marketing version.** `--upload` asks App Store
+  Connect for the highest version shipped and refuses a lower one, and refuses
+  the *same* one unless `--same-version` says it's another build of that
+  release. Semantic, by what a lifter would notice: minor for features or
+  behaviour, patch for fixes only, 1.0.0 at App Store launch. Bump it in the PR
+  that makes the release. (It sat at 0.1.0 from build 1 to 114 because nothing
+  asked; 0.2.0 is cloud backup plus Sign in with Apple.)
 - **Every TestFlight build carries its commit** as `LCGitCommit` in
   `Info.plist`, shown at the foot of Profile as `0.1.0 (103) · a1b2c3d`
   (`BuildInfo`). It was added because "did build 68 carry `v14_cognitoSub`?"
