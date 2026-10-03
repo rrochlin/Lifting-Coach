@@ -267,6 +267,25 @@ struct SnapshotSyncTests {
         #expect(harness.uploader.count == 0)
     }
 
+    @Test("Forgetting a deleted account clears its conflict, failure and watermark")
+    func forgettingADeletedAccount() async throws {
+        let harness = try makeHarness()
+        try await harness.sync.syncIfNeeded(.signedIn)
+        #expect(harness.watermarks.etag(for: "abc-123") != nil)
+        harness.uploader.refuseNextPrecondition()
+        try logAWorkout(harness, named: "Bench")
+        await harness.sync.markChanged()
+        try await harness.sync.syncIfNeeded(.workoutEnded)
+        #expect(await harness.sync.hasConflict)
+
+        await harness.sync.forgetAccount("abc-123")
+
+        #expect(await harness.sync.hasConflict == false)
+        #expect(await harness.sync.lastFailure == nil)
+        #expect(harness.watermarks.watermark(for: "abc-123") == nil)
+        #expect(harness.watermarks.etag(for: "abc-123") == nil)
+    }
+
     @Test("Choosing to overwrite uploads unconditionally and resumes sync")
     func overwriteResolvesTheConflict() async throws {
         let harness = try makeHarness()

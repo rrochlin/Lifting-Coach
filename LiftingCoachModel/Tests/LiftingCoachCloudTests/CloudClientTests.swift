@@ -165,3 +165,67 @@ struct SnapshotBucketTests {
         }
     }
 }
+
+@Suite("Account deletion")
+struct AccountDeletionTests {
+    private func json(_ object: [String: Any]) -> Data {
+        try! JSONSerialization.data(withJSONObject: object)
+    }
+
+    @Test("Deletion is a signed Lambda Invoke carrying the access token")
+    func request() async throws {
+        let transport = FakeTransport([(200, [:], json(["deleted": true, "objectVersions": 3]))])
+        let removed = try await AccountDeletion(transport: transport)
+            .delete(accessToken: "access-token", credentials: fakeCredentials)
+
+        #expect(removed == 3)
+        let sent = try #require(transport.sent.first)
+        #expect(sent.httpMethod == "POST")
+        #expect(sent.url?.absoluteString ==
+            "https://lambda.us-west-2.amazonaws.com/2015-03-31/functions/lift-coach-prod-delete-account/invocations")
+        let auth = sent.value(forHTTPHeaderField: "Authorization") ?? ""
+        #expect(auth.contains("/us-west-2/lambda/aws4_request"))
+        #expect(sent.value(forHTTPHeaderField: "X-Amz-Security-Token") == "session")
+        let body = try JSONSerialization.jsonObject(with: sent.httpBody ?? Data()) as? [String: String]
+        #expect(body == ["accessToken": "access-token"])
+    }
+
+    /// Lambda answers 200 for an invocation that ran, including one that
+    /// crashed. Reading that as success would tell the lifter their data was
+    /// deleted while it sat in the bucket.
+    @Test("A handler that raised is a failure, even inside a 200")
+    func functionError() async {
+        let transport = FakeTransport([(200, ["X-Amz-Function-Error": "Unhandled"],
+                                        json(["errorMessage": "boom"]))])
+        await #expect(throws: CloudError.self) {
+            try await AccountDeletion(transport: transport)
+                .delete(accessToken: "t", credentials: fakeCredentials)
+        }
+    }
+
+    @Test("A refused token reads as needing to sign in again")
+    func refused() async {
+        let transport = FakeTransport([(200, [:], json(["deleted": false, "reason": "signInRequired"]))])
+        await #expect(throws: CloudError.signInExpired) {
+            try await AccountDeletion(transport: transport)
+                .delete(accessToken: "t", credentials: fakeCredentials)
+        }
+    }
+
+    @Test("IAM refusing the invoke is a failure")
+    func forbidden() async {
+        let transport = FakeTransport([(403, [:], Data("AccessDenied".utf8))])
+        await #expect(throws: CloudError.http(403, "AccessDenied")) {
+            try await AccountDeletion(transport: transport)
+                .delete(accessToken: "t", credentials: fakeCredentials)
+        }
+    }
+
+    /// The server verifies the access token with Cognito's `GetUser`, which
+    /// needs this scope. Without it every deletion is refused.
+    @Test("Sign-in asks for the scope deletion depends on")
+    func adminScope() {
+        let url = HostedUI().authorizeURL(for: HostedUI.Attempt()).absoluteString
+        #expect(url.contains("aws.cognito.signin.user.admin"))
+    }
+}

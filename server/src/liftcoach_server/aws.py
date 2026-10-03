@@ -177,9 +177,130 @@ class DynamoMetaStore:
             # lost a race it was never trying to win, so it returns normally —
             # raising would make S3 retry an invocation that would lose again.
 
+    def delete(self, subject: str) -> None:
+        """`dynamodb:DeleteItem`, held by the deletion function only. Deleting
+        an absent item succeeds, which is what makes a repeat harmless."""
+        self.table.delete_item(Key={"pk": _partition_key(subject)})
+
+
+class CognitoAccounts:
+    """The user pool, through an access token rather than through IAM.
+
+    `GetUser` and `DeleteUser` are authorised by the token itself: Cognito
+    validates it — signature, expiry, revocation, and the
+    `aws.cognito.signin.user.admin` scope — and IAM is never consulted. So the
+    deletion role holds no Cognito permission at all, and there is no admin
+    call here that could be pointed at somebody else.
+    """
+
+    #: What Cognito says when the token is the problem. Both mean "sign in
+    #: again", and neither is worth a retry.
+    _REFUSALS = {"NotAuthorizedException", "UserNotFoundException"}
+
+    def __init__(self, client: Any | None = None) -> None:
+        self._client = client
+
+    @property
+    def client(self) -> Any:
+        if self._client is None:
+            import boto3
+
+            self._client = boto3.client("cognito-idp")
+        return self._client
+
+    def _call(self, operation: str, access_token: str) -> dict[str, Any]:
+        from botocore.exceptions import ClientError
+
+        from .accounts import InvalidToken
+
+        try:
+            return getattr(self.client, operation)(AccessToken=access_token)
+        except ClientError as exc:
+            code = exc.response.get("Error", {}).get("Code", "")
+            if code in self._REFUSALS:
+                # The message, never the token: it's a bearer credential.
+                raise InvalidToken(exc.response.get("Error", {}).get("Message", code)) from None
+            raise
+
+    def subject(self, access_token: str) -> str:
+        from .accounts import InvalidToken
+
+        response = self._call("get_user", access_token)
+        for attribute in response.get("UserAttributes") or []:
+            if attribute.get("Name") == "sub":
+                return str(attribute.get("Value", ""))
+        raise InvalidToken("Cognito returned a user with no sub")
+
+    def delete(self, access_token: str) -> None:
+        self._call("delete_user", access_token)
+
+
+class S3Versions:
+    """Deletes every version under a prefix — the only S3 deletion anywhere.
+
+    Holds `s3:ListBucketVersions` and `s3:DeleteObjectVersion`, on the deletion
+    function's role and nowhere else; the phone still has no delete permission
+    of any kind (INFRA-SPEC §3.4).
+    """
+
+    #: `DeleteObjects` takes at most this many keys per call.
+    _BATCH = 1000
+
+    def __init__(self, bucket: str, client: Any | None = None) -> None:
+        self._bucket = bucket
+        self._client = client
+
+    @property
+    def client(self) -> Any:
+        if self._client is None:
+            import boto3
+
+            self._client = boto3.client("s3")
+        return self._client
+
+    def _listed(self, prefix: str) -> list[dict[str, str]]:
+        found: list[dict[str, str]] = []
+        paginator = self.client.get_paginator("list_object_versions")
+        for page in paginator.paginate(Bucket=self._bucket, Prefix=prefix):
+            # Delete markers are versions too. Leaving them behind leaves a
+            # listable trace that the account existed.
+            for entry in [*(page.get("Versions") or []), *(page.get("DeleteMarkers") or [])]:
+                found.append({"Key": entry["Key"], "VersionId": entry["VersionId"]})
+        return found
+
+    def delete_all(self, prefix: str) -> int:
+        targets = self._listed(prefix)
+        for start in range(0, len(targets), self._BATCH):
+            batch = targets[start : start + self._BATCH]
+            response = self.client.delete_objects(
+                Bucket=self._bucket, Delete={"Objects": batch, "Quiet": True}
+            )
+            # `DeleteObjects` answers 200 while refusing individual keys, so a
+            # permissions mistake would otherwise report success with the
+            # training log still in the bucket.
+            errors = response.get("Errors") or []
+            if errors:
+                first = errors[0]
+                raise RuntimeError(
+                    f"S3 refused {len(errors)} of {len(batch)} deletions: "
+                    f"{first.get('Code')} {first.get('Message')}"
+                )
+        return len(targets)
+
 
 def build_dependencies(bucket: str, meta_table: str) -> Any:
     """The composition root, built from the Lambda's environment."""
     from .handlers import Deps
 
     return Deps(objects=S3Objects(bucket), meta=DynamoMetaStore(meta_table))
+
+
+def build_account_dependencies(bucket: str, meta_table: str) -> Any:
+    """The deletion function's composition root."""
+    from .handlers import AccountDeps
+
+    return AccountDeps(
+        accounts=CognitoAccounts(),
+        versions=S3Versions(bucket),
+        meta=DynamoMetaStore(meta_table),
+    )

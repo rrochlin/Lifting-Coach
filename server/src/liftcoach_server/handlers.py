@@ -1,6 +1,6 @@
-"""The Lambda entry point. There is one.
+"""The Lambda entry points: the indexer, and account deletion.
 
-The phone uploads to S3 directly with credentials scoped by its Cognito
+**`index_snapshot`.** The phone uploads to S3 directly with credentials scoped by its Cognito
 identity, so there is no request to authorise, no body to parse and no status
 code to choose. What remains is a consequence of an object existing:
 `ObjectCreated` fires, and this records what arrived.
@@ -9,6 +9,13 @@ code to choose. What remains is a consequence of an object existing:
 report is ordinary on a cellular link, and a design where that leaves the index
 disagreeing with the bucket is a design that needs a reconciler. Here the object
 *is* the trigger.
+
+**`delete_account`.** The one thing the phone asks the server to do, and the one
+thing it can't do itself: its role has no delete permission of any kind. It
+calls this with Lambda's own `Invoke` API, signed with the same identity-pool
+credentials it uploads with — so there is still no URL, no API Gateway and no
+public endpoint, only an IAM grant on one function. The access token in the
+payload is what decides whose account goes; see `accounts.py`.
 """
 
 from __future__ import annotations
@@ -19,7 +26,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
-from . import snapshots
+from . import accounts, snapshots
 from .errors import UnreadableSnapshot
 from .inspection import inspect
 from .snapshots import MetaStore, SnapshotMeta
@@ -163,3 +170,59 @@ def _index_one(
         )
     )
     return True
+
+
+@dataclass
+class AccountDeps:
+    """What `delete_account` needs. Separate from `Deps` because it is a
+    separate function with a separate role: the indexer never builds a client
+    that can delete, and this never builds one that reads a snapshot."""
+
+    accounts: accounts.Accounts
+    versions: accounts.SnapshotVersions
+    meta: MetaStore
+
+
+_account_deps: AccountDeps | None = None
+
+
+def configure_accounts(deps: AccountDeps | None) -> None:
+    global _account_deps
+    _account_deps = deps
+
+
+def account_dependencies() -> AccountDeps:
+    global _account_deps
+    if _account_deps is None:
+        from .aws import build_account_dependencies
+
+        _account_deps = build_account_dependencies(
+            bucket=os.environ["SNAPSHOT_BUCKET"],
+            meta_table=os.environ["SNAPSHOT_META_TABLE"],
+        )
+    return _account_deps
+
+
+def delete_account(event: Event, context: Any = None) -> dict[str, Any]:
+    """`{"accessToken": "..."}` → `{"deleted": true, "objectVersions": n}`.
+
+    A refused token is an *answer*, `{"deleted": false, "reason":
+    "signInRequired"}`, rather than a raise: Lambda reports a raised exception
+    as a function error carrying a stack trace, and "sign in again" is neither
+    an error nor worth one. Anything else does raise — the phone sees a failed
+    call, the lifter sees "try again", and every step is safe to repeat.
+    """
+    deps = account_dependencies()
+    token = str((event or {}).get("accessToken") or "")
+    try:
+        report = accounts.delete_account(
+            token, accounts=deps.accounts, versions=deps.versions, meta=deps.meta
+        )
+    except accounts.InvalidToken as refusal:
+        print(f"delete_account refused: {refusal.message}")
+        return {"deleted": False, "reason": "signInRequired"}
+
+    # The sub and a count, never the token. Enough to answer "did it run, and
+    # for whom" from the log group.
+    print(f"delete_account: {report.subject} removed, {report.object_versions} object versions")
+    return report.as_body()

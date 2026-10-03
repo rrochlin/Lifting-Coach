@@ -171,6 +171,21 @@ public actor SnapshotSync {
         return try await attempt(account: account, lastUploaded: nil, condition: .overwrite)
     }
 
+    /// The account is gone: forget everything this actor held about it.
+    ///
+    /// A conflict or a failure belonged to a cloud copy that no longer exists,
+    /// and the watermark and etag describe an object that was deleted — left
+    /// in place, a later account reusing nothing could still read them as
+    /// "already uploaded". Marked changed so the next account's first upload
+    /// isn't skipped as "nothing changed", though a missing watermark already
+    /// makes it due.
+    public func forgetAccount(_ account: String) {
+        watermarks.setWatermark(nil, etag: nil, for: account)
+        hasConflict = false
+        lastFailure = nil
+        hasChanged = true
+    }
+
     private func attempt(account: String, lastUploaded: String?, condition: UploadCondition) async throws -> Outcome {
         do {
             return try await run(account: account, lastUploaded: lastUploaded, condition: condition)

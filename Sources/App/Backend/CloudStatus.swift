@@ -46,3 +46,14 @@ public enum CloudActionError: LocalizedError {
         }
     }
 }
+
+public enum AccountDeletionError: LocalizedError {
+    case differentAccount
+
+    public var errorDescription: String? {
+        switch self {
+        case .differentAccount:
+            "That sign-in was a different account, so nothing was deleted. Sign in with the account shown here — email or Apple, whichever you used."
+        }
+    }
+}

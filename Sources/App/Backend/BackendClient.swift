@@ -47,6 +47,20 @@ public protocol BackendClient: Sendable {
     /// next needed, not treated as being signed out.
     var currentSession: AuthSession? { get async }
 
+    /// Deletes the account and everything the cloud holds for it, then signs
+    /// out. Returns the `sub` that was deleted.
+    ///
+    /// **Asks the lifter to sign in again first**, through the same
+    /// `authenticate` as `signIn`. It's the conventional confirmation for an
+    /// act that can't be undone, and it's also what guarantees a fresh access
+    /// token carrying the scope the server needs to verify it. Throws
+    /// `AccountDeletionError.differentAccount` if that sign-in names somebody
+    /// other than who is signed in now. Uploads are refused from the moment
+    /// this starts, so nothing can recreate the snapshot behind it.
+    func deleteAccount(
+        using authenticate: @Sendable (_ url: URL, _ callbackScheme: String) async throws -> URL
+    ) async throws -> String
+
     // MARK: Snapshot (S3)
 
     /// Uploads under a precondition and returns the etag S3 assigned.
@@ -186,6 +200,12 @@ public struct UnavailableBackend: BackendClient {
 
     public var currentSession: AuthSession? {
         get async { nil }
+    }
+
+    public func deleteAccount(
+        using authenticate: @Sendable (URL, String) async throws -> URL
+    ) async throws -> String {
+        throw BackendError.notImplementedUntilPhase2
     }
 
     public func uploadSnapshot(

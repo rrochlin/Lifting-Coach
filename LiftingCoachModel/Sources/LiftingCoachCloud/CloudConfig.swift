@@ -20,10 +20,14 @@ public struct CloudConfig: Sendable, Equatable {
     /// opened by the system — `ASWebAuthenticationSession` intercepts it —
     /// so it needs no `CFBundleURLSchemes` entry.
     public var redirectURI: String
+    /// The Lambda that deletes an account — `AccountDeletion`. Named rather
+    /// than addressed by URL: the phone calls Lambda's `Invoke` API directly.
+    public var deleteAccountFunction: String
 
     public init(
         region: String, authDomain: URL, clientID: String, userPoolID: String,
-        identityPoolID: String, bucket: String, redirectURI: String
+        identityPoolID: String, bucket: String, redirectURI: String,
+        deleteAccountFunction: String = "lift-coach-prod-delete-account"
     ) {
         self.region = region
         self.authDomain = authDomain
@@ -32,6 +36,7 @@ public struct CloudConfig: Sendable, Equatable {
         self.identityPoolID = identityPoolID
         self.bucket = bucket
         self.redirectURI = redirectURI
+        self.deleteAccountFunction = deleteAccountFunction
     }
 
     public static let production = CloudConfig(
@@ -41,7 +46,8 @@ public struct CloudConfig: Sendable, Equatable {
         userPoolID: "us-west-2_IdjBHNPTi",
         identityPoolID: "us-west-2:4ceed955-559e-4395-9537-9672249ceeb6",
         bucket: "lift-coach-prod-snapshots",
-        redirectURI: "liftcoach://callback"
+        redirectURI: "liftcoach://callback",
+        deleteAccountFunction: "lift-coach-prod-delete-account"
     )
 
     /// The `iss` of this pool's tokens, which is also the key the identity pool

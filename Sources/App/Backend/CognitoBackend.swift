@@ -16,16 +16,28 @@ actor CognitoBackend: BackendClient {
     private let hostedUI: HostedUI
     private let identityPool: IdentityPool
     private let bucket: SnapshotBucket
+    private let deletion: AccountDeletion
     private let tokenStore: TokenStore
     private let deviceID: String
 
     private var tokens: CognitoTokens?
     private var credentials: AWSCredentials?
 
+    /// Set for the whole of an account deletion. Uploads are refused while it
+    /// is, and `currentSession` reads as signed out, so `SnapshotSync` stops
+    /// before exporting anything.
+    private var isDeletingAccount = false
+    /// PUTs that have started and not answered. Actor methods interleave at
+    /// every `await`, so an upload can be mid-flight when deletion begins; the
+    /// deletion waits for it, or that upload would land after the versions
+    /// were removed and recreate the snapshot of an account that's gone.
+    private var uploadsInFlight = 0
+
     init(config: CloudConfig = .production, deviceID: String, tokenStore: TokenStore = TokenStore()) {
         hostedUI = HostedUI(config: config)
         identityPool = IdentityPool(config: config)
         bucket = SnapshotBucket(config: config)
+        deletion = AccountDeletion(config: config)
         self.tokenStore = tokenStore
         self.deviceID = deviceID
         tokens = tokenStore.load()
@@ -61,8 +73,47 @@ actor CognitoBackend: BackendClient {
     }
 
     var currentSession: AuthSession? {
-        guard let tokens, let claims = try? IDTokenClaims(jwt: tokens.idToken) else { return nil }
+        guard !isDeletingAccount, let tokens, let claims = try? IDTokenClaims(jwt: tokens.idToken) else { return nil }
         return AuthSession(subject: claims.subject, email: claims.email)
+    }
+
+    // MARK: Account deletion
+
+    func deleteAccount(
+        using authenticate: @Sendable (URL, String) async throws -> URL
+    ) async throws -> String {
+        guard let shown = currentSession?.subject else { throw CloudError.notSignedIn }
+        isDeletingAccount = true
+        defer { isDeletingAccount = false }
+
+        // Sign in again: the confirmation, and a token with the admin scope.
+        // A cancel here throws out of the whole deletion with nothing done.
+        let attempt = HostedUI.Attempt()
+        let callback = try await authenticate(
+            hostedUI.authorizeURL(for: attempt), hostedUI.config.callbackScheme
+        )
+        let code = try hostedUI.code(from: callback, for: attempt)
+        let fresh = try await hostedUI.exchange(code: code, for: attempt)
+        let subject = try IDTokenClaims(jwt: fresh.idToken).subject
+        guard subject == shown else { throw AccountDeletionError.differentAccount }
+        tokens = fresh
+        credentials = nil
+        tokenStore.save(fresh)
+
+        // The sign-in took seconds, so this is normally already zero.
+        var waited = 0
+        while uploadsInFlight > 0, waited < 300 {
+            try await Task.sleep(for: .milliseconds(100))
+            waited += 1
+        }
+
+        let aws = try await identityPool.credentials(idToken: fresh.idToken)
+        try await deletion.delete(accessToken: fresh.accessToken, credentials: aws)
+
+        tokens = nil
+        credentials = nil
+        tokenStore.clear()
+        return subject
     }
 
     // MARK: Snapshot
@@ -71,7 +122,13 @@ actor CognitoBackend: BackendClient {
         _ snapshot: SnapshotExporter.Snapshot,
         condition: SnapshotSync.UploadCondition
     ) async throws -> String {
+        guard !isDeletingAccount else { throw CloudError.notSignedIn }
+        uploadsInFlight += 1
+        defer { uploadsInFlight -= 1 }
         let (subject, credentials) = try await authorised()
+        // Re-checked after the await: a deletion may have begun while the
+        // credentials were being minted.
+        guard !isDeletingAccount else { throw CloudError.notSignedIn }
         let body = try Data(contentsOf: snapshot.url)
         let precondition: WritePrecondition = switch condition {
         case .firstUpload: .noExistingObject

@@ -19,6 +19,7 @@ struct AccountSection: View {
     @State private var message: String?
     @State private var confirmRestore = false
     @State private var confirmReplace = false
+    @State private var confirmDelete = false
 
     private var cloud: CloudStatus { environment.cloud }
 
@@ -67,6 +68,17 @@ struct AccountSection: View {
         ) {
             run { await environment.replaceCloudCopy() }
         }
+        // Says what goes *and* what stays. The phone's log staying is the half
+        // a lifter is most likely to get wrong in either direction — afraid
+        // it's wiped, or assuming the cloud copy survives.
+        .themedConfirm(
+            isPresented: $confirmDelete,
+            title: "Delete your account?",
+            message: "Your account and every cloud backup of your training log are deleted, permanently — including older versions. This can't be undone. You'll sign in once more to confirm it's you.\n\nThe training log on this phone stays. The next account you sign in with will back it up.",
+            confirmLabel: "Delete"
+        ) {
+            run { try await environment.deleteAccount(with: webAuthenticationSession) }
+        }
     }
 
     // MARK: States
@@ -110,6 +122,19 @@ struct AccountSection: View {
                     run { await environment.signOut() }
                 }
             }
+            // Quiet and last: reachable in two taps, as App Review requires
+            // (5.1.1(v)), and never the thing a thumb lands on by accident.
+            Button {
+                confirmDelete = true
+            } label: {
+                Text("DELETE ACCOUNT")
+                    .font(Theme.label).tracking(1.2)
+                    .foregroundStyle(isWorking ? Theme.inkMuted : Theme.alert)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+            }
+            .buttonStyle(.plain)
+            .disabled(isWorking)
         }
     }
 
