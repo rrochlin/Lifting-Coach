@@ -139,10 +139,10 @@ and both matter to code in this directory:
 
 ## Not built yet
 
-- **Nothing has run this code in AWS.** The function exists but still holds a
-  placeholder that fails at import, so no `snapshotMeta` item has ever been
-  written by the real handler. Until the first deploy lands, every property here
-  is proved by tests and none by production.
+- ~~Nothing has run this code in AWS.~~ The indexer has (2026-10-02: a real
+  upload from the phone, recorded `readable` at `v14_cognitoSub`), and so has
+  `delete_account` (the owner's account, every version gone). `apple_sign_in`
+  has not — it waits on INFRA-SPEC §3.5 step A.
 - **The chat and the query tools** (2.2, 2.3).
 - ~~**Account deletion.**~~ Built — `accounts.py`, INFRA-SPEC §9.4, with
   Apple grant revocation from §3.5. §9.2–9.5 hold the rest of the compliance
