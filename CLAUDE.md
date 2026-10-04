@@ -527,21 +527,26 @@ asking.
 `latest-stable` because a toolchain that moves under you turns an unrelated push
 into the run that mysteriously breaks — raise it deliberately.
 
-**`.github/workflows/testflight.yml` is a scaffold that cannot fire.**
-`workflow_dispatch` only, with an input you have to type `upload` into, and it
-has never been run. The steps are written out — throwaway keychain, imported
-`.p12`, installed profile, API key — and the file ends with the exact list of
-secrets and the one code change still needed (`Tools/testflight.sh` signs
-automatically, which is right on a Mac signed into an Apple ID and wrong on a
-runner). **The reason it isn't finished is written in it**: given an API key and
-no certificate, `-allowProvisioningUpdates` will *mint a new distribution
-certificate* per ephemeral runner, the team limit is three, and two or three runs
-locks every Mac out of signing this app until they're revoked by hand.
+**`.github/workflows/testflight.yml` uploads to TestFlight, on demand.**
+Actions → TestFlight → Run workflow, choosing *new version* or *another build of
+the current version* (which passes `--same-version`). It never runs on push,
+because every upload decides its version. It runs the same `Tools/testflight.sh`
+as the Mac, on `macos-26`.
 
-Until it's finished, `Tools/testflight.sh --upload` from the Mac is the path, and
-**Xcode Cloud is the alternative worth weighing** — it does the signing half with
-no secrets and no certificate to rotate, and 25 compute hours a month come with
-the Developer Program already being paid for.
+**Release signing is manual, and that's what made CI possible.** The team's one
+Apple Distribution certificate (ASC id `CUSD344557`, made 2026-10-04 by the
+remodel-tracker session and shared, expires 2027-10-04) plus this app's own
+**"LiftingCoach AppStore"** profile, made through the App Store Connect API,
+carrying the Sign in with Apple and Time Sensitive entitlements. Both are in
+`~/.appstoreconnect/signing/` (owner-only), and in six repo secrets
+(`IOS_DIST_P12_*`, `IOS_APPSTORE_PROFILE_BASE64`, `ASC_*`). **Nothing uses
+`-allowProvisioningUpdates` any more**: given an API key and no certificate, it
+mints a new distribution certificate per run, and the team limit is three.
+Automatic signing also failed twice on the Mac with "No Accounts" whenever
+Xcode's Apple ID sign-in lapsed. **Reuse `CUSD344557`; don't make another.**
+When the pair expires, renew the certificate once, then regenerate the profile
+and update the two secrets that carry them. The first signing on a Mac asks
+keychain permission for the key: answer "Always Allow".
 
 ## Working conventions from this project
 - The notes docs are living working files, not archives — once a design conversation converges on a direction, implement it directly in the relevant `.md` (or, going forward, the actual Swift code). Don't leave agreed decisions sitting only in chat.
