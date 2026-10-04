@@ -37,7 +37,8 @@ targets:
         # Phase 1 is portrait-only on iPhone; revisit if an iPad planner view lands.
         TARGETED_DEVICE_FAMILY: "1"
         ENABLE_USER_SCRIPT_SANDBOXING: YES
-        # Automatic signing, no DEVELOPMENT_TEAM pinned: Xcode fills this in from
+        # Automatic signing for Debug (Release overrides below), no
+        # DEVELOPMENT_TEAM pinned: Xcode fills this in from
         # whichever Apple ID/team is signed in locally (Xcode > Settings >
         # Accounts) the first time you select a real device as the run
         # destination, and a command-line build passes DEVELOPMENT_TEAM=... on
@@ -46,10 +47,24 @@ targets:
         # working (correctly) the moment you build for a physical device or for
         # distribution.
         CODE_SIGN_STYLE: Automatic
-        # Time Sensitive Notifications. The only entitlement this app has, and
-        # the only notification it posts is the rest-timer alert — see
-        # RestNotifier for why that one earns breaking through a Focus.
+        # Time Sensitive Notifications (the rest-timer alert — see RestNotifier)
+        # and Sign in with Apple (INFRA-SPEC §3.5).
         CODE_SIGN_ENTITLEMENTS: Sources/App/Resources/LiftingCoach.entitlements
+      # **Release is signed manually**, so a TestFlight build never depends on
+      # an Apple ID being signed in to Xcode. Automatic signing failed twice
+      # with "No Accounts" when Xcode's sign-in lapsed, and a CI runner never
+      # has one at all. The certificate is the team's one Apple Distribution
+      # certificate (ASC id CUSD344557, shared with remodel-tracker, expires
+      # 2027-10-04); the profile is this app's own, made through the App Store
+      # Connect API, and carries both entitlements above. Both live in
+      # ~/.appstoreconnect/signing/ and, for CI, in repo secrets. Debug stays
+      # automatic for running on a phone from Xcode.
+      configs:
+        Release:
+          CODE_SIGN_STYLE: Manual
+          DEVELOPMENT_TEAM: 33G44VZ97Z
+          CODE_SIGN_IDENTITY: "Apple Distribution"
+          PROVISIONING_PROFILE_SPECIFIER: "LiftingCoach AppStore"
     info:
       path: Sources/App/Resources/Info.plist
       properties:

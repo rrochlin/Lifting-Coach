@@ -60,6 +60,11 @@ TEAM_ID=33G44VZ97Z
 BUILD_DIR=/tmp/lifting-coach-archive
 ARCHIVE="$BUILD_DIR/LiftingCoach.xcarchive"
 BUNDLE_ID=com.rrochlin.LiftingCoach
+# Manual signing, matching project.yml's Release config: the team's Apple
+# Distribution certificate and this app's own App Store profile. No
+# -allowProvisioningUpdates anywhere — nothing here may create or change a
+# certificate or profile, and nothing needs an Apple ID signed in to Xcode.
+PROFILE_NAME="LiftingCoach AppStore"
 BUILD_NUMBER=${BUILD_NUMBER:-$(git rev-list --count HEAD)}
 COMMIT=$(git rev-parse --short HEAD)
 UPLOAD=false
@@ -133,7 +138,7 @@ rm -rf "$BUILD_DIR"
 
 xcodebuild -project LiftingCoach.xcodeproj -scheme LiftingCoach \
     -configuration Release -destination 'generic/platform=iOS' \
-    -archivePath "$ARCHIVE" -allowProvisioningUpdates \
+    -archivePath "$ARCHIVE" \
     DEVELOPMENT_TEAM="$TEAM_ID" CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
     MARKETING_VERSION="$VERSION" \
     LC_GIT_COMMIT="$COMMIT" \
@@ -146,7 +151,12 @@ cat > "$BUILD_DIR/ExportOptions.plist" <<PLIST
 <dict>
 	<key>method</key><string>app-store-connect</string>
 	<key>teamID</key><string>$TEAM_ID</string>
-	<key>signingStyle</key><string>automatic</string>
+	<key>signingStyle</key><string>manual</string>
+	<key>signingCertificate</key><string>Apple Distribution</string>
+	<key>provisioningProfiles</key>
+	<dict>
+		<key>$BUNDLE_ID</key><string>$PROFILE_NAME</string>
+	</dict>
 	<key>uploadSymbols</key><true/>
 	<key>destination</key><string>export</string>
 </dict>
@@ -155,8 +165,7 @@ PLIST
 
 xcodebuild -exportArchive -archivePath "$ARCHIVE" \
     -exportPath "$BUILD_DIR/export" \
-    -exportOptionsPlist "$BUILD_DIR/ExportOptions.plist" \
-    -allowProvisioningUpdates
+    -exportOptionsPlist "$BUILD_DIR/ExportOptions.plist"
 
 IPA="$BUILD_DIR/export/LiftingCoach.ipa"
 echo "==> exported $IPA"
