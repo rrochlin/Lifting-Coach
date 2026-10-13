@@ -50,6 +50,12 @@ public struct User: Codable, Hashable, Identifiable, Sendable {
     /// else. Like every unit preference in this app it changes *reading*, never
     /// storage — see `Measurement.expressed(in:)`.
     public var exerciseUnits: [Int: WeightUnit]?
+    /// How the lifter logs particular exercises, keyed by `Exercise.id` — an
+    /// override of `Exercise.defaultTracking`, sticky like `exerciseUnits` and
+    /// stored the same way. Present only for exercises they've changed: a
+    /// plank the catalog files under strength, or a catalog "cardio" entry
+    /// they'd rather count reps of.
+    public var exerciseTracking: [Int: ExerciseTracking]?
     /// The unit weights are read and entered in.
     ///
     /// A display and entry preference, not a storage format: weights are still
@@ -69,7 +75,8 @@ public struct User: Codable, Hashable, Identifiable, Sendable {
         goalMaxes: [Int: GoalMax]? = nil,
         bodyWeight: [Date: Measurement<UnitMass>]? = nil,
         preferredUnit: WeightUnit = .pounds,
-        exerciseUnits: [Int: WeightUnit]? = nil
+        exerciseUnits: [Int: WeightUnit]? = nil,
+        exerciseTracking: [Int: ExerciseTracking]? = nil
     ) {
         self.id = id
         self.name = name
@@ -80,6 +87,7 @@ public struct User: Codable, Hashable, Identifiable, Sendable {
         self.bodyWeight = bodyWeight
         self.preferredUnit = preferredUnit
         self.exerciseUnits = exerciseUnits
+        self.exerciseTracking = exerciseTracking
     }
 
     /// The unit a given lift is read and entered in: its own preference, then

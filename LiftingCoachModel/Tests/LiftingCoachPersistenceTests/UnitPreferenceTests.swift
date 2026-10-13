@@ -193,3 +193,49 @@ struct ExerciseUnitPreferenceTests {
         #expect((sets[1].unit ?? reloadedUser.unit(forExerciseID: exercise.id)) == .pounds)
     }
 }
+
+@Suite("Per-exercise tracking preference")
+struct ExerciseTrackingPreferenceTests {
+    private func anyExerciseID() -> Int { ExerciseCatalog.seed[0].id }
+
+    @Test("Logging an exercise by time is sticky, and only for that exercise")
+    func persists() throws {
+        let (users, user) = try makeStore()
+        let timed = anyExerciseID()
+        let other = ExerciseCatalog.seed[1].id
+
+        try users.setTracking(.timed, forExerciseID: timed, for: user.id)
+
+        let reloaded = try #require(try users.fetch(id: user.id))
+        #expect(reloaded.exerciseTracking?[timed] == .timed)
+        #expect(reloaded.exerciseTracking?[other] == nil)
+    }
+
+    @Test("Clearing it falls back to the catalog's default, and re-setting replaces")
+    func clearsAndReplaces() throws {
+        let (users, user) = try makeStore()
+        let id = anyExerciseID()
+
+        try users.setTracking(.timed, forExerciseID: id, for: user.id)
+        try users.setTracking(.strength, forExerciseID: id, for: user.id)
+        #expect(try users.fetch(id: user.id)?.exerciseTracking?[id] == .strength)
+
+        try users.setTracking(nil, forExerciseID: id, for: user.id)
+        #expect(try users.fetch(id: user.id)?.exerciseTracking == nil)
+    }
+
+    /// `save(_:)` rewrites the lifter's child rows; a preference it didn't
+    /// carry would be silently dropped by saving a bodyweight.
+    @Test("Saving the whole lifter keeps the preference")
+    func surviveSave() throws {
+        let (users, user) = try makeStore()
+        let id = anyExerciseID()
+        try users.setTracking(.timed, forExerciseID: id, for: user.id)
+
+        var edited = try #require(try users.fetch(id: user.id))
+        edited.name = "Rob"
+        try users.save(edited)
+
+        #expect(try users.fetch(id: user.id)?.exerciseTracking?[id] == .timed)
+    }
+}

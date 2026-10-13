@@ -193,6 +193,14 @@ enum LaunchArguments {
         ProcessInfo.processInfo.arguments.contains("-reorderMode")
     }
 
+    /// `-focusWeight` puts the keyboard on the next unlogged set's weight
+    /// field, which is the only way to screenshot the numeric bar and what a
+    /// field does on taking focus — `simctl` can't tap. Pair it with
+    /// `-restDemo`.
+    static var focusesWeightField: Bool {
+        ProcessInfo.processInfo.arguments.contains("-focusWeight")
+    }
+
     /// `-openExerciseLibrary` opens Profile's exercise library (needs
     /// `-initialTab profile`); `-openExerciseLibrary "Squat"` pushes straight
     /// through to that exercise's entry. Same stopgap family as the rest — the

@@ -12,6 +12,14 @@ public struct ExerciseAddress: Hashable, Sendable {
     }
 }
 
+/// What `WorkoutSession.followWeightChange` did, kept so it can be said on
+/// screen and taken back.
+public struct WeightFollow: Equatable, Sendable {
+    public var setIDs: [UUID]
+    public var previous: Measurement<UnitMass>
+    public var new: Measurement<UnitMass>
+}
+
 /// The live state of a workout in progress — the model behind the Workout
 /// Tracker screen.
 ///
@@ -279,6 +287,84 @@ public struct WorkoutSession: Equatable, Sendable {
         _ change: (inout WorkoutSet) -> Void
     ) -> Bool {
         mutateSet(id: id, change)
+    }
+
+    // MARK: - A changed weight carries down
+
+    /// Carries a weight the lifter just changed onto the sets that were going
+    /// to be done at the old weight.
+    ///
+    /// The case this is for: three sets programmed at 275, the first one moves
+    /// badly, the lifter drops the second to 255 — and then has to drop the
+    /// third as well, by hand, because a plan written as "3 × 5 at 275" became
+    /// three separate numbers at session start. They are one decision.
+    ///
+    /// **Which sets follow** is deliberately narrow: later in the same exercise,
+    /// not yet logged, of the same type, and *sitting at exactly the weight
+    /// this set had before the edit*. A back-off set programmed lighter, a
+    /// warmup, a drop set and anything already done all keep their own number —
+    /// they were never "the same weight as this one", so nothing says they
+    /// should move with it.
+    ///
+    /// **This is not the app adjusting a prescription** (Core Tenets §1). The
+    /// lifter made the adjustment; this applies their number to the sets it
+    /// plainly also describes, and `plannedFrom` — what the program asked for —
+    /// is not touched on any of them, so planned against actual stays legible.
+    /// The tracker says what moved and offers the way back (`undo`).
+    ///
+    /// Returns `nil` when nothing followed: the weight didn't change, was
+    /// cleared rather than changed, or no later set matched.
+    @discardableResult
+    public mutating func followWeightChange(
+        fromSetWith id: UUID,
+        previous: Measurement<UnitMass>?
+    ) -> WeightFollow? {
+        guard let previous,
+              let exercise = exercise(containingSetID: id),
+              let sets = exercise.sets,
+              let index = sets.firstIndex(where: { $0.id == id }),
+              let new = sets[index].weight,
+              !Self.sameWeight(new, previous)
+        else { return nil }
+
+        let source = sets[index]
+        let followers = sets[(index + 1)...].filter { set in
+            set.complete != true
+                && set.type == source.type
+                && set.weight.map { Self.sameWeight($0, previous) } == true
+        }.map(\.id)
+        guard !followers.isEmpty else { return nil }
+
+        for follower in followers {
+            mutateSet(id: follower) { $0.weight = new }
+        }
+        return WeightFollow(setIDs: followers, previous: previous, new: new)
+    }
+
+    /// Puts followed sets back. Only those still sitting at the weight they
+    /// were given — one the lifter has since retyped is theirs, and undoing
+    /// something else shouldn't overwrite it.
+    public mutating func undo(_ follow: WeightFollow) {
+        for id in follow.setIDs {
+            mutateSet(id: id) { set in
+                guard set.complete != true,
+                      set.weight.map({ Self.sameWeight($0, follow.new) }) == true
+                else { return }
+                set.weight = follow.previous
+            }
+        }
+    }
+
+    /// Compared in kilograms, so 100 kg and 220.46 lb are the same iron.
+    ///
+    /// The tolerance is 60 g, and both ends of that are deliberate. It has to
+    /// cover display rounding: the "weight before the edit" comes from the
+    /// field, which shows a converted weight to a tenth (`expressed(in:)`), so
+    /// a set stored as 275 lb and read in kg arrives as 124.7, not 124.738. And
+    /// it has to stay well under the smallest plate (0.25 kg), so two sets a
+    /// real plate apart are never taken for the same weight.
+    private static func sameWeight(_ a: Measurement<UnitMass>, _ b: Measurement<UnitMass>) -> Bool {
+        abs(a.converted(to: .kilograms).value - b.converted(to: .kilograms).value) < 0.06
     }
 
     /// Sets (or clears, with `nil`) the lifter's own rest for one set.

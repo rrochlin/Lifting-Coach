@@ -30,6 +30,15 @@ final class TrackerModel {
     /// know the PR was actually captured, not just quietly written to disk.
     private(set) var newAchievedMax: (exercise: Exercise, max: AchievedMax)?
 
+    /// A weight change that was just carried down to later sets, for the
+    /// notice that says so and offers the way back. See
+    /// `WorkoutSession.followWeightChange`.
+    private(set) var weightFollowed: WeightFollow?
+    private var weightFollowTask: Task<Void, Never>?
+    /// Long enough to read and reach for; it's a correction to offer, not a
+    /// decision to demand.
+    static let weightFollowLinger: Duration = .seconds(8)
+
     private let notifier: RestNotifier
     /// Wakes the model at expiry so the timer can announce itself (haptic,
     /// expired state) while the app is on screen. The scheduled notification
@@ -249,7 +258,45 @@ final class TrackerModel {
     }
 
     func updateSet(id: UUID, _ change: (inout WorkoutSet) -> Void) {
+        let wasComplete = session?.workout.allSets.first { $0.id == id }?.complete == true
         mutate { $0.updateSet(id: id, change) }
+        // Editing a set that's already logged can take away the max it earned
+        // — lowered, or retyped as a warmup. The record is corrected as the
+        // edit lands rather than at the next launch, so Home and any
+        // percent-of-achieved prescription don't run on a number that's gone.
+        guard wasComplete else { return }
+        if (try? users.repairContradictedMaxes(for: userID)) ?? 0 > 0 {
+            if let shown = newAchievedMax, shown.exercise.id == session?.exercise(containingSetID: id)?.exercise.id {
+                newAchievedMax = nil
+            }
+            onAchievedMaxRecorded()
+        }
+    }
+
+    /// Carries a finished weight edit down to the later sets that were at the
+    /// old weight, and holds what moved so the tracker can say it and undo it.
+    func followWeightChange(fromSetWith id: UUID, previous: Measurement<UnitMass>?) {
+        var made: WeightFollow?
+        mutate { made = $0.followWeightChange(fromSetWith: id, previous: previous) }
+        guard let made else { return }
+        weightFollowed = made
+        weightFollowTask?.cancel()
+        weightFollowTask = Task { [weak self] in
+            try? await Task.sleep(for: Self.weightFollowLinger)
+            guard !Task.isCancelled else { return }
+            self?.weightFollowed = nil
+        }
+    }
+
+    func undoWeightFollow() {
+        guard let follow = weightFollowed else { return }
+        mutate { $0.undo(follow) }
+        dismissWeightFollow()
+    }
+
+    func dismissWeightFollow() {
+        weightFollowTask?.cancel()
+        weightFollowed = nil
     }
 
     /// Tunes (or clears, with `nil`) one set's rest.

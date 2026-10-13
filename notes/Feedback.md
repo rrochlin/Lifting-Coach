@@ -231,7 +231,7 @@ Not broken — wanted, and bigger than a fix.
   ±2.5 lb / ±1 kg step lives — Strong puts both in the same panel.
 - **Bodyweight wheel selector**, prepopulated with the last recorded weight, to
   1/10 of a unit (from Home, above) — still a plain text field.
-- **Replay achieved maxes after a history edit.** Correcting a 500 lb squat
+- **Replay achieved maxes after a history edit.** *Partly done (13-10-26, issue #13):* a max whose own set contradicts it is retracted and that lift's maxes re-derived — see `UserStore.repairContradictedMaxes`. What's still open is the general case below: a set *raised* in History that should now be a max, with no contradicted event to trigger a repair. Correcting a 500 lb squat
   down to 405 leaves the max event that was recorded at the time, and marking a
   heavy single as `.working` after the fact doesn't produce the max it should
   have. `achievedMax` is deliberately append-only *event history* rather than a
@@ -248,7 +248,7 @@ Not broken — wanted, and bigger than a fix.
 - **Reorder exercises within one superset.** `moveGroup` reorders whole groups
   and `superset`/`ungroup` form and dissolve them, but nothing swaps the two
   lifts inside a pair.
-- **Cardio is logged as time, not sets × reps** (02-10-26). A treadmill run is
+- **Cardio is logged as time, not sets × reps** (02-10-26). **Entry is built** (13-10-26, issue #18): timed exercises take time and distance in the tracker, default from the catalog's `cardio` category, overridable per exercise, units in mi/km. **Still open: prescribing a timed set in the planner, and editing duration/distance in History.** The original note: A treadmill run is
   "30:00 · 3.1 mi", and today the tracker only offers weight and reps, so it
   can't record one at all. The storage already exists:
   `WorkoutSet.duration`/`distance` landed in `v13_setDurationDistance` for the

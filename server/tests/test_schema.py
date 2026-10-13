@@ -65,11 +65,13 @@ def test_a_newer_snapshot_is_stored_and_marked() -> None:
     """A TestFlight build landing before a Lambda deploy is ordinary. It gets
     recorded, flagged, and named — so a deploy three migrations behind can say
     which three without anyone downloading the file."""
-    verdict = schema.resolve(schema.KNOWN_MIGRATIONS + ("v15_somethingNew",))
+    verdict = schema.resolve(schema.KNOWN_MIGRATIONS + ("v99_somethingNew",))
 
-    assert verdict.version == "v14_cognitoSub"
+    # The newest migration this deploy knows, whatever that currently is — a
+    # literal here broke the day the next migration landed.
+    assert verdict.version == schema.KNOWN_MIGRATIONS[-1]
     assert verdict.newer_than_server
-    assert verdict.unrecognized == ("v15_somethingNew",)
+    assert verdict.unrecognized == ("v99_somethingNew",)
 
 
 def test_nothing_recognisable_is_unreadable() -> None:
