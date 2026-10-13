@@ -557,6 +557,26 @@ extension AppDatabase {
             )
         }
 
+        // Additive. Backs `User.exerciseTracking`: whether the lifter logs an
+        // exercise as weight × reps or as time and distance, where that
+        // differs from the catalog's own default (`Exercise.defaultTracking`).
+        //
+        // Shaped exactly like `exerciseUnitPreference`, and its own table for
+        // the same reason: it is a property of the lifter, not of the shared
+        // catalog row, so a catalog re-import can neither clobber it nor have
+        // to remember to preserve it.
+        migrator.registerMigration("v15_exerciseTrackingPreference") { db in
+            try db.create(table: "exerciseTrackingPreference") { t in
+                t.autoIncrementedPrimaryKey("rowid")
+                t.column("userId", .text).notNull()
+                    .references("user", onDelete: .cascade)
+                t.column("exerciseId", .integer).notNull()
+                    .references("exercise", onDelete: .cascade)
+                t.column("tracking", .text).notNull()
+                t.uniqueKey(["userId", "exerciseId"])
+            }
+        }
+
         return migrator
     }
 }

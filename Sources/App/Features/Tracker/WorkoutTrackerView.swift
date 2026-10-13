@@ -349,6 +349,8 @@ struct WorkoutTrackerView: View {
             model: model,
             unitFor: { environment.weightUnit(forExerciseID: $0) },
             onSetExerciseUnit: { environment.setExerciseUnit($1, forExerciseID: $0) },
+            trackingFor: { environment.tracking(for: $0) },
+            onSetExerciseTracking: { environment.setExerciseTracking($1, for: $0) },
             onAddExercise: { isPickingExercise = true }
         )
         .themedConfirm(
@@ -414,9 +416,32 @@ struct WorkoutTrackerView: View {
             // macOS, which keeps the sources typecheckable against the macOS SDK
             // while this machine's Xcode can't build for iOS at all.
             ToolbarItem(placement: .navigation) {
-                Text("\(progress.completed)/\(progress.total)")
-                    .font(Theme.data(14, weight: .medium))
-                    .foregroundStyle(progress.completed == progress.total ? Theme.signal : Theme.inkMuted)
+                HStack(spacing: 8) {
+                    Text("\(progress.completed)/\(progress.total)")
+                        .font(Theme.data(14, weight: .medium))
+                        .foregroundStyle(progress.completed == progress.total ? Theme.signal : Theme.inkMuted)
+                    // How long this workout has been going. `style: .timer`
+                    // counts up from the start time by itself — the system
+                    // redraws the text, so nothing here ticks, and a phone that
+                    // slept shows the truth on waking with nothing to catch up.
+                    // Up here rather than in the list because it's the one
+                    // fact about the session that stays true wherever the
+                    // list is scrolled.
+                    if let started = model.session?.workout.startTime {
+                        Label {
+                            Text(started, style: .timer)
+                                .font(Theme.data(14, weight: .medium))
+                                .monospacedDigit()
+                        } icon: {
+                            Image(systemName: "clock")
+                                .font(.system(size: 11, weight: .semibold))
+                        }
+                        .labelStyle(.titleAndIcon)
+                        .foregroundStyle(Theme.inkMuted)
+                        .accessibilityLabel("Workout time")
+                    }
+                }
+                .fixedSize()
             }
             // The two ways a workout ends, and nothing else. There was an
             // EditButton here driving \.editMode for drag-to-reorder; reorder
@@ -454,6 +479,9 @@ private struct ActiveWorkoutList: View {
     let unitFor: (Int) -> WeightUnit
     /// Pins a lift to a unit, or clears it with `nil`. Sticky across sessions.
     let onSetExerciseUnit: (Int, WeightUnit?) -> Void
+    /// Whether a lift is logged as weight × reps or as time and distance.
+    let trackingFor: (Exercise) -> ExerciseTracking
+    let onSetExerciseTracking: (Exercise, ExerciseTracking) -> Void
     let onAddExercise: () -> Void
 
     /// Per-exercise expand override. Absent means "default to expanded only if
@@ -552,15 +580,36 @@ private struct ActiveWorkoutList: View {
         .onAppear {
             // `-reorderMode`, latched: `.onAppear` runs again on every return
             // to this tab, and a mode that re-enters itself reads as a bug.
-            guard !didOpenLaunchReorder, LaunchArguments.opensReorderMode else { return }
+            guard !didOpenLaunchReorder else { return }
             didOpenLaunchReorder = true
-            isReordering = true
+            if LaunchArguments.opensReorderMode { isReordering = true }
+            // `-focusWeight`. After a beat: focus set in the same turn the
+            // list first appears doesn't take.
+            // A set that already has a weight, where there is one: an empty
+            // field has nothing to show being selected.
+            let filled = model.session?.workout.allSets.first { $0.weight != nil }
+            if LaunchArguments.focusesWeightField, let next = filled ?? model.session?.nextSet {
+                // On a timed exercise the field to land on is its clock.
+                let timed = model.session?.exerciseGroups.flatMap { $0 }
+                    .first { trackingFor($0.exercise) == .timed }?
+                    .sets?.first { $0.complete != true }
+                Task { @MainActor in
+                    try? await Task.sleep(for: .milliseconds(900))
+                    focusedField = timed.map { .duration($0.id) } ?? .weight(next.id)
+                }
+            }
         }
         // A safe-area inset rather than an overlay: the list runs *under* the
         // tab bar, so a bottom-aligned overlay puts the banner behind it. This
         // sits above the bar and lifts the list instead of covering its last row.
-        .safeAreaInset(edge: .bottom, spacing: 0) { achievedMaxBanner }
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            VStack(spacing: 0) {
+                weightFollowNotice
+                achievedMaxBanner
+            }
+        }
         .animation(.easeOut(duration: 0.22), value: model.newAchievedMax?.max.date)
+        .animation(.easeOut(duration: 0.22), value: model.weightFollowed)
         // Rest moved to a different set — or ended. An editor left open on the
         // set it used to belong to is the "rest timer modifier is frequently
         // open, I don't think I'm trying to open it" report: it was opened by
@@ -707,6 +756,56 @@ private struct ActiveWorkoutList: View {
         }
     }
 
+    /// Says that a changed weight was carried down, and offers the way back.
+    ///
+    /// The carry is automatic because it's what the lifter means nearly every
+    /// time — dropping set two of three at 275 is dropping the third as well —
+    /// but a number that changes off-screen without a word would be the app
+    /// deciding quietly (Core Tenets §1). So it's said, with the count and the
+    /// weight, and one tap undoes it. It clears itself: it's a correction on
+    /// offer, not a question that needs an answer.
+    @ViewBuilder
+    private var weightFollowNotice: some View {
+        if let follow = model.weightFollowed {
+            let count = follow.setIDs.count
+            HStack(spacing: 10) {
+                Image(systemName: "arrow.turn.right.down")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.signal)
+                Text("\(count) MORE SET\(count == 1 ? "" : "S") → \(weightText(follow.new, forSetWith: follow.setIDs.first))")
+                    .font(Theme.label)
+                    .tracking(1.2)
+                    .foregroundStyle(Theme.ink)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+                Spacer(minLength: 8)
+                Button("UNDO") { model.undoWeightFollow() }
+                    .font(Theme.label)
+                    .tracking(1.2)
+                    .foregroundStyle(Theme.signal)
+                    .buttonStyle(.plain)
+                    .frame(minHeight: 30)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .background(Theme.panelRaised)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.signal.opacity(0.4), lineWidth: 1))
+            .padding(.horizontal, 16)
+            .padding(.bottom, 8)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+
+    /// A weight in the unit the set it belongs to is read in.
+    private func weightText(_ weight: Measurement<UnitMass>, forSetWith id: UUID?) -> String {
+        let exercise = id.flatMap { model.session?.exercise(containingSetID: $0) }
+        let set = exercise?.sets?.first { $0.id == id }
+        let unit = set?.unit ?? exercise.map { unitFor($0.exercise.id) } ?? .pounds
+        let shown = weight.expressed(in: unit)
+        return "\(NumericEntry.format(shown.value, fractionDigits: 1)) \(unit.symbol)"
+    }
+
     // MARK: Reorder mode
 
     /// The way out, and the only thing on screen that isn't a lift.
@@ -824,6 +923,8 @@ private struct ActiveWorkoutList: View {
             onSetUnit: { onSetExerciseUnit(exercise.exercise.id, $0) },
             onSuperset: { model.superset(id: exercise.id, with: $0) },
             onUngroup: { model.ungroup(id: exercise.id) },
+            tracking: trackingFor(exercise.exercise),
+            onSetTracking: { onSetExerciseTracking(exercise.exercise, $0) },
             onShowInfo: { infoFor = exercise.exercise },
             onAddDropSet: { model.addDropSet(toExerciseWith: exercise.id) },
             onDelete: { model.deleteExercise(id: exercise.id) },
@@ -859,6 +960,7 @@ private struct ActiveWorkoutList: View {
             .buttonStyle(.plain)
             .panelGroupRow(.middle, accent: accent)
 
+            let isTimed = trackingFor(exercise.exercise) == .timed
             ForEach(Array(sets.enumerated()), id: \.element.id) { index, set in
                 // The countdown lives *inside* this row rather than as a row of
                 // its own, so it stays welded to the set that started it —
@@ -872,7 +974,9 @@ private struct ActiveWorkoutList: View {
                         // rename the first working set to "03".
                         number: ordinal(of: set, at: index, in: sets),
                         set: set,
-                        suggestion: model.suggestion(forSetAt: index, in: exercise),
+                        // A timed set has no weight or reps to propose.
+                        suggestion: isTimed ? nil : model.suggestion(forSetAt: index, in: exercise),
+                        tracking: isTimed ? .timed : .strength,
                         focus: $focusedField,
                         // Weight → reps → the next set's weight. The chain is
                         // built here because a row can't see the row below it.
@@ -884,10 +988,19 @@ private struct ActiveWorkoutList: View {
                         exerciseUnit: exerciseUnit,
                         hasUnitOverride: set.unit != nil,
                         onToggle: {
-                            toggle(set, suggestion: model.suggestion(forSetAt: index, in: exercise))
+                            toggle(set, suggestion: isTimed ? nil : model.suggestion(forSetAt: index, in: exercise))
                         },
+                        onDurationChange: { seconds in
+                            model.updateSet(id: set.id) {
+                                $0.duration = seconds.map { Measurement(value: Double($0), unit: .seconds) }
+                            }
+                        },
+                        onDistanceChange: { distance in model.updateSet(id: set.id) { $0.distance = distance } },
                         onRepsChange: { reps in model.updateSet(id: set.id) { $0.reps = reps } },
                         onWeightChange: { weight in model.updateSet(id: set.id) { $0.weight = weight } },
+                        onWeightEdited: { previous in
+                            model.followWeightChange(fromSetWith: set.id, previous: previous)
+                        },
                         onRPEChange: { rpe in model.updateSet(id: set.id) { $0.rpe = rpe } },
                         onUnitChange: { unit in model.updateSet(id: set.id) { $0.unit = unit } },
                         onTypeChange: { type in model.updateSet(id: set.id) { $0.type = type } },
@@ -1253,6 +1366,8 @@ private struct ExerciseHeaderRow: View {
     let onSetUnit: (WeightUnit?) -> Void
     let onSuperset: (UUID) -> Void
     let onUngroup: () -> Void
+    var tracking: ExerciseTracking = .strength
+    var onSetTracking: (ExerciseTracking) -> Void = { _ in }
     let onShowInfo: () -> Void
     let onAddDropSet: () -> Void
     let onDelete: () -> Void
@@ -1368,13 +1483,42 @@ private struct ExerciseHeaderRow: View {
                     // and *choose* an exercise, which is the wrong verb for a lift
                     // you're already three sets into.
                     Button("Exercise Info", systemImage: "info.circle", action: onShowInfo)
-                    Button("Add Drop Set", systemImage: "arrow.down.right", action: onAddDropSet)
+                    // A drop set is the same movement at less weight; a run has
+                    // no weight to drop.
+                    if tracking == .strength {
+                        Button("Add Drop Set", systemImage: "arrow.down.right", action: onAddDropSet)
+                    }
                     Button("Reorder Exercises", systemImage: "arrow.up.arrow.down", action: onReorder)
-                    Menu("Unit — \(unit.symbol)", systemImage: "scalemass") {
+                    // What a set of this is measured in. Sticky, like the unit
+                    // below it: a treadmill is a treadmill next week too. This
+                    // is where a plank (which the catalog files under strength)
+                    // gets its clock, and it changes which fields are offered
+                    // from here on — nothing already logged is rewritten.
+                    Menu(
+                        "Log As — \(tracking == .timed ? "Time & Distance" : "Weight × Reps")",
+                        systemImage: tracking == .timed ? "stopwatch" : "dumbbell"
+                    ) {
+                        Picker("Log As", selection: trackingSelection) {
+                            Text("Weight × Reps").tag(ExerciseTracking.strength)
+                            Text("Time & Distance").tag(ExerciseTracking.timed)
+                        }
+                    }
+                    // The same sticky per-exercise setting either way, named
+                    // for what it measures here: a timed exercise has no
+                    // weight to read in pounds, but its distance is in miles
+                    // or kilometres (`WeightUnit.distanceUnit`).
+                    Menu(
+                        "Unit — \(tracking == .timed ? unit.distanceUnit.symbol : unit.symbol)",
+                        systemImage: tracking == .timed ? "ruler" : "scalemass"
+                    ) {
                         Picker("Unit", selection: unitSelection) {
                             ForEach(WeightUnit.allCases, id: \.self) { option in
-                                Text(option == .pounds ? "Pounds (lb)" : "Kilograms (kg)")
-                                    .tag(Optional(option))
+                                Text(
+                                    tracking == .timed
+                                        ? option.distanceName
+                                        : (option == .pounds ? "Pounds (lb)" : "Kilograms (kg)")
+                                )
+                                .tag(Optional(option))
                             }
                         }
                         Button("Use App Default") { onSetUnit(nil) }
@@ -1404,6 +1548,10 @@ private struct ExerciseHeaderRow: View {
     /// the unit currently in force, inherited or not.
     private var unitSelection: Binding<WeightUnit?> {
         Binding(get: { unit }, set: { onSetUnit($0) })
+    }
+
+    private var trackingSelection: Binding<ExerciseTracking> {
+        Binding(get: { tracking }, set: { onSetTracking($0) })
     }
 
     private var collapsedProgress: String {
@@ -1462,6 +1610,9 @@ private struct NoteLine: View {
 enum SetField: Hashable {
     case weight(UUID)
     case reps(UUID)
+    /// A timed set's pair, in place of the two above.
+    case duration(UUID)
+    case distance(UUID)
 }
 
 /// One exercise group, collapsed to a single draggable row.
@@ -1529,6 +1680,8 @@ private struct SetRow: View {
     /// What the lifter did last time, shown greyed in whichever of reps/weight
     /// is still empty. A proposal, never a prescription — see `SetSuggestion`.
     let suggestion: SetSuggestion.Values?
+    /// Which pair of numbers this row asks for. See `ExerciseTracking`.
+    var tracking: ExerciseTracking = .strength
     /// The screen's focus, so this row's NEXT can reach the row below it.
     let focus: FocusState<SetField?>.Binding
     /// The set after this one, or nil at the end of the exercise.
@@ -1542,8 +1695,13 @@ private struct SetRow: View {
     /// Whether this set is overriding that fallback, for the menu's checkmark.
     let hasUnitOverride: Bool
     let onToggle: () -> Void
+    var onDurationChange: (Int?) -> Void = { _ in }
+    var onDistanceChange: (Measurement<UnitLength>?) -> Void = { _ in }
     let onRepsChange: (Int?) -> Void
     let onWeightChange: (Measurement<UnitMass>?) -> Void
+    /// The lifter has finished with the weight field; `previous` is what the
+    /// set weighed when they tapped into it. Where a drop carries down.
+    let onWeightEdited: (_ previous: Measurement<UnitMass>?) -> Void
     let onRPEChange: (Float?) -> Void
     let onUnitChange: (WeightUnit?) -> Void
     /// Retypes a set after the fact — warmup / working / drop. Load-bearing:
@@ -1614,6 +1772,83 @@ private struct SetRow: View {
 
             typeBadge
 
+            if tracking == .timed {
+                timedQuantities
+            } else {
+                strengthQuantities
+            }
+
+            RPEPicker(
+                value: self.set.rpe,
+                clearLabel: "not rated",
+                onChange: onRPEChange
+            )
+
+            setMenu
+        }
+    }
+
+    /// Time, then distance — a run reads "30:00 · 3.1 mi". Distance is the
+    /// optional half: a plank has none, and an empty field stays empty.
+    @ViewBuilder
+    private var timedQuantities: some View {
+        DurationField(
+            seconds: durationBinding,
+            isActive: !done,
+            font: Theme.data(15, weight: done ? .regular : .medium),
+            focus: focus,
+            id: SetField.duration(self.set.id),
+            next: .distance(self.set.id)
+        )
+        .layoutPriority(2)
+
+        SuggestingNumberField(
+            value: distanceBinding,
+            suggestion: nil,
+            label: "distance",
+            isActive: !done,
+            font: Theme.data(15, weight: done ? .regular : .medium),
+            foreground: Theme.ink,
+            focus: focus,
+            id: .distance(self.set.id),
+            next: nextSetID.map { .duration($0) }
+        )
+        .layoutPriority(1)
+
+        Text(rowDistanceUnit.symbol)
+            .font(Theme.data(13))
+            .foregroundStyle(Theme.inkFaint)
+            .fixedSize()
+    }
+
+    /// Miles or kilometres, from the same unit chain a weight uses — this
+    /// set's own, else the exercise's, else the app's (`WeightUnit.distanceUnit`).
+    private var rowDistanceUnit: UnitLength { unit.distanceUnit }
+
+    private var durationBinding: Binding<Int?> {
+        Binding(
+            get: { self.set.duration.map { Int($0.converted(to: .seconds).value.rounded()) } },
+            set: { onDurationChange($0) }
+        )
+    }
+
+    private var distanceBinding: Binding<Double?> {
+        Binding(
+            // Read in the row's unit, like a weight: 5 km logged last week
+            // shows as 3.11 mi here, the same distance. Left exactly alone
+            // when it's already in that unit, so tapping in and out can't
+            // drift it.
+            get: {
+                guard let distance = self.set.distance else { return nil }
+                guard distance.unit != rowDistanceUnit else { return distance.value }
+                return (distance.converted(to: rowDistanceUnit).value * 100).rounded() / 100
+            },
+            set: { onDistanceChange($0.map { Measurement(value: $0, unit: rowDistanceUnit) }) }
+        )
+    }
+
+    @ViewBuilder
+    private var strengthQuantities: some View {
             SuggestingNumberField(
                 value: weightBinding,
                 // Read in this row's unit like everything else, so a suggestion
@@ -1625,9 +1860,8 @@ private struct SetRow: View {
                 foreground: Theme.ink,
                 // One plate per side, in the unit the plates are marked in.
                 step: unit == .pounds ? 2.5 : 1,
-                onStep: { delta in
-                    let current = self.set.weight?.expressed(in: unit).value ?? 0
-                    onWeightChange(Measurement(value: max(0, current + delta), unit: weightUnit))
+                onEditingEnded: { arrived in
+                    onWeightEdited(arrived.map { Measurement(value: $0, unit: weightUnit) })
                 },
                 focus: focus,
                 id: .weight(self.set.id),
@@ -1654,21 +1888,11 @@ private struct SetRow: View {
                 font: Theme.data(15, weight: done ? .regular : .medium),
                 foreground: Theme.ink,
                 step: 1,
-                onStep: { delta in onRepsChange(max(0, (self.set.reps ?? 0) + Int(delta))) },
                 focus: focus,
                 id: .reps(self.set.id),
                 next: nextSetID.map { .weight($0) }
             )
             .layoutPriority(1)
-
-            RPEPicker(
-                value: self.set.rpe,
-                clearLabel: "not rated",
-                onChange: onRPEChange
-            )
-
-            setMenu
-        }
     }
 
     /// The set's index, and its kind, in one tappable badge: `W1`, `2`, `D1`.
@@ -1760,16 +1984,25 @@ private struct SetRow: View {
     /// had a place where the set's kind belongs.
     private var setMenu: some View {
         Menu {
-            Menu("Unit — \(unit.symbol)", systemImage: "scalemass") {
+            // One setting, read as the unit the set is actually measured in:
+            // pounds or kilograms for a lift, miles or kilometres for a run.
+            // Offering lb/kg on a treadmill was the report.
+            let timed = tracking == .timed
+            Menu(
+                "Unit — \(timed ? unit.distanceUnit.symbol : unit.symbol)",
+                systemImage: timed ? "ruler" : "scalemass"
+            ) {
                 Picker("Unit", selection: unitSelection) {
                     ForEach(WeightUnit.allCases, id: \.self) { option in
-                        Text(option == .pounds ? "Pounds (lb)" : "Kilograms (kg)")
+                        Text(timed ? option.distanceName : (option == .pounds ? "Pounds (lb)" : "Kilograms (kg)"))
                             .tag(Optional(option))
                     }
                 }
                 // Only offered when it would do something.
                 if hasUnitOverride {
-                    Button("Use Exercise Default (\(exerciseUnit.symbol))") { onUnitChange(nil) }
+                    Button("Use Exercise Default (\(timed ? exerciseUnit.distanceUnit.symbol : exerciseUnit.symbol))") {
+                        onUnitChange(nil)
+                    }
                 }
             }
             Button("Edit Note", systemImage: "note.text", action: onEditNote)

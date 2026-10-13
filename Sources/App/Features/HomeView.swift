@@ -99,10 +99,21 @@ struct HomeView: View {
                                 .foregroundStyle(Theme.inkMuted)
                                 .multilineTextAlignment(.leading)
                                 .lineLimit(2)
-                            Text(progressLabel(workout))
-                                .font(Theme.label)
-                                .tracking(1.4)
-                                .foregroundStyle(Theme.live)
+                            HStack(spacing: 8) {
+                                Text(progressLabel(workout))
+                                    .font(Theme.label)
+                                    .tracking(1.4)
+                                // How long it's been running. Same self-updating
+                                // text as the tracker's toolbar, so the two
+                                // screens can't disagree about the same workout.
+                                if let started = workout.startTime {
+                                    Text("·").font(Theme.label)
+                                    Text(started, style: .timer)
+                                        .font(Theme.label)
+                                        .monospacedDigit()
+                                }
+                            }
+                            .foregroundStyle(Theme.live)
                         }
                         Spacer(minLength: 6)
                         // Not a play glyph: nothing is being started here, and

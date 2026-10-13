@@ -124,6 +124,13 @@ public final class AppEnvironment {
         // import rather than through the tracker) still needs them computed
         // once. Cheap when there's nothing to count.
         if let user = currentUser { try exerciseStats.rebuild(for: user.id) }
+        // Maxes the tracker recorded from a weight that was never lifted (the
+        // typed number used to land a moment after the set was logged) are
+        // retracted and re-derived from the log. Idempotent, and a no-op on a
+        // log with nothing wrong — see `UserStore.repairContradictedMaxes`.
+        if let user = currentUser, (try? users.repairContradictedMaxes(for: user.id)) ?? 0 > 0 {
+            currentUser = try users.localUser()
+        }
     }
 
     /// First launch only: loads the owner's real 12-week program (Block 1) so
@@ -178,6 +185,24 @@ public final class AppEnvironment {
     public func setExerciseUnit(_ unit: WeightUnit?, forExerciseID exerciseID: Int) {
         guard let user = currentUser else { return }
         try? users.setUnit(unit, forExerciseID: exerciseID, for: user.id)
+        reloadUser()
+        snapshotDidChange(.lifterUpdated)
+    }
+
+    /// How a given exercise is logged — the lifter's own sticky choice, then
+    /// the catalog's default (`Exercise.defaultTracking`).
+    public func tracking(for exercise: Exercise) -> ExerciseTracking {
+        currentUser?.tracking(for: exercise) ?? exercise.defaultTracking
+    }
+
+    /// Logs one exercise as weight × reps or as time and distance from now on.
+    /// Sticky; rewrites nothing already logged.
+    public func setExerciseTracking(_ tracking: ExerciseTracking, for exercise: Exercise) {
+        guard let user = currentUser else { return }
+        // Choosing the catalog's own default clears the override rather than
+        // storing a row that says what would have happened anyway.
+        let stored: ExerciseTracking? = tracking == exercise.defaultTracking ? nil : tracking
+        try? users.setTracking(stored, forExerciseID: exercise.id, for: user.id)
         reloadUser()
         snapshotDidChange(.lifterUpdated)
     }

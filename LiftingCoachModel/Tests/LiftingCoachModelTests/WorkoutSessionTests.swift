@@ -853,3 +853,105 @@ struct DropSetTests {
         )
     }
 }
+
+@Suite("A changed weight carries down")
+struct WeightFollowTests {
+    private func lb(_ value: Double) -> Measurement<UnitMass> { Measurement(value: value, unit: .pounds) }
+
+    /// A warmup, three working sets at 275, a lighter back-off, and a drop.
+    private func session() -> WorkoutSession {
+        WorkoutSession.start(
+            from: plannedWorkout([(squat, [
+                PlannedSet(reps: 5, type: .warmup, load: .absolute(lb(275))),
+                PlannedSet(count: 3, reps: 5, type: .working, load: .absolute(lb(275))),
+                PlannedSet(reps: 8, type: .working, load: .absolute(lb(225))),
+                PlannedSet(reps: 10, type: .drop, load: .absolute(lb(275))),
+            ])]),
+            at: noon
+        )
+    }
+
+    private func sets(_ session: WorkoutSession) -> [WorkoutSet] {
+        session.exerciseGroups[0][0].sets ?? []
+    }
+
+    private func weights(_ session: WorkoutSession) -> [Double?] {
+        sets(session).map { $0.weight?.value }
+    }
+
+    @Test("Dropping one set drops the later sets that were at the same weight")
+    func followsDown() {
+        var session = self.session()
+        let second = sets(session)[2]
+        session.updateSet(id: second.id) { $0.weight = lb(255) }
+
+        let follow = session.followWeightChange(fromSetWith: second.id, previous: lb(275))
+
+        // Warmup and the first working set are *before* it; the back-off was
+        // never at 275; the drop set is a different kind.
+        #expect(weights(session) == [275, 275, 255, 255, 225, 275])
+        #expect(follow?.setIDs == [sets(session)[3].id])
+    }
+
+    @Test("What the program asked for is not rewritten")
+    func prescriptionUntouched() {
+        var session = self.session()
+        let first = sets(session)[1]
+        session.updateSet(id: first.id) { $0.weight = lb(255) }
+        session.followWeightChange(fromSetWith: first.id, previous: lb(275))
+
+        for set in sets(session)[1...3] {
+            #expect(set.weight == lb(255))
+            #expect(set.plannedFrom?.load == .absolute(lb(275)))
+        }
+    }
+
+    @Test("A set already logged keeps what was lifted")
+    func completedSetsStay() {
+        var session = self.session()
+        let all = sets(session)
+        session.completeSet(id: all[3].id, at: noon)
+        session.updateSet(id: all[1].id) { $0.weight = lb(255) }
+        session.followWeightChange(fromSetWith: all[1].id, previous: lb(275))
+
+        #expect(weights(session) == [275, 255, 255, 275, 225, 275])
+    }
+
+    @Test("The same iron in another unit still counts as the same weight")
+    func comparesAcrossUnits() {
+        var session = self.session()
+        let all = sets(session)
+        session.updateSet(id: all[2].id) { $0.weight = Measurement(value: 124.738, unit: .kilograms) }
+        session.updateSet(id: all[1].id) { $0.weight = lb(255) }
+        session.followWeightChange(fromSetWith: all[1].id, previous: lb(275))
+
+        #expect(sets(session)[2].weight == lb(255))
+    }
+
+    @Test("Nothing follows a weight that was cleared, unchanged, or had no number before")
+    func noOps() {
+        var session = self.session()
+        let first = sets(session)[1]
+
+        #expect(session.followWeightChange(fromSetWith: first.id, previous: lb(275)) == nil)
+        #expect(session.followWeightChange(fromSetWith: first.id, previous: nil) == nil)
+        session.updateSet(id: first.id) { $0.weight = nil }
+        #expect(session.followWeightChange(fromSetWith: first.id, previous: lb(275)) == nil)
+        #expect(weights(session) == [275, nil, 275, 275, 225, 275])
+    }
+
+    @Test("Undo puts the followers back, but not one the lifter has since retyped")
+    func undo() throws {
+        var session = self.session()
+        let all = sets(session)
+        session.updateSet(id: all[1].id) { $0.weight = lb(255) }
+        let made = session.followWeightChange(fromSetWith: all[1].id, previous: lb(275))
+        let follow = try #require(made)
+        session.updateSet(id: all[3].id) { $0.weight = lb(245) }
+
+        session.undo(follow)
+
+        // The edited set keeps its edit; set 3 goes back; set 4 was retyped.
+        #expect(weights(session) == [275, 255, 275, 245, 225, 275])
+    }
+}

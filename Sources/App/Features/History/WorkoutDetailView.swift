@@ -423,6 +423,12 @@ struct WorkoutDetailView: View {
             // the log can only be stale, never wrong (see `ExerciseStatsStore`).
             if let userID = environment.currentUser?.id {
                 try? environment.exerciseStats.rebuild(for: userID)
+                // A set corrected downward no longer supports the max it
+                // earned. Retracted and re-derived for that lift only — it
+                // never touches a lift whose record still agrees with its log.
+                if (try? environment.users.repairContradictedMaxes(for: userID)) ?? 0 > 0 {
+                    environment.reloadUser()
+                }
             }
             // Only after the write succeeds: rebasing on a failed save would
             // report unsaved work as saved.
@@ -607,10 +613,6 @@ private struct LoggedSetRow: View {
                 label: "weight",
                 // One plate per side, in the unit the plates are marked in.
                 step: unit == .pounds ? 2.5 : 1,
-                onStep: { delta in
-                    let current = self.set.weight?.expressed(in: unit).value ?? 0
-                    onChange { $0.weight = Measurement(value: max(0, current + delta), unit: unit.unit) }
-                },
                 focus: focus,
                 id: .weight(self.set.id),
                 next: .reps(self.set.id)
@@ -633,9 +635,6 @@ private struct LoggedSetRow: View {
                 fractionDigits: 0,
                 label: "reps",
                 step: 1,
-                onStep: { delta in
-                    onChange { $0.reps = max(0, ($0.reps ?? 0) + Int(delta)) }
-                },
                 focus: focus,
                 id: .reps(self.set.id),
                 next: nextSetID.map { .weight($0) }

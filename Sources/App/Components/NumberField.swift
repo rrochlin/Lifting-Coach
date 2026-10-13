@@ -1,3 +1,4 @@
+import LiftingCoachModel
 import SwiftUI
 
 /// Every number a lifter types goes through this field.
@@ -106,8 +107,14 @@ struct SuggestingNumberField<ID: Hashable>: View {
     var foreground: Color = Theme.ink
     var minWidth: CGFloat = 30
     var maxWidth: CGFloat = 72
+    /// The increment offered above the keyboard, or `nil` for none. The field
+    /// applies it itself, through `value` — see `applyStep`.
     var step: Double?
-    var onStep: (Double) -> Void = { _ in }
+    /// Called once as the lifter leaves the field, with the value it held when
+    /// they arrived. For whatever a *finished* edit means to the caller — the
+    /// tracker carries a changed weight down to the sets below — as opposed to
+    /// `value`, which is written on every keystroke.
+    var onEditingEnded: (_ valueOnArrival: Double?) -> Void = { _ in }
 
     /// Focus, owned by the screen rather than by this field.
     ///
@@ -126,11 +133,13 @@ struct SuggestingNumberField<ID: Hashable>: View {
     /// Editing happens in text so the field can be genuinely empty. A numeric
     /// binding has no way to represent "nothing typed yet".
     @State private var text: String = ""
+    @State private var selection: TextSelection?
+    @State private var valueOnArrival: Double?
 
     private var focused: Bool { focus.wrappedValue == id }
 
     var body: some View {
-        TextField("", text: $text, prompt: prompt)
+        TextField("", text: $text, selection: $selection, prompt: prompt)
             #if os(iOS)
             .keyboardType(.decimalPad)
             #endif
@@ -143,27 +152,41 @@ struct SuggestingNumberField<ID: Hashable>: View {
                 isActive: focused || isActive,
                 accent: focused ? Theme.signal : Theme.fieldEdge
             )
-            // Committing on blur, never per keystroke — the same contract
-            // `NumberField` has. A `2` on the way to `225` is not a weight.
-            //
-            // Watching the shared value rather than a local flag matters for
-            // NEXT: moving to the following field is a single change of one
-            // `@FocusState`, and this is what makes the field being *left*
-            // write its number on the way out.
-            .onChange(of: focus.wrappedValue) { previous, current in
-                if previous == id, current != id { commit() }
+            // **Written as it's typed, not when the field is left.** It used to
+            // commit on blur, and that made the model lag the screen: tapping a
+            // set's checkbox completes it in the same instant the field loses
+            // focus, so the set was logged — and checked for a new max — at
+            // the weight it had *before* the edit, and the typed number landed
+            // a moment later. A lifter who dropped 275 to 255 was told 275 was
+            // a new max. Nothing downstream can be trusted to wait for a blur,
+            // so there is no longer a moment when the screen and the model
+            // disagree. A half-typed `2` on the way to `255` is briefly the
+            // stored weight, which costs nothing: only completing a set acts
+            // on it.
+            .onChange(of: text) { _, typed in
+                guard focused else { return }
+                switch NumericEntry.read(typed) {
+                case .value(let number): if value != number { value = number }
+                // Clearing the field is a real edit — "I didn't do this".
+                case .empty: if value != nil { value = nil }
+                case .partial: break
+                }
             }
-            .onAppear { text = Self.format(value, fractionDigits: fractionDigits) }
-            // A step button (or any other writer) changed the value out from
-            // under the text — take it, unless the lifter is mid-type.
+            .onChange(of: focus.wrappedValue) { previous, current in
+                if current == id, previous != id { arrive() }
+                if previous == id, current != id { leave() }
+            }
+            .onAppear { text = NumericEntry.format(value, fractionDigits: fractionDigits) }
+            // Something else wrote the value — a weight carried down from the
+            // set above, a unit switch. Take it, unless the lifter is typing.
             .onChange(of: value) { _, newValue in
                 guard !focused else { return }
-                text = Self.format(newValue, fractionDigits: fractionDigits)
+                text = NumericEntry.format(newValue, fractionDigits: fractionDigits)
             }
             #if os(iOS)
             .numericKeyboardBar(
                 isFocused: focused, label: label, step: step, hasNext: next != nil,
-                onStep: onStep,
+                onStep: applyStep,
                 onNext: { focus.wrappedValue = next },
                 onDone: { focus.wrappedValue = nil }
             )
@@ -172,31 +195,137 @@ struct SuggestingNumberField<ID: Hashable>: View {
 
     private var prompt: Text? {
         guard let suggestion else { return nil }
-        return Text(Self.format(suggestion, fractionDigits: fractionDigits))
+        return Text(NumericEntry.format(suggestion, fractionDigits: fractionDigits))
             .foregroundColor(Theme.inkMuted)
     }
 
-    /// Clearing the field is a real edit — it means "I didn't do this" — so an
-    /// empty string writes `nil` rather than being ignored.
-    private func commit() {
-        let trimmed = text.trimmingCharacters(in: .whitespaces)
-        if trimmed.isEmpty {
-            value = nil
-            return
+    /// Tapping into a number selects all of it, so typing replaces it.
+    ///
+    /// A weight is far more often *replaced* than edited — 275 becomes 255 —
+    /// and with the caret at the end that was backspace, backspace, retype.
+    /// Deferred a beat because the text field places its own caret as it takes
+    /// focus, after this runs.
+    private func arrive() {
+        valueOnArrival = value
+        guard !text.isEmpty else { return }
+        Task { @MainActor in
+            guard focused, !text.isEmpty else { return }
+            selection = TextSelection(range: text.startIndex..<text.endIndex)
         }
-        // A comma decimal separator is what some locales' pads emit.
-        guard let parsed = Double(trimmed.replacingOccurrences(of: ",", with: ".")) else {
-            // Unparseable input reverts rather than silently becoming zero.
-            text = Self.format(value, fractionDigits: fractionDigits)
-            return
-        }
-        value = parsed
-        text = Self.format(parsed, fractionDigits: fractionDigits)
     }
 
-    static func format(_ value: Double?, fractionDigits: Int) -> String {
-        guard let value else { return "" }
-        return value.formatted(.number.precision(.fractionLength(0...fractionDigits)))
+    private func leave() {
+        // Tidy what's shown: "255." reads back as "255", and text that never
+        // became a number (a lone ".") reverts to the value it didn't change.
+        text = NumericEntry.format(value, fractionDigits: fractionDigits)
+        selection = nil
+        onEditingEnded(valueOnArrival)
+    }
+
+    /// A ± step, applied to what is on screen and written to both the text and
+    /// the value.
+    ///
+    /// This used to be the caller's job, and it changed the stored value while
+    /// this field — focused, so deliberately ignoring outside writes — kept
+    /// its old text and then wrote that text back on the way out. The buttons
+    /// did nothing. The field owns its text, so the field applies the step.
+    private func applyStep(_ delta: Double) {
+        let stepped = NumericEntry.stepped(text: text, value: value, suggestion: suggestion, by: delta)
+        text = NumericEntry.format(stepped, fractionDigits: fractionDigits)
+        value = stepped
+    }
+}
+
+// MARK: - Duration field
+
+/// A time, typed on the number pad the way a stopwatch takes it — digits fill
+/// from the right, so `3000` is thirty minutes and there is no colon to find
+/// on a keyboard that doesn't have one. See `DurationEntry`.
+///
+/// For work measured in time rather than weight: a run, a row, a plank. Same
+/// contract as `SuggestingNumberField` — it can be empty, it writes as it's
+/// typed, it selects everything on arrival, and the screen owns its focus so
+/// NEXT can move on.
+struct DurationField<ID: Hashable>: View {
+    /// Seconds, or `nil` for nothing entered.
+    @Binding var seconds: Int?
+    var label: String = "time"
+    var isActive: Bool = true
+    var font: Font = Theme.data(15, weight: .medium)
+    var foreground: Color = Theme.ink
+    var minWidth: CGFloat = 52
+    var maxWidth: CGFloat = 96
+
+    var focus: FocusState<ID?>.Binding
+    let id: ID
+    var next: ID?
+
+    /// Plain digits while the field has focus (`3000`), the formatted time
+    /// when it doesn't (`30:00`).
+    @State private var text: String = ""
+    @State private var selection: TextSelection?
+
+    private var focused: Bool { focus.wrappedValue == id }
+
+    var body: some View {
+        TextField("", text: $text, selection: $selection, prompt: Text("0:00").foregroundColor(Theme.inkFaint))
+            #if os(iOS)
+            .keyboardType(.numberPad)
+            #endif
+            .focused(focus, equals: id)
+            .font(font)
+            .foregroundStyle(foreground)
+            .multilineTextAlignment(.center)
+            .frame(minWidth: minWidth, maxWidth: maxWidth)
+            .editableField(
+                isActive: focused || isActive,
+                accent: focused ? Theme.signal : Theme.fieldEdge
+            )
+            // Written as it's typed, like the number fields — and **the text
+            // is never rewritten while it's being typed into**. See
+            // `DurationEntry.positional` for the two attempts that did, and
+            // what fast typing did to them.
+            .onChange(of: text) { _, typed in
+                guard focused else { return }
+                let entered = DurationEntry.seconds(fromDigits: typed)
+                if seconds != entered { seconds = entered }
+            }
+            .onChange(of: focus.wrappedValue) { previous, current in
+                if current == id, previous != id {
+                    // Arriving: the stored time as the digits that make it,
+                    // all selected, so typing replaces it.
+                    text = seconds.map(DurationEntry.digits(forSeconds:)) ?? ""
+                    guard !text.isEmpty else { return }
+                    Task { @MainActor in
+                        guard focused, !text.isEmpty else { return }
+                        selection = TextSelection(range: text.startIndex..<text.endIndex)
+                    }
+                }
+                if previous == id, current != id { show(seconds) }
+            }
+            .onAppear { show(seconds) }
+            .onChange(of: seconds) { _, newValue in
+                guard !focused else { return }
+                show(newValue)
+            }
+            #if os(iOS)
+            .numericKeyboardBar(
+                // The bar says what the digits mean: "TIME 30:00" over a
+                // field reading 3000.
+                isFocused: focused,
+                label: text.isEmpty ? label : "\(label) \(DurationEntry.positional(digits: text))",
+                step: nil, hasNext: next != nil,
+                onStep: { _ in },
+                onNext: { focus.wrappedValue = next },
+                onDone: { focus.wrappedValue = nil }
+            )
+            #endif
+    }
+
+    /// Normalised, for reading: `90` typed is `1:30` shown.
+    private func show(_ seconds: Int?) {
+        text = seconds.map(DurationEntry.format(seconds:)) ?? ""
+        selection = nil
     }
 }
 

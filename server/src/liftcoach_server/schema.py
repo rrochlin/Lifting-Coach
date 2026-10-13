@@ -84,6 +84,7 @@ KNOWN_MIGRATIONS: tuple[str, ...] = (
     "v13_setDurationDistance",
     "v14_plannedSetCount",
     "v14_cognitoSub",
+    "v15_exerciseTrackingPreference",
 )
 
 
