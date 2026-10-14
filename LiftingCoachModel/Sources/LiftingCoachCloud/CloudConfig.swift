@@ -18,11 +18,14 @@ public struct CloudConfig: Sendable, Equatable {
     /// The Lambda that deletes an account — `AccountDeletion`. Named rather
     /// than addressed by URL: the phone calls Lambda's `Invoke` API directly.
     public var deleteAccountFunction: String
+    /// The coach — `CoachClient`, INFRA-SPEC §13. Invoked the same way.
+    public var coachFunction: String
 
     public init(
         region: String, clientID: String, userPoolID: String,
         identityPoolID: String, bucket: String,
-        deleteAccountFunction: String = "lift-coach-prod-delete-account"
+        deleteAccountFunction: String = "lift-coach-prod-delete-account",
+        coachFunction: String = "lift-coach-prod-coach"
     ) {
         self.region = region
         self.clientID = clientID
@@ -30,6 +33,7 @@ public struct CloudConfig: Sendable, Equatable {
         self.identityPoolID = identityPoolID
         self.bucket = bucket
         self.deleteAccountFunction = deleteAccountFunction
+        self.coachFunction = coachFunction
     }
 
     public static let production = CloudConfig(
@@ -38,7 +42,8 @@ public struct CloudConfig: Sendable, Equatable {
         userPoolID: "us-west-2_IdjBHNPTi",
         identityPoolID: "us-west-2:4ceed955-559e-4395-9537-9672249ceeb6",
         bucket: "lift-coach-prod-snapshots",
-        deleteAccountFunction: "lift-coach-prod-delete-account"
+        deleteAccountFunction: "lift-coach-prod-delete-account",
+        coachFunction: "lift-coach-prod-coach"
     )
 
     /// The `iss` of this pool's tokens, which is also the key the identity pool

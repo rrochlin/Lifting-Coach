@@ -577,6 +577,29 @@ extension AppDatabase {
             }
         }
 
+        // Additive. The coach conversation (INFRA-SPEC §13), kept **on the
+        // phone** — which makes it part of the snapshot, so it is backed up
+        // and restored with the training log rather than living on a server.
+        //
+        // `status` is what makes a message impossible to lose: a lifter's
+        // message is written `pending` before it is sent and only becomes
+        // `sent` once its reply is stored beside it, so anything the app was
+        // killed in the middle of is still `pending` on the next launch and is
+        // sent again — with the same id, which the server answers at most once.
+        migrator.registerMigration("v16_coachMessage") { db in
+            try db.create(table: "coachMessage") { t in
+                t.primaryKey("id", .text)
+                t.column("role", .text).notNull()
+                t.column("text", .text).notNull()
+                t.column("createdAt", .datetime).notNull()
+                t.column("status", .text).notNull()
+                t.column("failure", .text)
+                // A reply names the message it answers.
+                t.column("inReplyTo", .text)
+            }
+            try db.create(index: "coachMessage_on_createdAt", on: "coachMessage", columns: ["createdAt"])
+        }
+
         return migrator
     }
 }

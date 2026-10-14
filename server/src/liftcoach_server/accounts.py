@@ -36,7 +36,7 @@ lifter's training still in the bucket.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Protocol
 
 from . import apple
 from .errors import ServiceError
@@ -121,6 +121,7 @@ def delete_account(
     versions: SnapshotVersions,
     meta: MetaStore,
     apple_grants: apple.AppleGrants,
+    coach_replies: Any = None,
 ) -> DeletionReport:
     """Deletes the account `access_token` belongs to, and all it holds.
 
@@ -152,5 +153,9 @@ def delete_account(
 
     removed = versions.delete_all(user_prefix(subject))
     meta.delete(subject)
+    # Coach replies kept for re-delivery (INFRA-SPEC §13). They expire in a
+    # week regardless; "deleted" means now.
+    if coach_replies is not None:
+        coach_replies.delete_all(subject)
     accounts.delete(access_token)
     return DeletionReport(subject=subject, object_versions=removed)

@@ -54,6 +54,11 @@ public final class AppEnvironment {
     /// it checks for one before it exports anything.
     public let snapshotSync: SnapshotSync
 
+    /// The coach conversation, and the one owner of sending it — here rather
+    /// than on the Coach screen so leaving the screen can't cancel a message.
+    /// INFRA-SPEC §13.
+    let coach: CoachModel
+
     public init(
         database: AppDatabase,
         backend: any BackendClient,
@@ -79,6 +84,19 @@ public final class AppEnvironment {
             // firmly the `user` row says whose log this is.
             account: { await backend.currentSession?.subject },
             upload: { try await backend.uploadSnapshot($0, condition: $1) }
+        )
+        let sync = snapshotSync
+        self.coach = CoachModel(
+            store: CoachStore(database),
+            outbox: CoachOutbox(store: CoachStore(database)) { id, text, history in
+                try await backend.sendCoachMessage(id: id, text: text, history: history)
+            },
+            onReplied: {
+                Task {
+                    await sync.markChanged()
+                    _ = try? await sync.syncIfNeeded(.coachReplied)
+                }
+            }
         )
     }
 
@@ -289,6 +307,8 @@ public final class AppEnvironment {
         // reinstalled phone discovers the cloud already has a backup.
         let outcome = try? await snapshotSync.syncIfNeeded(.signedIn)
         recordSync(outcome)
+        // Coach messages held for a sign-in can go now.
+        coach.deliver()
     }
 
     // MARK: Sign-in at launch

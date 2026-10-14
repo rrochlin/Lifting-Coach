@@ -13,6 +13,9 @@ import LiftingCoachModel
 /// which that stopped being acceptable.
 struct UserProfileView: View {
     @Environment(AppEnvironment.self) private var environment
+    @Environment(\.dismiss) private var dismiss
+    /// Presented from Home's toolbar since Coach took the tab (see `RootView`).
+    var isPresentedAsSheet = false
 
     /// The archive being written, then the archive to hand off. `nil` between.
     @State private var isExporting = false
@@ -36,6 +39,14 @@ struct UserProfileView: View {
             .listStyle(.plain)
             .screenGround()
             .navigationTitle("Profile")
+            .toolbar {
+                if isPresentedAsSheet {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { dismiss() }
+                            .foregroundStyle(Theme.signal)
+                    }
+                }
+            }
             .sheet(item: $exportedFile) { file in
                 ShareSheet(url: file.url)
             }

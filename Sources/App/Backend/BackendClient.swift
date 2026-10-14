@@ -97,9 +97,16 @@ public protocol BackendClient: Sendable {
     /// the system ever sees.
     func resolveDraft(_ id: String, as resolution: DraftResolution) async throws
 
-    // MARK: Coach (Bedrock over websocket)
-    /// Streams coach replies. Phase 2.2 — see `Features/Coach Conversation.md`.
-    func coachReplies(to message: String) -> AsyncThrowingStream<String, any Error>
+    // MARK: Coach (INFRA-SPEC §13)
+
+    /// Sends one coach message and returns its reply — send and receive, not a
+    /// stream. Throws `CoachOutbox.Refusal`, which is what `CoachOutbox` acts
+    /// on: keep the message pending, hold it until sign-in, or mark it failed.
+    /// The server answers an id at most once, so calling this again for a
+    /// message whose reply was lost returns that same reply.
+    func sendCoachMessage(
+        id: String, text: String, history: [CoachOutbox.Turn]
+    ) async throws -> CoachOutbox.Reply
 }
 
 /// A signed-in lifter.
@@ -224,7 +231,9 @@ public struct UnavailableBackend: BackendClient {
         throw BackendError.notImplementedUntilPhase2
     }
 
-    public func coachReplies(to message: String) -> AsyncThrowingStream<String, any Error> {
-        AsyncThrowingStream { $0.finish(throwing: BackendError.notImplementedUntilPhase2) }
+    public func sendCoachMessage(
+        id: String, text: String, history: [CoachOutbox.Turn]
+    ) async throws -> CoachOutbox.Reply {
+        throw CoachOutbox.Refusal.unavailable
     }
 }

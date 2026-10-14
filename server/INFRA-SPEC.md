@@ -1010,7 +1010,8 @@ building the flow around it.
 
 Named so the module layout anticipates them, not built:
 
-- **2.2 — chat.** A WebSocket `aws_apigatewayv2_api`
+- **2.2 — chat.** *Superseded by §13: send/receive through a directly invoked
+  Lambda — no API Gateway, no connections table.* The original sketch: a WebSocket `aws_apigatewayv2_api`
   (`$connect`/`$disconnect`/`$default`) with a Cognito JWT authorizer, a
   `${prefix}-connections` table **with** TTL, a `${prefix}-conversations` table,
   and `bedrock:InvokeModelWithResponseStream` on the chat function's role. Note
@@ -1181,11 +1182,17 @@ use-based data mining. Nothing in this design does, and nothing here should
 start.
 
 The place it becomes a live question is **2.2**, where a training log goes into
-a Bedrock prompt. In our own AWS account, with a model that does not train on
-inputs, that is processing rather than disclosure — but it is worth being
-deliberate about, and it gets sharper if HealthKit integration ever lands, since
-HealthKit-sourced data carries its own restrictions on sharing beyond the app.
-Decide it when the chat is built; do not let it arrive as a side effect.
+a model prompt. **Decided (2026-10-13, owner): the coach is Claude on Amazon
+Bedrock** — messages, and from 2.3 query results over the log, are processed
+by Bedrock within this AWS account (§13). The owner first chose Anthropic's
+API directly and accepted the data leaving the account; Bedrock was then
+chosen for model access, which happens to keep it in. What follows from it is in §13: Apple's guideline
+**5.1.2(i)** (disclose, and obtain explicit permission, before personal data is
+shared with a third-party AI) becomes a one-time consent screen in the Coach
+tab, and the privacy manifest and App Privacy answers gain the chat as user
+content. It still gets sharper if HealthKit lands, since HealthKit-sourced data
+carries its own restrictions on sharing beyond the app — that remains
+undecided and must not arrive as a side effect.
 
 **Scope, honestly:** all of §9.2–9.5 is Apple's rules, and they apply at one
 user. GDPR/CCPA largely do not engage while the owner is the only person whose
@@ -1452,3 +1459,156 @@ Two visibly different identifiers again, and the object under the first.
 The bucket and table were emptied afterwards, versions and delete markers
 included, so the first real upload lands on a clean slate rather than on top of
 verification fixtures.
+
+---
+
+## 13. Phase 2.2 — the coach, as send and receive
+
+**Decided (2026-10-13, owner).** Messages, not live chat: the lifter sends one,
+the reply arrives whole. The phone calls a coach Lambda with Lambda's own
+`Invoke` — the same signed call `delete_account` uses — and the Lambda calls
+**Claude through Amazon Bedrock** with Anthropic's own Python SDK
+(`AnthropicBedrock`). No API Gateway, no WebSocket, no connections table, no
+public endpoint: §8's "no service in front of anything" still holds, and
+§9.1's WebSocket sketch is superseded.
+
+**Which model, measured rather than assumed.** The first plan was Claude
+Sonnet 5.5 on Anthropic's API; the owner chose Bedrock instead, with the best
+model this account can actually call. Probed on 2026-10-13 with a five-token
+request each: every Claude 4.7-and-later model returns `not available for
+this account`, as do Opus 4.6 and the newest OpenAI models. **Callable on the CLI that day: Claude Opus 4.5, Sonnet 4.6, Sonnet 4.5,
+Haiku 4.5**, and of the others Kimi K2.5, GLM-5, Qwen3-235B and DeepSeek V3.2.
+Then, called through the SDK, **Opus 4.5 refused** — `not authorized to
+perform the required AWS Marketplace actions (aws-marketplace:Subscribe)`: its
+first call had squeaked through, and using it needs a one-time Marketplace
+subscription an admin makes in the console. **The coach uses Claude Sonnet
+4.6** (`us.anthropic.claude-sonnet-4-6`), which works today and is a newer
+generation than Opus 4.5 — adaptive thinking, the current effort control. The
+model is an environment variable, so moving to a newer one when access lands
+is a configuration change, not a deploy. The `global.` profiles were refused
+where `us.` ones answered, so the `us.` (cross-region, US) profile it is.
+
+Measured live, through the real `BedrockCoach`: 1–3 s a reply, ~450 input and
+~70 output tokens for a short question, and both rules that matter most held —
+asked how many reps an RPE 9 left, it explained that RPE records effort rather
+than converting it; asked for a best lift, it said it can't see the log.
+
+### 13.1 Never drop a message
+
+The requirement is that leaving the Coach tab, or the app, before a reply comes
+back loses nothing. Three things make that structural:
+
+1. **The phone writes the message before it sends it.** A `coachMessage` row
+   (migration `v16`) with a client-generated id and status `pending`. Sending
+   is done by a model object owned by `AppEnvironment`, not by the view, so
+   switching tabs doesn't cancel it, and backgrounding holds a background task
+   for the duration (as `syncBeforeSuspending` does).
+2. **The server is idempotent on that id.** The coach function records each
+   reply in `${prefix}-coach-replies` (`pk = USER#{sub}`, `sk = messageId`)
+   before returning it. A request for an id already answered returns the stored reply
+   without calling Claude again — so a reply lost to a killed app, a dead
+   network or a timeout costs a retry, never a second charge or a second,
+   different answer.
+3. **Anything still `pending` is re-sent** when the app launches and when the
+   Coach tab appears, with its original id. Either it was answered while the
+   phone wasn't listening (the stored reply comes back) or it never arrived
+   (it's answered now).
+
+A message that fails for a reason a retry can't fix (a refused key, a
+malformed request) is marked `failed` with the reason and a RETRY on the
+bubble — shown, never silently discarded.
+
+**The conversation lives on the phone** (`coachMessage`), which makes it part
+of the snapshot and so backed up and restored with everything else — "stored
+for the user" in the owner's words. The server keeps no conversation: the phone
+sends the recent history with each message, and the reply table is an
+idempotency cache with a 7-day TTL, not a record. One rolling conversation for
+now; separate threads are a later change to the table, not to the protocol.
+
+### 13.2 The request
+
+`{"accessToken", "messageId", "history": [{"role", "text"}, …], "text"}` →
+`{"messageId", "reply": {"id", "text", "createdAt"}}`, or
+`{"error": "signInRequired" | "consentRequired" | "unavailable", …}`.
+
+- **Who** is decided the same way as deletion: Cognito's `GetUser` on the
+  access token (§9.4). The `sub` keys the idempotency table, and in 2.3 it is
+  what selects the snapshot the tools read.
+- **History is bounded** to the last 40 messages, so a long conversation's cost
+  stays flat. The full conversation is still on the phone.
+- **Nothing in the logs is content.** The function logs the `sub`, message id,
+  latency and token usage (`usage.input_tokens`, `output_tokens`,
+  `cache_read_input_tokens`), never a message.
+
+### 13.3 The model call
+
+- Claude Sonnet 4.6 through `AnthropicBedrock(aws_region=…)`, which signs
+  with the Lambda role's own credentials — no key to store or rotate.
+  `thinking: {type: "adaptive"}` at `output_config.effort = "medium"`: a
+  coaching answer wants more than chat-level effort and less than agentic
+  work; re-tune on real use.
+- **Bedrock has no server-side refusal fallback.** A turn ending in
+  `stop_reason == "refusal"` is answered with a plain "I can't help with that
+  one" rather than an empty bubble.
+- **No automatic prompt caching on Bedrock** — an explicit `cache_control`
+  breakpoint on the system prompt instead. (Below the model's minimum it
+  simply doesn't cache, which costs nothing.)
+- **The system prompt carries the Core Tenets** the coach must not violate:
+  it advises and never claims to have changed the plan (§1); RPE is exertion,
+  not reps in reserve (§3); achieved, goal and theoretical maxes are distinct
+  (§6); and in 2.2 it has **no access to the lifter's log** and must say so
+  rather than invent numbers (§10). It is static, so it is cached
+  (`cache_control`), and nothing volatile — no date, no id — goes in it.
+- Python's official `anthropic` SDK (1.x), bundled into the deployment zip like
+  `cryptography` (≈23 MB of wheels; boto3 comes from the runtime); standard
+  `anthropic.*Error` classes, most specific first. A model or network failure
+  is answered `{"error": "unavailable"}` so the phone keeps the message pending
+  and retries — never a reply invented in its place.
+
+### 13.4 Resources (for `terraform-infrastructure`)
+
+| resource | notes |
+| --- | --- |
+| `${prefix}-coach` Lambda | python3.12, arm64, handler `liftcoach_server.handlers.coach_reply`, **timeout 120 s**, memory 512 MB, reserved concurrency 2; env `COACH_REPLIES_TABLE`, `COACH_MODEL = us.anthropic.claude-sonnet-4-6`; 14-day log group; placeholder zip + `ignore_changes` |
+| role grants | `dynamodb:GetItem`, `PutItem` on the replies table; `bedrock:InvokeModel` on the `us.anthropic.claude-sonnet-4-6` inference profile **and** on the foundation model in each region it routes to (`arn:aws:bedrock:*::foundation-model/anthropic.claude-sonnet-4-6`) — a cross-region profile is authorised against both. Grant Opus 4.5 the same way, so switching model is only the env var once its subscription exists. No S3 until 2.3. |
+| `${prefix}-coach-replies` table | `pk` (S, `USER#{sub}`) + `sk` (S, message id), on-demand, **TTL on `expiresAt`**, no deletion protection (it is a cache) |
+| phone role | `lambda:InvokeFunction` on `${prefix}-coach`, beside the deletion grant |
+
+`deploy-server.yml` gains the function name. The phone's `CloudConfig` gains
+`coachFunction`.
+
+**Account deletion** (§9.4) gains one step: `Query` the replies table on
+`pk = USER#{sub}` and delete what comes back, with the rest. The composite key
+is what makes that one query rather than a scan; the TTL would remove the items
+within a week anyway, but "deleted" means now. The deletion role gains
+`dynamodb:Query` and `DeleteItem` on the replies table.
+
+**Spend.** Bedrock bills to this AWS account, so §9.1's budget alarm is the
+cap that matters — and there isn't one yet. At Sonnet 4.6's Bedrock price a
+coaching exchange is well under a cent; reserved concurrency 2 bounds how fast it
+can run, not how much. The owner chose to continue without a cap for now.
+
+### 13.5 The app
+
+- **A Coach tab.** A conversation view: the lifter's messages and the coach's,
+  newest at the bottom, a composer pinned above the keyboard. **It would be the sixth
+  tab, and iPhone shows five** — a sixth folds the last two into a system
+  "More" list. So a tab has to move: the plan is Profile leaves the tab bar for
+  a button in Home's toolbar (it is settings, visited rarely), and Coach takes
+  its place. Confirmed by the owner (2026-10-13).
+- **Waiting is visible.** The sent message shows immediately with a "sending"
+  state; a typing indicator stands in for the reply until it lands; the tab
+  item carries a badge when a reply arrives while the lifter is elsewhere.
+- **Consent first** (guideline 5.1.2(i)). Before the first message, one screen
+  says that messages are answered by Anthropic's Claude, run through Amazon
+  Bedrock — and, from 2.3, that the coach reads the training log to answer —
+  and asks to continue. Kept even though Bedrock processes inside our own AWS
+  account: the rule is about personal data reaching an AI model the lifter
+  didn't pick, and saying so costs one screen. The choice is stored; until
+  it's given, the composer is the consent screen.
+- **Privacy manifest and App Privacy**: add *Other User Content* (the chat),
+  linked to the user, app functionality, not tracking.
+- **Not in 2.2:** tools over the snapshot (2.3), drafts (2.3), screen context
+  (the tab was chosen over a sheet, so there is no "current screen" to send;
+  2.3's tools make it unnecessary for most questions).
+

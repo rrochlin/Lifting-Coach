@@ -3,9 +3,10 @@ import LiftingCoachModel
 
 /// Top-level navigation.
 ///
-/// Tabs follow the feature docs in `notes/Workout App/Features/`. Coach
-/// Conversation is deliberately absent: it's phase 2, and per its feature doc it
-/// belongs as an overlay over whatever the user is already doing, not as a tab.
+/// Tabs follow the feature docs in `notes/Workout App/Features/`. **Coach is a
+/// tab** (owner's call, 2026-10-13), and it took Profile's seat: iPhone shows
+/// five tabs and folds a sixth into a "More" list, and Profile — settings,
+/// visited rarely — moved to a button in Home's toolbar.
 struct RootView: View {
     @State private var selection = RootTab.initialFromLaunchArguments
     /// A day Home asked to start, handed to the Workout tab to act on.
@@ -56,6 +57,7 @@ struct RootView: View {
         TabView(selection: $selection) {
             Tab("Home", systemImage: "house.fill", value: RootTab.home) {
                 HomeView(
+                    opensProfileAtLaunch: RootTab.launchedIntoProfile,
                     onStartWorkout: { planned in
                         pendingStart = planned
                         selection = .workout
@@ -74,15 +76,24 @@ struct RootView: View {
             Tab("History", systemImage: "clock.arrow.circlepath", value: RootTab.history) {
                 WorkoutHistoryView()
             }
-            Tab("Profile", systemImage: "person.crop.circle", value: RootTab.profile) {
-                UserProfileView()
+            Tab("Coach", systemImage: "bubble.left.and.text.bubble.right", value: RootTab.coach) {
+                CoachView()
             }
+            // Replies that landed while you were elsewhere.
+            .badge(environment.coach.unread)
         }
     }
 }
 
 enum RootTab: String, Hashable, CaseIterable {
-    case home, workout, plan, history, profile
+    case home, workout, plan, history, coach
+
+    /// `-initialTab profile` still works: Profile is a sheet over Home now,
+    /// so it opens Home and presents it. Every DEBUG flag that names the
+    /// profile tab (`-openExerciseLibrary`, …) keeps working unchanged.
+    static var launchedIntoProfile: Bool {
+        LaunchArguments.value(for: "-initialTab") == "profile"
+    }
 
     /// Lets a launch argument pick the starting tab: `-initialTab plan`.
     ///

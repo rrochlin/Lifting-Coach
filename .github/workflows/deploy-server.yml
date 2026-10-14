@@ -40,7 +40,7 @@ env:
   AWS_REGION: us-west-2
   # Space-separated. Every one must exist before this runs on main — the
   # Terraform that creates a function lands first, the code second.
-  FUNCTION_NAMES: lift-coach-prod-index-snapshot lift-coach-prod-delete-account lift-coach-prod-apple-sign-in
+  FUNCTION_NAMES: lift-coach-prod-index-snapshot lift-coach-prod-delete-account lift-coach-prod-apple-sign-in lift-coach-prod-coach
 
 # Two deploys of the same function must not race. Queued rather than
 # cancelled: a half-finished code update is worse than a redundant one.
