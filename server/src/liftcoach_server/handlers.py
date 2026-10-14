@@ -10,6 +10,9 @@ report is ordinary on a cellular link, and a design where that leaves the index
 disagreeing with the bucket is a design that needs a reconciler. Here the object
 *is* the trigger.
 
+**`coach_reply`.** One coach message in, one reply out — `coach.py`, INFRA-SPEC
+§13. Invoked the same way as deletion, and authorised the same way.
+
 **`delete_account`.** The one thing the phone asks the server to do, and the one
 thing it can't do itself: its role has no delete permission of any kind. It
 calls this with Lambda's own `Invoke` API, signed with the same identity-pool
@@ -21,12 +24,13 @@ payload is what decides whose account goes; see `accounts.py`.
 from __future__ import annotations
 
 import os
+import time
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
 
-from . import accounts, apple, auth_triggers, snapshots
+from . import accounts, apple, auth_triggers, coach, snapshots
 from .errors import UnreadableSnapshot
 from .inspection import inspect
 from .snapshots import MetaStore, SnapshotMeta
@@ -182,6 +186,8 @@ class AccountDeps:
     versions: accounts.SnapshotVersions
     meta: MetaStore
     apple_grants: apple.AppleGrants
+    #: The coach's reply cache, when the deletion function is told about it.
+    coach_replies: coach.ReplyStore | None = None
 
 
 _account_deps: AccountDeps | None = None
@@ -223,6 +229,7 @@ def delete_account(event: Event, context: Any = None) -> dict[str, Any]:
             versions=deps.versions,
             meta=deps.meta,
             apple_grants=deps.apple_grants,
+            coach_replies=deps.coach_replies,
         )
     except accounts.InvalidToken as refusal:
         print(f"delete_account refused: {refusal.message}")
@@ -267,3 +274,69 @@ def apple_sign_in(event: Event, context: Any = None) -> Event:
             keys=apple.HttpAppleKeys(), audience=os.environ["APPLE_BUNDLE_ID"]
         )
     return auth_triggers.handle(event, _apple_deps)
+
+
+# ── The coach ────────────────────────────────────────────────────────────────
+
+
+@dataclass
+class CoachDeps:
+    accounts: accounts.Accounts
+    store: coach.ReplyStore
+    model: coach.CoachModel
+
+
+_coach_deps: CoachDeps | None = None
+
+
+def configure_coach(deps: CoachDeps | None) -> None:
+    global _coach_deps
+    _coach_deps = deps
+
+
+def coach_reply(event: Event, context: Any = None) -> dict[str, Any]:
+    """`{"accessToken", "messageId", "text", "history"}` → `{"messageId", "reply"}`.
+
+    Refusals are answers with an `error` the phone acts on, not raises:
+    `signInRequired` (sign in again), `badRequest` (don't resend),
+    `unavailable` (keep it pending and resend). A raise would reach the phone
+    as a function error with a stack trace, which says less than these do.
+    """
+    global _coach_deps
+    if _coach_deps is None:
+        from .aws import build_coach_dependencies
+
+        _coach_deps = build_coach_dependencies(
+            replies_table=os.environ["COACH_REPLIES_TABLE"],
+            model_id=os.environ["COACH_MODEL"],
+            region=os.environ.get("AWS_REGION", "us-west-2"),
+        )
+    payload = event or {}
+    message_id = str(payload.get("messageId") or "")
+    started = time.monotonic()
+    try:
+        answered = coach.answer(
+            str(payload.get("accessToken") or ""),
+            message_id,
+            str(payload.get("text") or ""),
+            payload.get("history"),
+            accounts=_coach_deps.accounts,
+            store=_coach_deps.store,
+            model=_coach_deps.model,
+        )
+    except accounts.InvalidToken as refusal:
+        print(f"coach refused: {refusal.message}")
+        return {"messageId": message_id, "error": "signInRequired"}
+    except coach.MessageRejected as refusal:
+        print(f"coach rejected {message_id}: {refusal.message}")
+        return {"messageId": message_id, "error": "badRequest", "detail": refusal.message}
+    except coach.ModelUnavailable as failure:
+        print(f"coach unavailable for {message_id}: {failure.message}")
+        return {"messageId": message_id, "error": "unavailable"}
+
+    # Ids, timing and token counts — never a word of either message.
+    print(
+        f"coach answered {message_id} in {time.monotonic() - started:.1f}s"
+        f" redelivered={answered.redelivered} usage={answered.usage}"
+    )
+    return {"messageId": message_id, "reply": answered.reply.as_body()}

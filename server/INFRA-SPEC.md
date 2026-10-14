@@ -1476,19 +1476,22 @@ public endpoint: §8's "no service in front of anything" still holds, and
 Sonnet 5.5 on Anthropic's API; the owner chose Bedrock instead, with the best
 model this account can actually call. Probed on 2026-10-13 with a five-token
 request each: every Claude 4.7-and-later model returns `not available for
-this account`, as do Opus 4.6 and the newest OpenAI models. **Callable: Claude
-Opus 4.5, Claude Sonnet 4.6, Sonnet 4.5, Haiku 4.5**, and of the others Kimi
-K2.5, GLM-5, Qwen3-235B and DeepSeek V3.2. **The coach uses Claude Opus 4.5**
-(`us.anthropic.claude-opus-4-5-20251101-v1:0`), the most capable of those;
-Sonnet 4.6 is the cheaper alternative. The model is an environment variable,
-so moving to a newer one when access lands is a configuration change, not a
-deploy. The `global.` profiles were refused where `us.` ones answered, so the
-`us.` (cross-region, US) profile it is.
+this account`, as do Opus 4.6 and the newest OpenAI models. **Callable on the CLI that day: Claude Opus 4.5, Sonnet 4.6, Sonnet 4.5,
+Haiku 4.5**, and of the others Kimi K2.5, GLM-5, Qwen3-235B and DeepSeek V3.2.
+Then, called through the SDK, **Opus 4.5 refused** — `not authorized to
+perform the required AWS Marketplace actions (aws-marketplace:Subscribe)`: its
+first call had squeaked through, and using it needs a one-time Marketplace
+subscription an admin makes in the console. **The coach uses Claude Sonnet
+4.6** (`us.anthropic.claude-sonnet-4-6`), which works today and is a newer
+generation than Opus 4.5 — adaptive thinking, the current effort control. The
+model is an environment variable, so moving to a newer one when access lands
+is a configuration change, not a deploy. The `global.` profiles were refused
+where `us.` ones answered, so the `us.` (cross-region, US) profile it is.
 
-The cost is that a reply arrives all at once rather than word by word. The
-answer to that is a waiting state the lifter can see, not a stream — and
-streaming can be added later behind the same message model if waiting turns out
-to matter.
+Measured live, through the real `BedrockCoach`: 1–3 s a reply, ~450 input and
+~70 output tokens for a short question, and both rules that matter most held —
+asked how many reps an RPE 9 left, it explained that RPE records effort rather
+than converting it; asked for a best lift, it said it can't see the log.
 
 ### 13.1 Never drop a message
 
@@ -1539,11 +1542,11 @@ now; separate threads are a later change to the table, not to the protocol.
 
 ### 13.3 The model call
 
-- Claude Opus 4.5 through `AnthropicBedrock(aws_region=…)`, which signs with
-  the Lambda role's own credentials — no key to store or rotate. Opus 4.5
-  predates adaptive thinking, so thinking is `{type: "enabled",
-  budget_tokens: 2048}` under `max_tokens` 8000: enough to reason about a
-  program, not enough to make a chat reply slow.
+- Claude Sonnet 4.6 through `AnthropicBedrock(aws_region=…)`, which signs
+  with the Lambda role's own credentials — no key to store or rotate.
+  `thinking: {type: "adaptive"}` at `output_config.effort = "medium"`: a
+  coaching answer wants more than chat-level effort and less than agentic
+  work; re-tune on real use.
 - **Bedrock has no server-side refusal fallback.** A turn ending in
   `stop_reason == "refusal"` is answered with a plain "I can't help with that
   one" rather than an empty bubble.
@@ -1566,8 +1569,8 @@ now; separate threads are a later change to the table, not to the protocol.
 
 | resource | notes |
 | --- | --- |
-| `${prefix}-coach` Lambda | python3.12, arm64, handler `liftcoach_server.handlers.coach_reply`, **timeout 120 s**, memory 512 MB, reserved concurrency 2; env `COACH_REPLIES_TABLE`, `COACH_MODEL = us.anthropic.claude-opus-4-5-20251101-v1:0`; 14-day log group; placeholder zip + `ignore_changes` |
-| role grants | `dynamodb:GetItem`, `PutItem` on the replies table; `bedrock:InvokeModel` on the `us.` inference profile **and** on the foundation model in each region it routes to (`arn:aws:bedrock:{us-east-1,us-east-2,us-west-2}::foundation-model/anthropic.claude-opus-4-5-20251101-v1:0`) — a cross-region profile is authorised against both. Sonnet 4.6 granted the same way, so switching model needs no IAM change. No S3 until 2.3. |
+| `${prefix}-coach` Lambda | python3.12, arm64, handler `liftcoach_server.handlers.coach_reply`, **timeout 120 s**, memory 512 MB, reserved concurrency 2; env `COACH_REPLIES_TABLE`, `COACH_MODEL = us.anthropic.claude-sonnet-4-6`; 14-day log group; placeholder zip + `ignore_changes` |
+| role grants | `dynamodb:GetItem`, `PutItem` on the replies table; `bedrock:InvokeModel` on the `us.anthropic.claude-sonnet-4-6` inference profile **and** on the foundation model in each region it routes to (`arn:aws:bedrock:*::foundation-model/anthropic.claude-sonnet-4-6`) — a cross-region profile is authorised against both. Grant Opus 4.5 the same way, so switching model is only the env var once its subscription exists. No S3 until 2.3. |
 | `${prefix}-coach-replies` table | `pk` (S, `USER#{sub}`) + `sk` (S, message id), on-demand, **TTL on `expiresAt`**, no deletion protection (it is a cache) |
 | phone role | `lambda:InvokeFunction` on `${prefix}-coach`, beside the deletion grant |
 
@@ -1581,8 +1584,8 @@ within a week anyway, but "deleted" means now. The deletion role gains
 `dynamodb:Query` and `DeleteItem` on the replies table.
 
 **Spend.** Bedrock bills to this AWS account, so §9.1's budget alarm is the
-cap that matters — and there isn't one yet. At Opus 4.5's Bedrock price a
-coaching exchange is a few cents; reserved concurrency 2 bounds how fast it
+cap that matters — and there isn't one yet. At Sonnet 4.6's Bedrock price a
+coaching exchange is well under a cent; reserved concurrency 2 bounds how fast it
 can run, not how much. The owner chose to continue without a cap for now.
 
 ### 13.5 The app

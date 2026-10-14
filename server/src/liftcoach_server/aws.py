@@ -292,6 +292,82 @@ class S3Versions:
         return len(targets)
 
 
+class DynamoReplyStore:
+    """`${prefix}-coach-replies` — answered coach messages, for re-delivery.
+
+    `pk = USER#{sub}`, `sk = messageId`, with a TTL on `expiresAt`. The
+    composite key is what makes account deletion one `Query` rather than a
+    scan (INFRA-SPEC §13.4).
+    """
+
+    def __init__(self, table_name: str, resource: Any | None = None) -> None:
+        self._table_name = table_name
+        self._resource = resource
+        self._table: Any | None = None
+
+    @property
+    def table(self) -> Any:
+        if self._table is None:
+            if self._resource is None:
+                import boto3
+
+                self._resource = boto3.resource("dynamodb")
+            self._table = self._resource.Table(self._table_name)
+        return self._table
+
+    def get(self, subject: str, message_id: str) -> Any:
+        from .coach import Reply
+
+        item = self.table.get_item(
+            Key={"pk": _partition_key(subject), "sk": message_id}, ConsistentRead=True
+        ).get("Item")
+        if not item:
+            return None
+        return Reply(id=str(item["replyId"]), text=str(item["text"]), created_at=str(item["createdAt"]))
+
+    def put(self, subject: str, message_id: str, reply: Any, expires_at: int) -> None:
+        self.table.put_item(
+            Item={
+                "pk": _partition_key(subject),
+                "sk": message_id,
+                "replyId": reply.id,
+                "text": reply.text,
+                "createdAt": reply.created_at,
+                "expiresAt": Decimal(expires_at),
+            }
+        )
+
+    def delete_all(self, subject: str) -> int:
+        from boto3.dynamodb.conditions import Key
+
+        removed = 0
+        kwargs: dict[str, Any] = {
+            "KeyConditionExpression": Key("pk").eq(_partition_key(subject)),
+            "ProjectionExpression": "pk, sk",
+        }
+        while True:
+            page = self.table.query(**kwargs)
+            with self.table.batch_writer() as batch:
+                for item in page.get("Items", []):
+                    batch.delete_item(Key={"pk": item["pk"], "sk": item["sk"]})
+                    removed += 1
+            if "LastEvaluatedKey" not in page:
+                return removed
+            kwargs["ExclusiveStartKey"] = page["LastEvaluatedKey"]
+
+
+def build_coach_dependencies(replies_table: str, model_id: str, region: str) -> Any:
+    """The coach function's composition root."""
+    from .coach import BedrockCoach
+    from .handlers import CoachDeps
+
+    return CoachDeps(
+        accounts=CognitoAccounts(),
+        store=DynamoReplyStore(replies_table),
+        model=BedrockCoach(model_id=model_id, region=region),
+    )
+
+
 def build_dependencies(bucket: str, meta_table: str) -> Any:
     """The composition root, built from the Lambda's environment."""
     from .handlers import Deps
@@ -342,10 +418,12 @@ def build_account_dependencies(bucket: str, meta_table: str) -> Any:
     from .handlers import AccountDeps
 
     bundle_id = os.environ["APPLE_BUNDLE_ID"]
+    replies_table = os.environ.get("COACH_REPLIES_TABLE")
     return AccountDeps(
         accounts=CognitoAccounts(),
         versions=S3Versions(bucket),
         meta=DynamoMetaStore(meta_table),
+        coach_replies=DynamoReplyStore(replies_table) if replies_table else None,
         apple_grants=AppleRevoker(
             client_id=bundle_id,
             secret=SSMAppleSecret(
