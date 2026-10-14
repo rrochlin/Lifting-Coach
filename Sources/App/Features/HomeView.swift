@@ -8,6 +8,8 @@ import LiftingCoachModel
 /// doesn't exist yet. It's marked low priority there, so it stays out rather than
 /// shipping a number derived from the flawed formula the notes complain about.
 struct HomeView: View {
+    /// `-initialTab profile`: open with Profile presented. See `RootTab`.
+    var opensProfileAtLaunch = false
     @Environment(AppEnvironment.self) private var environment
 
     /// Starts a programmed day and switches to the Workout tab.
@@ -49,6 +51,8 @@ struct HomeView: View {
         "Barbell_Deadlift",
     ]
     @State private var bigThree: [Exercise] = []
+    @State private var isShowingProfile = false
+    @State private var didOpenLaunchProfile = false
 
     var body: some View {
         NavigationStack {
@@ -64,6 +68,27 @@ struct HomeView: View {
             .navigationTitle("Lifting Coach")
             .refreshable { load() }
             .task { load() }
+            // Profile lives here now that Coach has its tab seat — account,
+            // units, data, the exercise library. Settings, so a toolbar
+            // button rather than a tab.
+            .toolbar {
+                ToolbarItem(placement: .primaryAction) {
+                    Button { isShowingProfile = true } label: {
+                        Image(systemName: "person.crop.circle")
+                            .font(.system(size: 18))
+                            .foregroundStyle(Theme.signal)
+                    }
+                    .accessibilityLabel("Profile")
+                }
+            }
+        }
+        .sheet(isPresented: $isShowingProfile) {
+            UserProfileView(isPresentedAsSheet: true)
+        }
+        .onAppear {
+            guard opensProfileAtLaunch, !didOpenLaunchProfile else { return }
+            didOpenLaunchProfile = true
+            isShowingProfile = true
         }
         .sheet(isPresented: $isLoggingBodyWeight) {
             LogBodyWeightSheet(unit: environment.weightUnit) { weight in

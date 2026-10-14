@@ -52,6 +52,9 @@ public actor SnapshotSync {
         case enteringBackground
         case signedIn
         case openingCoachChat
+        /// A coach reply landed. The conversation lives in the database, so
+        /// it backs up like the rest of it (INFRA-SPEC §13.1).
+        case coachReplied
     }
 
     /// The precondition an upload is made under. Mirrors the cloud layer's own

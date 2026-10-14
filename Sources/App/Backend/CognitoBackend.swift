@@ -18,6 +18,7 @@ actor CognitoBackend: BackendClient {
     private let identityPool: IdentityPool
     private let bucket: SnapshotBucket
     private let deletion: AccountDeletion
+    private let coach: CoachClient
     private let tokenStore: TokenStore
     private let deviceID: String
 
@@ -39,6 +40,7 @@ actor CognitoBackend: BackendClient {
         identityPool = IdentityPool(config: config)
         bucket = SnapshotBucket(config: config)
         deletion = AccountDeletion(config: config)
+        coach = CoachClient(config: config)
         self.tokenStore = tokenStore
         self.deviceID = deviceID
         tokens = tokenStore.load()
@@ -147,7 +149,7 @@ actor CognitoBackend: BackendClient {
         return Self.descriptor(remote)
     }
 
-    // MARK: Coach — phase 2.2
+    // MARK: Coach
 
     nonisolated func fetchDrafts() async throws -> [CoachDraft] {
         throw BackendError.notImplementedUntilPhase2
@@ -157,8 +159,34 @@ actor CognitoBackend: BackendClient {
         throw BackendError.notImplementedUntilPhase2
     }
 
-    nonisolated func coachReplies(to message: String) -> AsyncThrowingStream<String, any Error> {
-        AsyncThrowingStream { $0.finish(throwing: BackendError.notImplementedUntilPhase2) }
+    func sendCoachMessage(
+        id: String, text: String, history: [CoachOutbox.Turn]
+    ) async throws -> CoachOutbox.Reply {
+        let credentials: AWSCredentials
+        do {
+            (_, credentials) = try await authorised()
+        } catch CloudError.notSignedIn, CloudError.signInExpired {
+            throw CoachOutbox.Refusal.signInRequired
+        } catch {
+            throw CoachOutbox.Refusal.unavailable
+        }
+        // `authorised()` has just refreshed the tokens if they were near
+        // expiry, so this access token is good for the call.
+        guard let accessToken = tokens?.accessToken else { throw CoachOutbox.Refusal.signInRequired }
+        do {
+            let reply = try await coach.send(
+                messageID: id, text: text,
+                history: history.map { CoachClient.Turn(role: $0.role == .lifter ? "user" : "assistant", text: $0.text) },
+                accessToken: accessToken, credentials: credentials
+            )
+            return CoachOutbox.Reply(id: reply.id, text: reply.text, createdAt: reply.createdAt)
+        } catch CoachClient.Failure.signInRequired {
+            throw CoachOutbox.Refusal.signInRequired
+        } catch CoachClient.Failure.rejected(let detail) {
+            throw CoachOutbox.Refusal.rejected(detail)
+        } catch {
+            throw CoachOutbox.Refusal.unavailable
+        }
     }
 
     // MARK: Credentials

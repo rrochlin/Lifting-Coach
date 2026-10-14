@@ -275,3 +275,52 @@ struct AccountDeletionTests {
         }
     }
 }
+
+@Suite("Coach client")
+struct CoachClientTests {
+    private func send(_ transport: FakeTransport) async throws -> CoachClient.Reply {
+        try await CoachClient(transport: transport).send(
+            messageID: "m-1", text: "Deload?", history: [.init(role: "lifter", text: "Hi")],
+            accessToken: "access", credentials: fakeCredentials
+        )
+    }
+
+    @Test("A message is a signed Invoke carrying the id, the text and the history")
+    func request() async throws {
+        let transport = FakeTransport([(200, [:], json([
+            "messageId": "m-1", "reply": ["id": "m-1-reply", "text": "Yes.", "createdAt": "2026-10-13T20:00:00Z"],
+        ]))])
+        let reply = try await send(transport)
+
+        #expect(reply == CoachClient.Reply(
+            id: "m-1-reply", text: "Yes.", createdAt: ISO8601DateFormatter().date(from: "2026-10-13T20:00:00Z")!
+        ))
+        let sent = try #require(transport.sent.first)
+        #expect(sent.url?.absoluteString ==
+            "https://lambda.us-west-2.amazonaws.com/2015-03-31/functions/lift-coach-prod-coach/invocations")
+        #expect((sent.value(forHTTPHeaderField: "Authorization") ?? "").contains("/us-west-2/lambda/aws4_request"))
+        let payload = body(sent)
+        #expect(payload["messageId"] as? String == "m-1")
+        #expect(payload["accessToken"] as? String == "access")
+        #expect((payload["history"] as? [[String: String]]) == [["role": "lifter", "text": "Hi"]])
+    }
+
+    /// Which of the three things happened is the client's whole job: the
+    /// outbox keeps a message pending, holds it, or marks it failed on this.
+    @Test("Each server answer maps to resend, hold, or don't-resend")
+    func failures() async {
+        let cases: [((Int, [String: String], Data), CoachClient.Failure)] = [
+            ((200, [:], json(["error": "unavailable"])), .unavailable),
+            ((200, [:], json(["error": "signInRequired"])), .signInRequired),
+            ((200, [:], json(["error": "badRequest", "detail": "Empty message"])), .rejected("Empty message")),
+            ((200, ["X-Amz-Function-Error": "Unhandled"], json(["errorMessage": "boom"])), .unavailable),
+            ((429, [:], Data()), .unavailable),
+            ((500, [:], Data()), .unavailable),
+            ((403, [:], Data()), .signInRequired),
+            ((200, [:], Data("not json".utf8)), .unavailable),
+        ]
+        for (response, expected) in cases {
+            await #expect(throws: expected) { try await send(FakeTransport([response])) }
+        }
+    }
+}

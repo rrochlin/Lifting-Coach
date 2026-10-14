@@ -43,6 +43,9 @@ struct LiftingCoachApp: App {
                     // free when nothing has changed — `SnapshotSync` checks its
                     // flag before it exports anything, which matters because
                     // backgrounding happens dozens of times a day.
+                    // Coming back: a coach message the app was killed or
+                    // suspended in the middle of is still pending, and goes now.
+                    if phase == .active { environment.coach.deliver() }
                     guard phase == .background else { return }
                     // Backgrounding is when an upload is most likely to be cut
                     // off — the phone is headed for a pocket. Asking for the
