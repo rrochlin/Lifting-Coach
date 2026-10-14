@@ -1011,8 +1011,7 @@ building the flow around it.
 Named so the module layout anticipates them, not built:
 
 - **2.2 — chat.** *Superseded by §13: send/receive through a directly invoked
-  Lambda, and the Claude API rather than Bedrock — no API Gateway, no
-  connections table.* The original sketch: a WebSocket `aws_apigatewayv2_api`
+  Lambda — no API Gateway, no connections table.* The original sketch: a WebSocket `aws_apigatewayv2_api`
   (`$connect`/`$disconnect`/`$default`) with a Cognito JWT authorizer, a
   `${prefix}-connections` table **with** TTL, a `${prefix}-conversations` table,
   and `bedrock:InvokeModelWithResponseStream` on the chat function's role. Note
@@ -1183,10 +1182,11 @@ use-based data mining. Nothing in this design does, and nothing here should
 start.
 
 The place it becomes a live question is **2.2**, where a training log goes into
-a model prompt. **Decided (2026-10-13, owner): the coach uses Anthropic's
-Claude API directly, not Bedrock**, so messages — and, from 2.3, query results
-over the lifter's log — leave our AWS account for a third party. The owner
-accepted that for the coach. What follows from it is in §13: Apple's guideline
+a model prompt. **Decided (2026-10-13, owner): the coach is Claude on Amazon
+Bedrock** — messages, and from 2.3 query results over the log, are processed
+by Bedrock within this AWS account (§13). The owner first chose Anthropic's
+API directly and accepted the data leaving the account; Bedrock was then
+chosen for model access, which happens to keep it in. What follows from it is in §13: Apple's guideline
 **5.1.2(i)** (disclose, and obtain explicit permission, before personal data is
 shared with a third-party AI) becomes a one-time consent screen in the Coach
 tab, and the privacy manifest and App Privacy answers gain the chat as user
@@ -1467,10 +1467,23 @@ verification fixtures.
 **Decided (2026-10-13, owner).** Messages, not live chat: the lifter sends one,
 the reply arrives whole. The phone calls a coach Lambda with Lambda's own
 `Invoke` — the same signed call `delete_account` uses — and the Lambda calls
-**Claude Sonnet 5.5 (`claude-sonnet-5-5`) through Anthropic's API**. No API
-Gateway, no WebSocket, no connections table, no public endpoint: §8's "no
-service in front of anything" still holds, and §9.1's WebSocket sketch is
-superseded.
+**Claude through Amazon Bedrock** with Anthropic's own Python SDK
+(`AnthropicBedrock`). No API Gateway, no WebSocket, no connections table, no
+public endpoint: §8's "no service in front of anything" still holds, and
+§9.1's WebSocket sketch is superseded.
+
+**Which model, measured rather than assumed.** The first plan was Claude
+Sonnet 5.5 on Anthropic's API; the owner chose Bedrock instead, with the best
+model this account can actually call. Probed on 2026-10-13 with a five-token
+request each: every Claude 4.7-and-later model returns `not available for
+this account`, as do Opus 4.6 and the newest OpenAI models. **Callable: Claude
+Opus 4.5, Claude Sonnet 4.6, Sonnet 4.5, Haiku 4.5**, and of the others Kimi
+K2.5, GLM-5, Qwen3-235B and DeepSeek V3.2. **The coach uses Claude Opus 4.5**
+(`us.anthropic.claude-opus-4-5-20251101-v1:0`), the most capable of those;
+Sonnet 4.6 is the cheaper alternative. The model is an environment variable,
+so moving to a newer one when access lands is a configuration change, not a
+deploy. The `global.` profiles were refused where `us.` ones answered, so the
+`us.` (cross-region, US) profile it is.
 
 The cost is that a reply arrives all at once rather than word by word. The
 answer to that is a waiting state the lifter can see, not a stream — and
@@ -1526,13 +1539,17 @@ now; separate threads are a later change to the table, not to the protocol.
 
 ### 13.3 The model call
 
-- `claude-sonnet-5-5` (owner's choice), adaptive thinking (the model's
-  default), `output_config.effort = "medium"` to start — coaching answers want
-  more than chat-level effort and less than agentic work; re-tune on real use.
-- **Refusal fallback on**: `fallbacks: "default"` with beta
-  `server-side-fallback-2026-07-01`. A turn that still ends in
+- Claude Opus 4.5 through `AnthropicBedrock(aws_region=…)`, which signs with
+  the Lambda role's own credentials — no key to store or rotate. Opus 4.5
+  predates adaptive thinking, so thinking is `{type: "enabled",
+  budget_tokens: 2048}` under `max_tokens` 8000: enough to reason about a
+  program, not enough to make a chat reply slow.
+- **Bedrock has no server-side refusal fallback.** A turn ending in
   `stop_reason == "refusal"` is answered with a plain "I can't help with that
   one" rather than an empty bubble.
+- **No automatic prompt caching on Bedrock** — an explicit `cache_control`
+  breakpoint on the system prompt instead. (Below the model's minimum it
+  simply doesn't cache, which costs nothing.)
 - **The system prompt carries the Core Tenets** the coach must not violate:
   it advises and never claims to have changed the plan (§1); RPE is exertion,
   not reps in reserve (§3); achieved, goal and theoretical maxes are distinct
@@ -1540,18 +1557,19 @@ now; separate threads are a later change to the table, not to the protocol.
   rather than invent numbers (§10). It is static, so it is cached
   (`cache_control`), and nothing volatile — no date, no id — goes in it.
 - Python's official `anthropic` SDK (1.x), bundled into the deployment zip like
-  `cryptography`; standard `anthropic.*Error` classes, most specific first.
-  `max_tokens` 8000 — a coaching reply, not a document.
+  `cryptography` (≈23 MB of wheels; boto3 comes from the runtime); standard
+  `anthropic.*Error` classes, most specific first. A model or network failure
+  is answered `{"error": "unavailable"}` so the phone keeps the message pending
+  and retries — never a reply invented in its place.
 
 ### 13.4 Resources (for `terraform-infrastructure`)
 
 | resource | notes |
 | --- | --- |
-| `${prefix}-coach` Lambda | python3.12, arm64, handler `liftcoach_server.handlers.coach_reply`, **timeout 120 s**, memory 512 MB, reserved concurrency 2; env `COACH_REPLIES_TABLE`, `ANTHROPIC_API_KEY_PARAM = /lift-coach-prod/anthropic/api-key`, `COACH_MODEL = claude-sonnet-5-5`; 14-day log group; placeholder zip + `ignore_changes` |
-| role grants | `dynamodb:GetItem`, `PutItem` on the replies table; `ssm:GetParameter` on exactly the key parameter; `kms:Decrypt` on `aws/ssm` via `ssm.us-west-2.amazonaws.com`. No S3 until 2.3. |
+| `${prefix}-coach` Lambda | python3.12, arm64, handler `liftcoach_server.handlers.coach_reply`, **timeout 120 s**, memory 512 MB, reserved concurrency 2; env `COACH_REPLIES_TABLE`, `COACH_MODEL = us.anthropic.claude-opus-4-5-20251101-v1:0`; 14-day log group; placeholder zip + `ignore_changes` |
+| role grants | `dynamodb:GetItem`, `PutItem` on the replies table; `bedrock:InvokeModel` on the `us.` inference profile **and** on the foundation model in each region it routes to (`arn:aws:bedrock:{us-east-1,us-east-2,us-west-2}::foundation-model/anthropic.claude-opus-4-5-20251101-v1:0`) — a cross-region profile is authorised against both. Sonnet 4.6 granted the same way, so switching model needs no IAM change. No S3 until 2.3. |
 | `${prefix}-coach-replies` table | `pk` (S, `USER#{sub}`) + `sk` (S, message id), on-demand, **TTL on `expiresAt`**, no deletion protection (it is a cache) |
 | phone role | `lambda:InvokeFunction` on `${prefix}-coach`, beside the deletion grant |
-| SSM `/lift-coach-prod/anthropic/api-key` | SecureString, **created by the owner out of band** from console.anthropic.com, like the Apple key — never in state, never in a variable |
 
 `deploy-server.yml` gains the function name. The phone's `CloudConfig` gains
 `coachFunction`.
@@ -1562,10 +1580,10 @@ is what makes that one query rather than a scan; the TTL would remove the items
 within a week anyway, but "deleted" means now. The deletion role gains
 `dynamodb:Query` and `DeleteItem` on the replies table.
 
-**Spend.** The Anthropic API is billed by Anthropic, so the cap that matters is
-**a monthly spend limit on the API key's workspace in the Anthropic console**
-(owner), not the AWS budget in §9.1 — that one still matters for Lambda and
-DynamoDB, at pennies.
+**Spend.** Bedrock bills to this AWS account, so §9.1's budget alarm is the
+cap that matters — and there isn't one yet. At Opus 4.5's Bedrock price a
+coaching exchange is a few cents; reserved concurrency 2 bounds how fast it
+can run, not how much. The owner chose to continue without a cap for now.
 
 ### 13.5 The app
 
@@ -1574,14 +1592,17 @@ DynamoDB, at pennies.
   tab, and iPhone shows five** — a sixth folds the last two into a system
   "More" list. So a tab has to move: the plan is Profile leaves the tab bar for
   a button in Home's toolbar (it is settings, visited rarely), and Coach takes
-  its place. Owner to confirm.
+  its place. Confirmed by the owner (2026-10-13).
 - **Waiting is visible.** The sent message shows immediately with a "sending"
   state; a typing indicator stands in for the reply until it lands; the tab
   item carries a badge when a reply arrives while the lifter is elsewhere.
 - **Consent first** (guideline 5.1.2(i)). Before the first message, one screen
-  says that messages go to Anthropic's Claude to generate replies — and, from
-  2.3, that the coach reads the training log to answer — and asks to continue.
-  The choice is stored; until it's given, the composer is the consent screen.
+  says that messages are answered by Anthropic's Claude, run through Amazon
+  Bedrock — and, from 2.3, that the coach reads the training log to answer —
+  and asks to continue. Kept even though Bedrock processes inside our own AWS
+  account: the rule is about personal data reaching an AI model the lifter
+  didn't pick, and saying so costs one screen. The choice is stored; until
+  it's given, the composer is the consent screen.
 - **Privacy manifest and App Privacy**: add *Other User Content* (the chat),
   linked to the user, app functionality, not tracking.
 - **Not in 2.2:** tools over the snapshot (2.3), drafts (2.3), screen context
