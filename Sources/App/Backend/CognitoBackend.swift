@@ -1,5 +1,6 @@
 import Foundation
 import LiftingCoachCloud
+import LiftingCoachModel
 import LiftingCoachPersistence
 
 /// The phase 2 backend: Cognito for identity, S3 for the snapshot.
@@ -160,7 +161,7 @@ actor CognitoBackend: BackendClient {
     }
 
     func sendCoachMessage(
-        id: String, text: String, history: [CoachOutbox.Turn]
+        id: String, text: String, history: [CoachOutbox.Turn], context: CoachOutbox.Context
     ) async throws -> CoachOutbox.Reply {
         let credentials: AWSCredentials
         do {
@@ -177,9 +178,20 @@ actor CognitoBackend: BackendClient {
             let reply = try await coach.send(
                 messageID: id, text: text,
                 history: history.map { CoachClient.Turn(role: $0.role == .lifter ? "user" : "assistant", text: $0.text) },
+                memory: context.memory.map {
+                    CoachClient.MemoryEntry(id: $0.id, category: $0.category.rawValue, text: $0.text, source: $0.source.rawValue)
+                },
+                today: context.today,
                 accessToken: accessToken, credentials: credentials
             )
-            return CoachOutbox.Reply(id: reply.id, text: reply.text, createdAt: reply.createdAt)
+            return CoachOutbox.Reply(
+                id: reply.id, text: reply.text, createdAt: reply.createdAt,
+                memoryChanges: reply.memory.compactMap { change in
+                    CoachMemoryChange.Operation(rawValue: change.op).map {
+                        CoachMemoryChange(op: $0, id: change.id, category: change.category, text: change.text)
+                    }
+                }
+            )
         } catch CoachClient.Failure.signInRequired {
             throw CoachOutbox.Refusal.signInRequired
         } catch CoachClient.Failure.rejected(let detail) {

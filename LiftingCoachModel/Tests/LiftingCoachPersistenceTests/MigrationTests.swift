@@ -127,4 +127,33 @@ struct MigrationTests {
         // Absent means one.
         #expect(prescription.count == 1)
     }
+
+    /// The phone has coach messages from before conversations existed. They
+    /// must arrive in one conversation, not as rows the Coach tab can't show.
+    @Test("Coach messages from before v17 are gathered into one conversation")
+    func v16MessagesSurviveV17() throws {
+        let queue = try database(upTo: "v16_coachMessage")
+        try queue.write { db in
+            try db.execute(sql: """
+                INSERT INTO coachMessage (id, role, text, createdAt, status) VALUES
+                ('m1', 'lifter', 'Hi', '2026-10-14 10:00:00.000', 'sent'),
+                ('m1-reply', 'coach', 'Hello', '2026-10-14 10:00:03.000', 'sent')
+                """)
+        }
+        try AppDatabase.migrator.migrate(queue)
+
+        let store = CoachStore(try AppDatabase(queue))
+        let conversations = try store.conversations()
+        #expect(conversations.count == 1)
+        #expect(conversations[0].title == "Earlier conversation")
+        #expect(try store.messages(in: conversations[0].id).map(\.id) == ["m1", "m1-reply"])
+    }
+
+    @Test("A phone with no coach messages gets no empty conversation from v17")
+    func v17NoEmptyConversation() throws {
+        let queue = try database(upTo: "v16_coachMessage")
+        try AppDatabase.migrator.migrate(queue)
+        #expect(try CoachStore(try AppDatabase(queue)).conversations().isEmpty)
+    }
 }
+

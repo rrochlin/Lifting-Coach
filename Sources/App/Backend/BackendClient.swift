@@ -105,7 +105,7 @@ public protocol BackendClient: Sendable {
     /// The server answers an id at most once, so calling this again for a
     /// message whose reply was lost returns that same reply.
     func sendCoachMessage(
-        id: String, text: String, history: [CoachOutbox.Turn]
+        id: String, text: String, history: [CoachOutbox.Turn], context: CoachOutbox.Context
     ) async throws -> CoachOutbox.Reply
 }
 
@@ -232,7 +232,7 @@ public struct UnavailableBackend: BackendClient {
     }
 
     public func sendCoachMessage(
-        id: String, text: String, history: [CoachOutbox.Turn]
+        id: String, text: String, history: [CoachOutbox.Turn], context: CoachOutbox.Context
     ) async throws -> CoachOutbox.Reply {
         throw CoachOutbox.Refusal.unavailable
     }

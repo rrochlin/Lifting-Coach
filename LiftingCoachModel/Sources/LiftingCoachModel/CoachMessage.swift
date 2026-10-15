@@ -30,10 +30,14 @@ public struct CoachMessage: Identifiable, Hashable, Sendable {
     public var status: Status
     /// On a reply: the lifter's message it answers.
     public var inReplyTo: String?
+    public var conversationID: String?
+    /// On a reply: what it changed in the lifter profile.
+    public var memoryChanges: [CoachMemoryChange]
 
     public init(
         id: String, role: Role, text: String, createdAt: Date,
-        status: Status = .sent, inReplyTo: String? = nil
+        status: Status = .sent, inReplyTo: String? = nil,
+        conversationID: String? = nil, memoryChanges: [CoachMemoryChange] = []
     ) {
         self.id = id
         self.role = role
@@ -41,6 +45,8 @@ public struct CoachMessage: Identifiable, Hashable, Sendable {
         self.createdAt = createdAt
         self.status = status
         self.inReplyTo = inReplyTo
+        self.conversationID = conversationID
+        self.memoryChanges = memoryChanges
     }
 
     /// The longest message the server accepts (`coach.MESSAGE_LIMIT`).

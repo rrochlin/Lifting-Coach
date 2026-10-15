@@ -86,6 +86,7 @@ KNOWN_MIGRATIONS: tuple[str, ...] = (
     "v14_cognitoSub",
     "v15_exerciseTrackingPreference",
     "v16_coachMessage",
+    "v17_coachConversationsAndMemory",
 )
 
 

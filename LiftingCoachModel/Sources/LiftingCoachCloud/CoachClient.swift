@@ -19,10 +19,34 @@ public struct CoachClient: Sendable {
         }
     }
 
+    /// A lifter-profile entry as the coach function takes it.
+    public struct MemoryEntry: Sendable, Equatable {
+        public var id: String
+        public var category: String
+        public var text: String
+        public var source: String
+
+        public init(id: String, category: String, text: String, source: String) {
+            self.id = id
+            self.category = category
+            self.text = text
+            self.source = source
+        }
+    }
+
+    /// A change the coach made to the profile.
+    public struct MemoryChange: Sendable, Equatable {
+        public var op: String
+        public var id: String
+        public var category: String
+        public var text: String
+    }
+
     public struct Reply: Sendable, Equatable {
         public var id: String
         public var text: String
         public var createdAt: Date
+        public var memory: [MemoryChange]
     }
 
     public enum Failure: Error, Equatable, LocalizedError {
@@ -55,6 +79,7 @@ public struct CoachClient: Sendable {
 
     public func send(
         messageID: String, text: String, history: [Turn],
+        memory: [MemoryEntry] = [], today: String = "",
         accessToken: String, credentials: AWSCredentials
     ) async throws -> Reply {
         let body = try JSONSerialization.data(withJSONObject: [
@@ -62,6 +87,8 @@ public struct CoachClient: Sendable {
             "messageId": messageID,
             "text": text,
             "history": history.map { ["role": $0.role, "text": $0.text] },
+            "memory": memory.map { ["id": $0.id, "category": $0.category, "text": $0.text, "source": $0.source] },
+            "today": today,
         ] as [String: Any])
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -104,6 +131,13 @@ public struct CoachClient: Sendable {
             let text = body["text"] as? String
         else { throw Failure.unavailable }
         let created = (body["createdAt"] as? String).flatMap { ISO8601DateFormatter().date(from: $0) } ?? Date()
-        return Reply(id: id, text: text, createdAt: created)
+        let changes = ((body["memory"] as? [[String: Any]]) ?? []).compactMap { change -> MemoryChange? in
+            guard let op = change["op"] as? String, let id = change["id"] as? String else { return nil }
+            return MemoryChange(
+                op: op, id: id,
+                category: (change["category"] as? String) ?? "", text: (change["text"] as? String) ?? ""
+            )
+        }
+        return Reply(id: id, text: text, createdAt: created, memory: changes)
     }
 }

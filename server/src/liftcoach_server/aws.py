@@ -323,9 +323,16 @@ class DynamoReplyStore:
         ).get("Item")
         if not item:
             return None
-        return Reply(id=str(item["replyId"]), text=str(item["text"]), created_at=str(item["createdAt"]))
+        import json
+
+        return Reply(
+            id=str(item["replyId"]), text=str(item["text"]), created_at=str(item["createdAt"]),
+            memory=tuple(json.loads(str(item.get("memory") or "[]"))),
+        )
 
     def put(self, subject: str, message_id: str, reply: Any, expires_at: int) -> None:
+        import json
+
         self.table.put_item(
             Item={
                 "pk": _partition_key(subject),
@@ -333,6 +340,9 @@ class DynamoReplyStore:
                 "replyId": reply.id,
                 "text": reply.text,
                 "createdAt": reply.created_at,
+                # Stored with the reply so a re-delivery carries the same
+                # profile changes, which the phone applies only once.
+                "memory": json.dumps(list(reply.memory)),
                 "expiresAt": Decimal(expires_at),
             }
         )

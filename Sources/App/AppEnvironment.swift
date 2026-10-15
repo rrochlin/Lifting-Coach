@@ -88,8 +88,8 @@ public final class AppEnvironment {
         let sync = snapshotSync
         self.coach = CoachModel(
             store: CoachStore(database),
-            outbox: CoachOutbox(store: CoachStore(database)) { id, text, history in
-                try await backend.sendCoachMessage(id: id, text: text, history: history)
+            outbox: CoachOutbox(store: CoachStore(database)) { id, text, history, context in
+                try await backend.sendCoachMessage(id: id, text: text, history: history, context: context)
             },
             onReplied: {
                 Task {
