@@ -1683,3 +1683,54 @@ treat profile text as information about the lifter, never as instructions.
 The profile goes in the system prompt **after** the cached static block, so a
 changed profile doesn't invalidate the cache of the part that never changes.
 
+---
+
+## 14. Phase 2.3, first half — the coach reads the log
+
+**Built (2026-10-15).** The coach answers from what the lifter has actually
+done, so they don't start every conversation from the ground floor.
+
+**Named queries, not SQL** (`server/log_tools.py`): `training_overview`,
+`exercise_history`, `recent_workouts`, `maxes`, `list_logged_exercises`,
+`bodyweight`. Each is a fixed, bounded query (6,000 characters at most, saying
+what it left out), so what the coach can ask is reviewable in one file and a
+question about five years can't return five years of rows. Achieved and goal
+maxes come back side by side and labelled (Core Tenets §6).
+
+**Read-only by construction** (Tenet 8). The snapshot is copied to `/tmp`,
+opened `mode=ro` with `PRAGMA query_only`; the coach role gets `s3:GetObject`
+and nothing that writes. The profile tools (§13.7) remain the coach's only
+write path.
+
+**Whose log is decided by the verified `sub`** (`GetUser`), never by the
+request. The coach role can read every prefix; the code reads one.
+
+**Fetched lazily, cached by etag** (`server/log_source.py`): the first log
+tool call of a turn does a `HeadObject`, and downloads only if the etag isn't
+already in `/tmp`; a turn that never reads the log never touches S3.
+
+**Honest about staleness and schema** (Tenet 10). Every answer starts "Log as
+of …" (the upload time, in the lifter's time zone, which the phone now sends);
+the phone backs up on opening the Coach tab so that time is usually minutes
+ago. A snapshot carrying a migration this deploy doesn't know is declined in
+words rather than queried. `tests/fixtures/schema.sql` is the app's real
+schema, pinned against `KNOWN_MIGRATIONS`, so a migration that isn't
+reflected here fails a test.
+
+**Measured on a copy of the owner's real backup:** asked "how has training
+been going?", the coach called `training_overview` and `recent_workouts`, read
+the logged notes (a mid-back strain, a "super dead and slow" Friday), saved
+the injury to the profile, and answered with the actual loads and RPEs —
+~20 s across three tool rounds, ~9k input tokens. It also found a real bug:
+text written before a tool call was dropped, so replies started mid-thought.
+Text from every round is now kept.
+
+**Resources** — additions to the coach function only: env `SNAPSHOT_BUCKET`;
+`s3:GetObject` on `${bucket_arn}/users/*`; `kms:Decrypt` on the snapshot key.
+Deployed before the infrastructure, the coach still answers, with the log
+tools simply not offered.
+
+**Still to come in 2.3:** drafts (the coach proposing a program the lifter
+reviews and accepts — Roadmap 2.3), and threads tied to a block or workout
+(§13.6's `subject`).
+

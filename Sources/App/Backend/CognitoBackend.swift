@@ -182,6 +182,7 @@ actor CognitoBackend: BackendClient {
                     CoachClient.MemoryEntry(id: $0.id, category: $0.category.rawValue, text: $0.text, source: $0.source.rawValue)
                 },
                 today: context.today,
+                timeZone: context.timeZone,
                 accessToken: accessToken, credentials: credentials
             )
             return CoachOutbox.Reply(

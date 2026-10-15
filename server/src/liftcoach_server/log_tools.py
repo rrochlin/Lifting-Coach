@@ -26,7 +26,7 @@ from __future__ import annotations
 import datetime
 import sqlite3
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 from zoneinfo import ZoneInfo
 
 #: Upper bound on any one answer, in characters. A tool that would say more
@@ -113,8 +113,14 @@ NAMES = frozenset(tool["name"] for tool in TOOLS)
 class LogReader:
     """Runs the coach's log tool calls against one snapshot, read-only."""
 
-    def __init__(self, snapshot: LogSnapshot | None, time_zone: str | None = None) -> None:
-        self._snapshot = snapshot
+    def __init__(
+        self, snapshot: LogSnapshot | None | Callable[[], LogSnapshot | None], time_zone: str | None = None
+    ) -> None:
+        # A loader, so the snapshot is fetched on the first log tool call of a
+        # turn and not at all on a turn that never asks.
+        self._load = snapshot if callable(snapshot) else (lambda: snapshot)
+        self._loaded = False
+        self._snapshot: LogSnapshot | None = None
         try:
             self._zone = ZoneInfo(time_zone) if time_zone else datetime.UTC
         except (KeyError, ValueError):
@@ -128,6 +134,12 @@ class LogReader:
 
     def run(self, name: str, tool_input: Any) -> tuple[str, bool]:
         """`(result text, is_error)` for one tool call."""
+        if not self._loaded:
+            self._loaded = True
+            try:
+                self._snapshot = self._load()
+            except Exception as error:
+                return f"Couldn't fetch the log right now ({type(error).__name__}). Say so; don't guess.", True
         if self._snapshot is None:
             return ("The lifter hasn't backed up their log yet, so there's nothing to read. "
                     "Ask them, or suggest signing in so the app can back it up."), False

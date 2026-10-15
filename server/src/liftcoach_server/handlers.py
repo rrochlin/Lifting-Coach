@@ -284,6 +284,8 @@ class CoachDeps:
     accounts: accounts.Accounts
     store: coach.ReplyStore
     model: coach.CoachModel
+    #: The lifter's snapshot, for the log tools. `None` leaves them off.
+    snapshots: Any = None
 
 
 _coach_deps: CoachDeps | None = None
@@ -328,6 +330,8 @@ def coach_reply(event: Event, context: Any = None) -> dict[str, Any]:
             model=_coach_deps.model,
             memory=payload.get("memory"),
             today=payload.get("today"),
+            snapshots=_coach_deps.snapshots,
+            time_zone=payload.get("timeZone"),
         )
     except accounts.InvalidToken as refusal:
         print(f"coach refused: {refusal.message}")
