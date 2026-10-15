@@ -293,7 +293,8 @@ struct CoachClientTests {
         let reply = try await send(transport)
 
         #expect(reply == CoachClient.Reply(
-            id: "m-1-reply", text: "Yes.", createdAt: ISO8601DateFormatter().date(from: "2026-10-13T20:00:00Z")!
+            id: "m-1-reply", text: "Yes.", createdAt: ISO8601DateFormatter().date(from: "2026-10-13T20:00:00Z")!,
+            memory: []
         ))
         let sent = try #require(transport.sent.first)
         #expect(sent.url?.absoluteString ==
@@ -323,4 +324,24 @@ struct CoachClientTests {
             await #expect(throws: expected) { try await send(FakeTransport([response])) }
         }
     }
+
+    @Test("The profile and the date go with the message; the coach's changes come back")
+    func memoryRoundTrip() async throws {
+        let transport = FakeTransport([(200, [:], json([
+            "messageId": "m-1",
+            "reply": ["id": "m-1-reply", "text": "Noted.", "createdAt": "2026-10-14T20:00:00Z",
+                      "memory": [["op": "add", "id": "p-2", "category": "goals", "text": "Total 1500."]]],
+        ]))])
+        let reply = try await CoachClient(transport: transport).send(
+            messageID: "m-1", text: "Hi", history: [],
+            memory: [.init(id: "p-1", category: "constraints", text: "Bad shoulder.", source: "lifter")],
+            today: "2026-10-14", accessToken: "a", credentials: fakeCredentials
+        )
+        #expect(reply.memory == [.init(op: "add", id: "p-2", category: "goals", text: "Total 1500.")])
+        let payload = body(try #require(transport.sent.first))
+        #expect(payload["today"] as? String == "2026-10-14")
+        #expect((payload["memory"] as? [[String: String]]) ==
+            [["id": "p-1", "category": "constraints", "text": "Bad shoulder.", "source": "lifter"]])
+    }
 }
+

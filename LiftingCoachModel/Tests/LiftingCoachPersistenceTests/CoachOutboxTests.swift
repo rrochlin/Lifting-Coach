@@ -12,13 +12,17 @@ struct CoachOutboxTests {
     final class Server: @unchecked Sendable {
         var answered: [String: CoachOutbox.Reply] = [:]
         var calls: [(id: String, history: [CoachOutbox.Turn])] = []
+        var contexts: [CoachOutbox.Context] = []
         var failures: [Error] = []
+        var changes: [CoachMemoryChange] = []
 
-        func send(_ id: String, _ text: String, _ history: [CoachOutbox.Turn]) throws -> CoachOutbox.Reply {
+        func send(_ id: String, _ text: String, _ history: [CoachOutbox.Turn],
+                  _ context: CoachOutbox.Context = .init(memory: [], today: "")) throws -> CoachOutbox.Reply {
             calls.append((id, history))
+            contexts.append(context)
             if !failures.isEmpty { throw failures.removeFirst() }
             if let reply = answered[id] { return reply }
-            let reply = CoachOutbox.Reply(id: "\(id)-reply", text: "re: \(text)", createdAt: Date())
+            let reply = CoachOutbox.Reply(id: "\(id)-reply", text: "re: \(text)", createdAt: Date(), memoryChanges: changes)
             answered[id] = reply
             return reply
         }
@@ -27,8 +31,8 @@ struct CoachOutboxTests {
     private func make() throws -> (CoachStore, CoachOutbox, Server) {
         let store = CoachStore(try AppDatabase.inMemory())
         let server = Server()
-        let outbox = CoachOutbox(store: store) { id, text, history in
-            try server.send(id, text, history)
+        let outbox = CoachOutbox(store: store, now: { Date(timeIntervalSince1970: 1_791_000_000) }) { id, text, history, context in
+            try server.send(id, text, history, context)
         }
         return (store, outbox, server)
     }
@@ -144,8 +148,8 @@ struct CoachOutboxTests {
     @Test("Messages go in order, each with the exchanges before it")
     func orderAndHistory() async throws {
         let (store, outbox, server) = try make()
-        try store.addPending("One", at: t0)
-        try store.addPending("Two", at: t0.addingTimeInterval(1))
+        let first = try store.addPending("One", at: t0)
+        try store.addPending("Two", in: first.conversationID, at: t0.addingTimeInterval(1))
 
         await outbox.deliverPending()
         #expect(server.calls.count == 2)
@@ -157,10 +161,10 @@ struct CoachOutboxTests {
     func failedNotInHistory() throws {
         let t = { (s: Double) in Date(timeIntervalSince1970: 1_770_000_000 + s) }
         let conversation = [
-            CoachMessage(id: "a", role: .lifter, text: "kept", createdAt: t(0)),
-            CoachMessage(id: "a-reply", role: .coach, text: "answer", createdAt: t(1)),
-            CoachMessage(id: "b", role: .lifter, text: "dropped", createdAt: t(2), status: .failed("x")),
-            CoachMessage(id: "c", role: .lifter, text: "now", createdAt: t(3), status: .pending),
+            CoachMessage(id: "a", role: .lifter, text: "kept", createdAt: t(0), conversationID: "c1"),
+            CoachMessage(id: "a-reply", role: .coach, text: "answer", createdAt: t(1), conversationID: "c1"),
+            CoachMessage(id: "b", role: .lifter, text: "dropped", createdAt: t(2), status: .failed("x"), conversationID: "c1"),
+            CoachMessage(id: "c", role: .lifter, text: "now", createdAt: t(3), status: .pending, conversationID: "c1"),
         ]
         #expect(CoachOutbox.history(for: conversation[3], in: conversation).map(\.text) == ["kept", "answer"])
     }
@@ -169,9 +173,9 @@ struct CoachOutboxTests {
     func boundedHistory() {
         let conversation = (0..<100).map {
             CoachMessage(id: "\($0)", role: $0 % 2 == 0 ? .lifter : .coach, text: "\($0)",
-                         createdAt: Date(timeIntervalSince1970: Double($0)))
+                         createdAt: Date(timeIntervalSince1970: Double($0)), conversationID: "c1")
         }
-        let now = CoachMessage(id: "now", role: .lifter, text: "now", createdAt: Date(), status: .pending)
+        let now = CoachMessage(id: "now", role: .lifter, text: "now", createdAt: Date(), status: .pending, conversationID: "c1")
         #expect(CoachOutbox.history(for: now, in: conversation + [now]).count == CoachOutbox.historyLimit)
     }
 
@@ -186,5 +190,129 @@ struct CoachOutboxTests {
         _ = await (a, b)
         #expect(server.calls.count == 1)
         #expect(try store.all().count == 2)
+    }
+
+    // MARK: Conversations
+
+    @Test("A message with no conversation starts one, titled by the message")
+    func startsConversation() throws {
+        let (store, _, _) = try make()
+        let message = try store.addPending("How do I peak for a meet?\nMore detail here.", at: t0)
+        let conversations = try store.conversations()
+        #expect(conversations.map(\.title) == ["How do I peak for a meet?"])
+        #expect(message.conversationID == conversations[0].id)
+    }
+
+    @Test("A new conversation doesn't carry the last one's history")
+    func historyIsPerConversation() async throws {
+        let (store, outbox, server) = try make()
+        try store.addPending("Topic A", at: t0)
+        await outbox.deliverPending()
+        try store.addPending("Topic B", at: t0.addingTimeInterval(10))
+        await outbox.deliverPending()
+
+        #expect(server.calls.count == 2)
+        #expect(server.calls[1].history.isEmpty)
+        #expect(try store.conversations().count == 2)
+    }
+
+    @Test("Deleting a conversation deletes its messages")
+    func deleteConversation() throws {
+        let (store, _, _) = try make()
+        let message = try store.addPending("Bye", at: t0)
+        try store.deleteConversation(try #require(message.conversationID))
+        #expect(try store.all().isEmpty)
+        #expect(try store.conversations().isEmpty)
+    }
+
+    // MARK: The lifter profile
+
+    @Test("Each message carries the whole profile and the lifter's date")
+    func context() async throws {
+        let (store, outbox, server) = try make()
+        try store.addMemory("Trains Mon–Sat.", category: .constraints, at: t0)
+        try store.addPending("Hi", at: t0)
+        await outbox.deliverPending()
+
+        let context = try #require(server.contexts.first)
+        #expect(context.memory.map(\.text) == ["Trains Mon–Sat."])
+        #expect(context.memory.first?.source == .lifter)
+        #expect(context.today == CoachOutbox.localDate(Date(timeIntervalSince1970: 1_791_000_000)))
+    }
+
+    @Test("A reply's profile changes are applied with it, and shown on it")
+    func appliesChanges() async throws {
+        let (store, outbox, server) = try make()
+        server.changes = [CoachMemoryChange(op: .add, id: "p-1", category: "goals", text: "Total 1500 by June 2027.")]
+        try store.addPending("My goal is 1500.", at: t0)
+        await outbox.deliverPending()
+
+        #expect(try store.memory().map(\.text) == ["Total 1500 by June 2027."])
+        #expect(try store.memory().first?.source == .coach)
+        let reply = try #require(try store.all().last)
+        #expect(reply.memoryChanges.map(\.id) == ["p-1"])
+    }
+
+    /// Re-delivery carries the same changes; applying a remove-then-add twice
+    /// would be harmless, but an add after the lifter deleted it would bring
+    /// back something they'd removed.
+    @Test("A re-delivered reply applies nothing a second time")
+    func appliesOnce() throws {
+        let (store, _, _) = try make()
+        let message = try store.addPending("Hi", at: t0)
+        let reply = CoachMessage(
+            id: "\(message.id)-reply", role: .coach, text: "Noted.", createdAt: t0,
+            memoryChanges: [CoachMemoryChange(op: .add, id: "p-1", category: "goals", text: "Squat 500.")]
+        )
+        try store.deliver(reply: reply, answering: message.id)
+        try store.deleteMemory("p-1")
+        try store.deliver(reply: reply, answering: message.id)
+        #expect(try store.memory().isEmpty)
+    }
+
+    @Test("A change that breaks the rules is skipped, not trimmed")
+    func validatesChanges() throws {
+        let (store, _, _) = try make()
+        let message = try store.addPending("Hi", at: t0)
+        let reply = CoachMessage(
+            id: "\(message.id)-reply", role: .coach, text: "ok", createdAt: t0,
+            memoryChanges: [
+                CoachMemoryChange(op: .add, id: "p-1", category: "secrets", text: "x"),
+                CoachMemoryChange(op: .add, id: "p-2", category: "goals", text: String(repeating: "y", count: 301)),
+                CoachMemoryChange(op: .add, id: "", category: "goals", text: "no id"),
+                CoachMemoryChange(op: .add, id: "p-3", category: "notes", text: "fine"),
+            ]
+        )
+        try store.deliver(reply: reply, answering: message.id)
+        #expect(try store.memory().map(\.id) == ["p-3"])
+    }
+
+    @Test("The lifter's edits are marked as theirs; revise and forget work")
+    func lifterEdits() throws {
+        let (store, _, _) = try make()
+        let message = try store.addPending("Hi", at: t0)
+        try store.deliver(reply: CoachMessage(
+            id: "r", role: .coach, text: "ok", createdAt: t0,
+            memoryChanges: [CoachMemoryChange(op: .add, id: "p-1", category: "experience", text: "Two years.")]
+        ), answering: message.id)
+
+        try store.editMemory("p-1", text: "Six years, actually.")
+        #expect(try store.memory().first?.source == .lifter)
+        #expect(try store.memory().first?.text == "Six years, actually.")
+
+        let next = try store.addPending("Again", in: message.conversationID, at: t0.addingTimeInterval(5))
+        try store.deliver(reply: CoachMessage(
+            id: "r2", role: .coach, text: "ok", createdAt: t0,
+            memoryChanges: [CoachMemoryChange(op: .remove, id: "p-1", category: "experience", text: "Six years, actually.")]
+        ), answering: next.id)
+        #expect(try store.memory().isEmpty)
+    }
+
+    @Test("Profile entries come back grouped in category order")
+    func grouped() throws {
+        let (store, _, _) = try make()
+        try store.addMemory("note", category: .notes, at: t0)
+        try store.addMemory("goal", category: .goals, at: t0.addingTimeInterval(1))
+        #expect(try store.memory().map(\.category) == [.goals, .notes])
     }
 }

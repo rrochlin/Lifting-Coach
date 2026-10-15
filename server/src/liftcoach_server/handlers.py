@@ -295,7 +295,10 @@ def configure_coach(deps: CoachDeps | None) -> None:
 
 
 def coach_reply(event: Event, context: Any = None) -> dict[str, Any]:
-    """`{"accessToken", "messageId", "text", "history"}` → `{"messageId", "reply"}`.
+    """`{"accessToken", "messageId", "text", "history", "memory"}` → `{"messageId", "reply"}`.
+
+    `memory` is the lifter profile (INFRA-SPEC §13.7); the reply carries any
+    changes the coach made to it.
 
     Refusals are answers with an `error` the phone acts on, not raises:
     `signInRequired` (sign in again), `badRequest` (don't resend),
@@ -323,6 +326,8 @@ def coach_reply(event: Event, context: Any = None) -> dict[str, Any]:
             accounts=_coach_deps.accounts,
             store=_coach_deps.store,
             model=_coach_deps.model,
+            memory=payload.get("memory"),
+            today=payload.get("today"),
         )
     except accounts.InvalidToken as refusal:
         print(f"coach refused: {refusal.message}")
@@ -338,5 +343,6 @@ def coach_reply(event: Event, context: Any = None) -> dict[str, Any]:
     print(
         f"coach answered {message_id} in {time.monotonic() - started:.1f}s"
         f" redelivered={answered.redelivered} usage={answered.usage}"
+        f" profileChanges={len(answered.reply.memory)}"
     )
     return {"messageId": message_id, "reply": answered.reply.as_body()}

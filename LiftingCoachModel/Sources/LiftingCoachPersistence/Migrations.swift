@@ -600,6 +600,51 @@ extension AppDatabase {
             try db.create(index: "coachMessage_on_createdAt", on: "coachMessage", columns: ["createdAt"])
         }
 
+        // Additive. Conversations and the lifter profile (INFRA-SPEC §13.6–7).
+        //
+        // Messages from before conversations existed are gathered into one so
+        // nothing disappears from the Coach tab. `subject` is the optional
+        // block or workout a conversation is about — empty until 2.3 gives it
+        // a use, so that "ask about this workout" needs no schema change then.
+        //
+        // `coachMemory` is what the coach knows about the lifter. It is the
+        // coach's only write path anywhere, and nothing that resolves a
+        // prescription or reads the log reads this table.
+        migrator.registerMigration("v17_coachConversationsAndMemory") { db in
+            try db.create(table: "coachConversation") { t in
+                t.primaryKey("id", .text)
+                t.column("title", .text).notNull()
+                t.column("createdAt", .datetime).notNull()
+                t.column("updatedAt", .datetime).notNull()
+                t.column("subject", .text)
+            }
+            try db.alter(table: "coachMessage") { t in
+                t.add(column: "conversationId", .text)
+                    .references("coachConversation", onDelete: .cascade)
+                // On a reply: the profile changes it made, as JSON, so the
+                // transcript can say what the coach noted.
+                t.add(column: "memoryChanges", .text)
+            }
+            if let first = try Row.fetchOne(db, sql: "SELECT MIN(createdAt) AS a, MAX(createdAt) AS b FROM coachMessage"),
+               let start = first["a"] as Date?, let end = first["b"] as Date? {
+                let id = UUID().uuidString
+                try db.execute(
+                    sql: "INSERT INTO coachConversation (id, title, createdAt, updatedAt) VALUES (?, ?, ?, ?)",
+                    arguments: [id, "Earlier conversation", start, end]
+                )
+                try db.execute(sql: "UPDATE coachMessage SET conversationId = ?", arguments: [id])
+            }
+            try db.create(index: "coachMessage_on_conversation", on: "coachMessage", columns: ["conversationId"])
+
+            try db.create(table: "coachMemory") { t in
+                t.primaryKey("id", .text)
+                t.column("category", .text).notNull()
+                t.column("text", .text).notNull()
+                t.column("source", .text).notNull()
+                t.column("updatedAt", .datetime).notNull()
+            }
+        }
+
         return migrator
     }
 }

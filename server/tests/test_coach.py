@@ -14,7 +14,7 @@ import anthropic
 import httpx2
 import pytest
 
-from liftcoach_server import coach, handlers
+from liftcoach_server import coach, handlers, profile
 from liftcoach_server.accounts import AccountUser, InvalidToken
 from liftcoach_server.coach import (
     BedrockCoach,
@@ -39,18 +39,26 @@ class FakeAccounts:
 
 
 class FakeModel:
+    """Answers with a canned reply, after making any scripted profile calls."""
+
     def __init__(self, reply: str = "Drop to 245 for the back-offs.", refused: bool = False,
-                 fails: int = 0) -> None:
+                 fails: int = 0, tool_calls: list[tuple[str, dict[str, Any]]] | None = None) -> None:
         self.reply = reply
         self.refused = refused
         self.fails = fails
+        self.tool_calls = tool_calls or []
         self.calls: list[list[dict[str, str]]] = []
+        self.profiles: list[str] = []
 
-    def answer(self, system: str, messages: list[dict[str, str]]) -> ModelAnswer:
+    def answer(self, system: str, profile_text: str, messages: list[dict[str, str]],
+               editor: profile.ProfileEditor) -> ModelAnswer:
         self.calls.append(messages)
+        self.profiles.append(profile_text)
         if self.fails:
             self.fails -= 1
             raise ModelUnavailable("throttled")
+        for name, args in self.tool_calls:
+            editor.run(name, args)
         return ModelAnswer(text=self.reply, refused=self.refused, usage={"input": 10, "output": 5})
 
 
@@ -63,9 +71,10 @@ def world() -> handlers.CoachDeps:
 
 
 def send(message_id: str = MESSAGE, text: str = "Squat felt heavy today", token: str = "token",
-         history: Any = None) -> dict[str, Any]:
+         history: Any = None, memory: Any = None) -> dict[str, Any]:
     return handlers.coach_reply(
-        {"accessToken": token, "messageId": message_id, "text": text, "history": history or []}
+        {"accessToken": token, "messageId": message_id, "text": text, "history": history or [],
+         "memory": memory or []}
     )
 
 
@@ -180,23 +189,43 @@ def test_garbage_history_is_treated_as_none() -> None:
 
 
 class FakeMessages:
-    def __init__(self, response: Any = None, raises: Exception | None = None) -> None:
-        self.response = response
+    """A scripted model: one response per call, recording each request."""
+
+    def __init__(self, *responses: Any, raises: Exception | None = None) -> None:
+        self.responses = list(responses)
         self.raises = raises
-        self.kwargs: dict[str, Any] = {}
+        self.requests: list[dict[str, Any]] = []
+
+    @property
+    def kwargs(self) -> dict[str, Any]:
+        return self.requests[-1]
 
     def create(self, **kwargs: Any) -> Any:
-        self.kwargs = kwargs
+        # Copied, because the loop appends to the same list between calls.
+        self.requests.append({**kwargs, "messages": list(kwargs["messages"])})
         if self.raises:
             raise self.raises
-        return self.response
+        return self.responses.pop(0)
+
+
+def usage() -> Any:
+    return SimpleNamespace(input_tokens=1200, output_tokens=80, cache_read_input_tokens=0)
 
 
 def response(text: str = "Answer.", stop_reason: str = "end_turn") -> Any:
     return SimpleNamespace(
         content=[SimpleNamespace(type="thinking", thinking=""), SimpleNamespace(type="text", text=text)],
-        stop_reason=stop_reason,
-        usage=SimpleNamespace(input_tokens=1200, output_tokens=80, cache_read_input_tokens=0),
+        stop_reason=stop_reason, usage=usage(),
+    )
+
+
+def tool_use(*calls: tuple[str, dict[str, Any]]) -> Any:
+    return SimpleNamespace(
+        content=[SimpleNamespace(type="thinking", thinking="")] + [
+            SimpleNamespace(type="tool_use", id=f"tu_{n}", name=name, input=args)
+            for n, (name, args) in enumerate(calls)
+        ],
+        stop_reason="tool_use", usage=usage(),
     )
 
 
@@ -207,24 +236,70 @@ def bedrock(messages: FakeMessages) -> BedrockCoach:
     )
 
 
-def test_the_request_names_the_model_thinks_adaptively_and_caches_the_system_prompt() -> None:
+def run(messages: FakeMessages, entries: list[profile.Entry] | None = None) -> tuple[ModelAnswer, profile.ProfileEditor]:
+    editor = profile.ProfileEditor(entries=list(entries or []))
+    answer = bedrock(messages).answer("system text", "profile text", [{"role": "user", "content": "hi"}], editor)
+    return answer, editor
+
+
+def test_the_request_names_the_model_thinks_adaptively_and_caches_only_the_static_prompt() -> None:
     messages = FakeMessages(response())
-    answer = bedrock(messages).answer("system text", [{"role": "user", "content": "hi"}])
+    answer, _ = run(messages)
 
     sent = messages.kwargs
     assert sent["model"] == "us.anthropic.claude-sonnet-4-6"
     assert sent["thinking"] == {"type": "adaptive"}
     assert sent["output_config"] == {"effort": BedrockCoach.EFFORT}
-    # Explicit breakpoint: Bedrock rejects top-level automatic caching.
+    assert sent["tools"] == profile.TOOLS
+    # The static rules carry the breakpoint; the profile, which changes,
+    # comes after it so it can't invalidate them.
     assert "cache_control" not in sent
-    assert sent["system"] == [{"type": "text", "text": "system text", "cache_control": {"type": "ephemeral"}}]
-    # Only the text blocks become the reply.
+    assert sent["system"] == [
+        {"type": "text", "text": "system text", "cache_control": {"type": "ephemeral"}},
+        {"type": "text", "text": "profile text"},
+    ]
     assert answer.text == "Answer."
     assert answer.usage == {"input": 1200, "output": 80, "cacheRead": 0}
 
 
+def test_profile_tool_calls_are_run_and_the_turn_continues() -> None:
+    messages = FakeMessages(
+        tool_use(("remember", {"category": "goals", "text": "Total 1500 lb by June 2027."})),
+        response("Got it — let's build toward that."),
+    )
+    answer, editor = run(messages)
+
+    assert answer.text == "Got it — let's build toward that."
+    assert [c["op"] for c in editor.changes] == ["add"]
+    # The second request carries the assistant's tool turn back whole and
+    # every result in one user message.
+    second = messages.requests[1]["messages"]
+    assert second[-2]["role"] == "assistant"
+    results = second[-1]["content"]
+    assert results[0]["type"] == "tool_result" and results[0]["tool_use_id"] == "tu_0"
+    assert results[0]["is_error"] is False
+    # Usage is summed across the rounds.
+    assert answer.usage == {"input": 2400, "output": 160, "cacheRead": 0}
+
+
+def test_a_bad_tool_call_is_answered_with_an_error_the_coach_can_read() -> None:
+    messages = FakeMessages(tool_use(("remember", {"category": "secrets", "text": "x"})), response())
+    _, editor = run(messages)
+    result = messages.requests[1]["messages"][-1]["content"][0]
+    assert result["is_error"] is True
+    assert editor.changes == []
+
+
+def test_a_turn_that_keeps_calling_tools_is_cut_off() -> None:
+    rounds = [tool_use(("remember", {"category": "notes", "text": f"n{n}"})) for n in range(10)]
+    messages = FakeMessages(*rounds)
+    run(messages)
+    assert len(messages.requests) == BedrockCoach.MAX_TOOL_ROUNDS + 1
+
+
 def test_a_refusal_stop_is_reported() -> None:
-    assert bedrock(FakeMessages(response("", "refusal"))).answer("s", []).refused
+    answer, _ = run(FakeMessages(response("", "refusal")))
+    assert answer.refused
 
 
 def _request() -> httpx2.Request:
@@ -233,19 +308,43 @@ def _request() -> httpx2.Request:
 
 def test_a_network_or_service_failure_is_unavailable_so_the_phone_retries() -> None:
     with pytest.raises(ModelUnavailable):
-        bedrock(FakeMessages(raises=anthropic.APIConnectionError(request=_request()))).answer("s", [])
-
-    throttled = anthropic.RateLimitError(
-        "slow down", response=httpx2.Response(429, request=_request()), body=None
-    )
+        run(FakeMessages(raises=anthropic.APIConnectionError(request=_request())))
+    throttled = anthropic.RateLimitError("slow down", response=httpx2.Response(429, request=_request()), body=None)
     with pytest.raises(ModelUnavailable):
-        bedrock(FakeMessages(raises=throttled)).answer("s", [])
+        run(FakeMessages(raises=throttled))
 
 
 def test_a_malformed_request_is_rejected_rather_than_retried_forever() -> None:
     bad = anthropic.BadRequestError("bad", response=httpx2.Response(400, request=_request()), body=None)
     with pytest.raises(MessageRejected):
-        bedrock(FakeMessages(raises=bad)).answer("s", [])
+        run(FakeMessages(raises=bad))
+
+
+# ── Profile changes through the handler ──────────────────────────────────────
+
+
+def test_profile_changes_come_back_with_the_reply(world: handlers.CoachDeps) -> None:
+    world.model.tool_calls = [("remember", {"category": "experience", "text": "Six years lifting."})]
+    body = send()
+    assert [(c["op"], c["category"], c["text"]) for c in body["reply"]["memory"]] == [
+        ("add", "experience", "Six years lifting.")
+    ]
+
+
+def test_a_redelivered_reply_carries_the_same_changes_without_running_again(world: handlers.CoachDeps) -> None:
+    world.model.tool_calls = [("remember", {"category": "goals", "text": "Squat 500."})]
+    first = send()
+    world.model.tool_calls = [("remember", {"category": "goals", "text": "Something else."})]
+    assert send() == first
+    assert len(world.model.calls) == 1
+
+
+def test_the_profile_the_phone_sends_is_what_the_coach_reads(world: handlers.CoachDeps) -> None:
+    send(memory=[{"id": "p-1", "category": "constraints", "text": "Left shoulder impingement.", "source": "lifter"},
+                 {"id": "", "category": "goals", "text": "dropped: no id"}])
+    shown = world.model.profiles[-1]
+    assert "Left shoulder impingement. (the lifter's own words)" in shown
+    assert "dropped" not in shown
 
 
 def test_the_system_prompt_states_the_rules_the_coach_must_keep() -> None:
@@ -256,3 +355,16 @@ def test_the_system_prompt_states_the_rules_the_coach_must_keep() -> None:
     assert "not reps in reserve" in prompt  # Tenet 3
     assert "achieved max" in prompt and "goal max" in prompt and "theoretical max" in prompt  # Tenet 6
     assert "can't see the lifter's training log" in prompt  # Tenet 10, until 2.3
+    assert "the only thing your tools can change" in prompt  # §13.7: the narrow write path
+
+
+def test_the_coach_is_told_the_lifters_date(world: handlers.CoachDeps) -> None:
+    """Without it, "a meet next June" was recorded as the June already past."""
+    handlers.coach_reply({"accessToken": "token", "messageId": MESSAGE, "text": "hi", "today": "2026-10-14"})
+    assert world.model.profiles[-1].startswith("Today is Wednesday, 2026-10-14")
+
+
+@pytest.mark.parametrize("today", [None, "", "14/10/2026", "2026-13-40"])
+def test_a_missing_or_malformed_date_falls_back_to_the_servers(world: handlers.CoachDeps, today: Any) -> None:
+    handlers.coach_reply({"accessToken": "token", "messageId": MESSAGE, "text": "hi", "today": today})
+    assert world.model.profiles[-1].startswith("Today is ")

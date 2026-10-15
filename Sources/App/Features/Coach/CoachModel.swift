@@ -15,7 +15,18 @@ import UIKit
 @MainActor
 @Observable
 final class CoachModel {
+    /// Every conversation, newest first.
+    private(set) var conversations: [CoachConversation] = []
+    /// The conversation on screen, or `nil` for a new one not yet started —
+    /// it's created by its first message (`CoachStore.addPending`).
+    private(set) var currentConversationID: String?
+    /// The conversation on screen's messages.
     private(set) var messages: [CoachMessage] = []
+    /// What the coach knows about the lifter (INFRA-SPEC §13.7).
+    private(set) var memory: [CoachMemoryEntry] = []
+    /// Whether any conversation has a message waiting — what deciding to
+    /// deliver depends on, wherever the lifter is looking.
+    private var anyPending = false
     /// A delivery is running. With a pending message, this is the typing
     /// indicator.
     private(set) var isDelivering = false
@@ -45,11 +56,64 @@ final class CoachModel {
         self.outbox = outbox
         self.onReplied = onReplied
         hasConsented = UserDefaults.standard.bool(forKey: Self.consentKey)
+        // Opens on the most recent conversation.
+        currentConversationID = (try? store.conversations())?.first?.id
         reload()
     }
 
+    /// The conversation on screen has a message waiting: the typing indicator.
     var hasPending: Bool {
         messages.contains { $0.role == .lifter && $0.status == .pending }
+    }
+
+    var currentTitle: String {
+        conversations.first { $0.id == currentConversationID }?.title ?? "New conversation"
+    }
+
+    // MARK: Conversations
+
+    func startNewConversation() {
+        currentConversationID = nil
+        reload()
+    }
+
+    func open(_ conversationID: String) {
+        currentConversationID = conversationID
+        reload()
+    }
+
+    func deleteConversation(_ id: String) {
+        try? store.deleteConversation(id)
+        if currentConversationID == id { currentConversationID = nil }
+        reload()
+    }
+
+    // MARK: The lifter profile
+
+    func editMemory(_ id: String, text: String) {
+        try? store.editMemory(id, text: text)
+        memoryChanged()
+    }
+
+    func addMemory(_ text: String, category: CoachMemoryEntry.Category) {
+        try? store.addMemory(text, category: category)
+        memoryChanged()
+    }
+
+    func deleteMemory(_ id: String) {
+        try? store.deleteMemory(id)
+        memoryChanged()
+    }
+
+    func clearMemory() {
+        try? store.clearMemory()
+        memoryChanged()
+    }
+
+    /// The profile is in the database, so the lifter's edits back up too.
+    private func memoryChanged() {
+        reload()
+        onReplied()
     }
 
     func consent() {
@@ -63,7 +127,8 @@ final class CoachModel {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, trimmed.count <= CoachMessage.characterLimit else { return }
         do {
-            try store.addPending(trimmed)
+            let message = try store.addPending(trimmed, in: currentConversationID)
+            currentConversationID = message.conversationID
         } catch {
             return
         }
@@ -82,7 +147,7 @@ final class CoachModel {
     /// when the app becomes active, and after sign-in — any of which may find
     /// messages a killed app left behind.
     func deliver() {
-        guard hasConsented, hasPending, !isDelivering else { return }
+        guard hasConsented, anyPending, !isDelivering else { return }
         retryTask?.cancel()
         isDelivering = true
         let outbox = outbox
@@ -118,6 +183,13 @@ final class CoachModel {
     }
 
     private func reload() {
-        messages = (try? store.all()) ?? messages
+        conversations = (try? store.conversations()) ?? conversations
+        if let currentConversationID {
+            messages = (try? store.messages(in: currentConversationID)) ?? messages
+        } else {
+            messages = []
+        }
+        memory = (try? store.memory()) ?? memory
+        anyPending = ((try? store.all()) ?? []).contains { $0.role == .lifter && $0.status == .pending }
     }
 }

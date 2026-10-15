@@ -29,11 +29,14 @@ public actor CoachOutbox {
         public var id: String
         public var text: String
         public var createdAt: Date
+        /// What the coach changed in the lifter profile (INFRA-SPEC §13.7).
+        public var memoryChanges: [CoachMemoryChange]
 
-        public init(id: String, text: String, createdAt: Date) {
+        public init(id: String, text: String, createdAt: Date, memoryChanges: [CoachMemoryChange] = []) {
             self.id = id
             self.text = text
             self.createdAt = createdAt
+            self.memoryChanges = memoryChanges
         }
     }
 
@@ -48,7 +51,15 @@ public actor CoachOutbox {
         case unavailable
     }
 
-    public typealias Send = @Sendable (_ id: String, _ text: String, _ history: [Turn]) async throws -> Reply
+    /// What goes with each message besides its history: the whole lifter
+    /// profile, and the lifter's local date — without it "a meet next June"
+    /// was recorded as the June already past.
+    public struct Context: Equatable, Sendable {
+        public var memory: [CoachMemoryEntry]
+        public var today: String
+    }
+
+    public typealias Send = @Sendable (_ id: String, _ text: String, _ history: [Turn], _ context: Context) async throws -> Reply
 
     /// How many earlier messages go with each one. The server bounds it too.
     public static let historyLimit = 40
@@ -61,9 +72,18 @@ public actor CoachOutbox {
     /// The last reason delivery stopped, or `nil` once everything was sent.
     public private(set) var stopped: Stop?
 
-    public init(store: CoachStore, send: @escaping Send) {
+    private let now: @Sendable () -> Date
+
+    public init(store: CoachStore, now: @escaping @Sendable () -> Date = { Date() }, send: @escaping Send) {
         self.store = store
+        self.now = now
         self.send = send
+    }
+
+    /// The lifter's local calendar date, `yyyy-MM-dd`.
+    static func localDate(_ date: Date) -> String {
+        let parts = Calendar.current.dateComponents([.year, .month, .day], from: date)
+        return String(format: "%04d-%02d-%02d", parts.year ?? 0, parts.month ?? 0, parts.day ?? 0)
     }
 
     /// Delivers every pending message, in order. Returns how many were
@@ -96,11 +116,16 @@ public actor CoachOutbox {
                 return answered
             }
             do {
-                let reply = try await send(message.id, message.text, Self.history(for: message, in: conversation))
+                // The profile is read fresh for each message, so a reply that
+                // just changed it informs the next one.
+                let context = Context(memory: (try? store.memory()) ?? [], today: Self.localDate(now()))
+                let reply = try await send(
+                    message.id, message.text, Self.history(for: message, in: conversation), context
+                )
                 try store.deliver(
                     reply: CoachMessage(
                         id: reply.id, role: .coach, text: reply.text, createdAt: reply.createdAt,
-                        inReplyTo: message.id
+                        inReplyTo: message.id, memoryChanges: reply.memoryChanges
                     ),
                     answering: message.id
                 )
@@ -132,6 +157,9 @@ public actor CoachOutbox {
     /// the lifter's turns in a row for no reason.
     static func history(for message: CoachMessage, in conversation: [CoachMessage]) -> [Turn] {
         conversation
+            // This conversation's exchanges only: a new conversation is a
+            // fresh topic, which is what it's for (INFRA-SPEC §13.6).
+            .filter { $0.conversationID == message.conversationID }
             .filter { $0.id != message.id && ($0.role == .coach || $0.status == .sent) }
             .suffix(historyLimit)
             .map { Turn(role: $0.role, text: $0.text) }

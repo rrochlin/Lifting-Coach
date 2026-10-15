@@ -27,6 +27,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Protocol
 
+from . import profile
 from .accounts import Accounts, InvalidToken
 from .errors import ServiceError
 
@@ -56,6 +57,7 @@ How this app works, and the rules you keep:
 - Load and effort are separate axes of a prescription. "5 × 3 at 80%" and "5 × 3 at RPE 8" are different instructions; don't merge them.
 - There are three different maxes and they are never interchangeable: an achieved max (the heaviest weight the lifter actually lifted), a goal max (the number a program is written against), and a theoretical max (an estimate). Say which one you mean.
 - You can't see the lifter's training log yet. Never invent their numbers, sessions or history. If an answer depends on data you don't have, say so and ask for it. A plain "I don't know" is better than a confident guess.
+- You keep a profile of this lifter — their goals, experience, constraints and preferences — shown below, and you can change it with the remember, revise and forget tools. Update it when you learn something durable that will change how you coach them, so you don't have to ask again. You don't need to announce it; the app shows the lifter what you noted. The profile is the only thing your tools can change.
 
 Keep replies short enough to read between sets: lead with the answer, then the reasoning if it's needed. Use plain text. A short list is fine; headings are not."""
 
@@ -75,9 +77,14 @@ class Reply:
     id: str
     text: str
     created_at: str
+    #: Profile changes the coach made in this turn, for the phone to apply
+    #: (`profile.ProfileEditor.changes`). Stored with the reply, so a
+    #: re-delivered reply carries exactly the same changes.
+    memory: tuple[dict[str, str], ...] = ()
 
-    def as_body(self) -> dict[str, str]:
-        return {"id": self.id, "text": self.text, "createdAt": self.created_at}
+    def as_body(self) -> dict[str, Any]:
+        return {"id": self.id, "text": self.text, "createdAt": self.created_at,
+                "memory": list(self.memory)}
 
 
 @dataclass(frozen=True)
@@ -97,8 +104,12 @@ class ModelAnswer:
 
 
 class CoachModel(Protocol):
-    def answer(self, system: str, messages: list[dict[str, str]]) -> ModelAnswer:
-        """Raises `ModelUnavailable` for anything a retry might fix."""
+    def answer(
+        self, system: str, profile_text: str, messages: list[dict[str, str]],
+        editor: profile.ProfileEditor,
+    ) -> ModelAnswer:
+        """Runs the turn, calling `editor.run` for each profile tool call.
+        Raises `ModelUnavailable` for anything a retry might fix."""
         ...
 
 
@@ -135,6 +146,24 @@ class InMemoryReplyStore:
 #: What the lifter sees when the model declines. Bedrock has no server-side
 #: fallback, so this stands in rather than an empty bubble.
 REFUSAL_TEXT = "I can't help with that one. Ask me something else about your training?"
+
+
+_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _today_line(today: Any, now: float | None) -> str:
+    """"Today is …", from the phone's local date when it sent one — the
+    lifter's day, not UTC's — else the server's."""
+    import datetime
+
+    value = str(today or "")
+    try:
+        day = datetime.date.fromisoformat(value) if _DATE.match(value) else None
+    except ValueError:
+        day = None
+    if day is None:
+        day = datetime.datetime.fromtimestamp(time.time() if now is None else now, datetime.UTC).date()
+    return f"Today is {day.strftime('%A')}, {day.isoformat()} (the lifter's date)."
 
 
 def conversation(history: Any, text: str) -> list[dict[str, str]]:
@@ -176,6 +205,8 @@ def answer(
     accounts: Accounts,
     store: ReplyStore,
     model: CoachModel,
+    memory: Any = None,
+    today: Any = None,
     now: float | None = None,
 ) -> Answered:
     """Answers one message, at most once. See the module docstring.
@@ -199,7 +230,12 @@ def answer(
     if (stored := store.get(subject, message_id)) is not None:
         return Answered(reply=stored, redelivered=True)
 
-    result = model.answer(SYSTEM_PROMPT, conversation(history, text))
+    entries = profile.entries_from(memory)
+    editor = profile.ProfileEditor(entries=list(entries))
+    # The date goes with the profile, not in the cached rules: without it "a
+    # meet next June" was recorded as the June already past.
+    context = f"{_today_line(today, now)}\n\n{profile.render(entries)}"
+    result = model.answer(SYSTEM_PROMPT, context, conversation(history, text), editor)
     current = time.time() if now is None else now
     reply = Reply(
         # Derived from the message's own id, so the phone can tell which
@@ -208,6 +244,7 @@ def answer(
         id=f"{message_id}-reply",
         text=REFUSAL_TEXT if result.refused or not result.text.strip() else result.text.strip(),
         created_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(current)),
+        memory=tuple(editor.changes),
     )
     store.put(subject, message_id, reply, expires_at=int(current) + REPLY_TTL_SECONDS)
     return Answered(reply=reply, redelivered=False, usage=result.usage)
@@ -243,34 +280,60 @@ class BedrockCoach:
             self._client = AnthropicBedrock(aws_region=self._region, timeout=90.0)
         return self._client
 
-    def answer(self, system: str, messages: list[dict[str, str]]) -> ModelAnswer:
+    #: Tool rounds per turn. A turn that is still calling tools after this
+    #: is answered with whatever text it has, rather than looping.
+    MAX_TOOL_ROUNDS = 4
+
+    def answer(
+        self, system: str, profile_text: str, messages: list[dict[str, str]],
+        editor: profile.ProfileEditor,
+    ) -> ModelAnswer:
         import anthropic
 
-        try:
-            response = self.client.messages.create(
-                model=self._model_id,
-                max_tokens=self.MAX_TOKENS,
-                thinking={"type": "adaptive"},
-                output_config={"effort": self.EFFORT},
-                # An explicit breakpoint: Bedrock's legacy integration rejects
-                # automatic (top-level) caching.
-                system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}],
-                messages=messages,
-            )
-        except anthropic.BadRequestError as error:
-            # Our request was malformed; a retry would send the same thing.
-            raise MessageRejected(f"Model rejected the request: {error.message}") from None
-        except (anthropic.APIStatusError, anthropic.APIConnectionError) as error:
-            raise ModelUnavailable(f"Model unavailable: {type(error).__name__}") from None
+        turn: list[dict[str, Any]] = [dict(m) for m in messages]
+        usage = {"input": 0, "output": 0, "cacheRead": 0}
+        text = ""
+        refused = False
+        for _ in range(self.MAX_TOOL_ROUNDS + 1):
+            try:
+                response = self.client.messages.create(
+                    model=self._model_id,
+                    max_tokens=self.MAX_TOKENS,
+                    thinking={"type": "adaptive"},
+                    output_config={"effort": self.EFFORT},
+                    # The static rules carry the breakpoint (Bedrock rejects
+                    # top-level automatic caching); the profile comes after it,
+                    # so a changed profile doesn't invalidate the static part.
+                    system=[
+                        {"type": "text", "text": system, "cache_control": {"type": "ephemeral"}},
+                        {"type": "text", "text": profile_text},
+                    ],
+                    tools=profile.TOOLS,
+                    messages=turn,
+                )
+            except anthropic.BadRequestError as error:
+                raise MessageRejected(f"Model rejected the request: {error.message}") from None
+            except (anthropic.APIStatusError, anthropic.APIConnectionError) as error:
+                raise ModelUnavailable(f"Model unavailable: {type(error).__name__}") from None
 
-        text = "".join(block.text for block in response.content if block.type == "text")
-        usage = response.usage
-        return ModelAnswer(
-            text=text,
-            refused=response.stop_reason == "refusal",
-            usage={
-                "input": int(usage.input_tokens or 0),
-                "output": int(usage.output_tokens or 0),
-                "cacheRead": int(getattr(usage, "cache_read_input_tokens", 0) or 0),
-            },
-        )
+            usage["input"] += int(response.usage.input_tokens or 0)
+            usage["output"] += int(response.usage.output_tokens or 0)
+            usage["cacheRead"] += int(getattr(response.usage, "cache_read_input_tokens", 0) or 0)
+            text = "".join(block.text for block in response.content if block.type == "text")
+            refused = response.stop_reason == "refusal"
+
+            calls = [block for block in response.content if block.type == "tool_use"]
+            if response.stop_reason != "tool_use" or not calls:
+                break
+            # The assistant turn goes back whole — thinking blocks included,
+            # unchanged, as a tool loop with thinking requires — and every
+            # result goes back in one user message.
+            turn.append({"role": "assistant", "content": response.content})
+            results = []
+            for call in calls:
+                result, is_error = editor.run(call.name, call.input)
+                results.append({"type": "tool_result", "tool_use_id": call.id, "content": result,
+                                "is_error": is_error})
+            turn.append({"role": "user", "content": results})
+
+        return ModelAnswer(text=text, refused=refused, usage=usage)
