@@ -57,6 +57,9 @@ struct CoachView: View {
                 .padding(.vertical, 12)
             }
             .scrollDismissesKeyboard(.interactively)
+            // A tap on the conversation puts the keyboard away. Simultaneous,
+            // so it doesn't swallow text selection or the RETRY buttons.
+            .simultaneousGesture(TapGesture().onEnded { composing = false })
             .defaultScrollAnchor(.bottom)
             .onChange(of: coach.messages.count) { _, _ in scrollToEnd(proxy) }
             .onChange(of: coach.isDelivering) { _, _ in scrollToEnd(proxy) }
@@ -93,6 +96,25 @@ struct CoachView: View {
 
     private var composer: some View {
         VStack(spacing: 4) {
+            // How to get the keyboard out of the way, shown rather than left to
+            // be discovered: a grab-handle chevron that is also the button. Part of the composer rather than a keyboard
+            // toolbar — on iOS 26 that toolbar floats over the content just
+            // above the keyboard, which here is the message field itself.
+            if composing {
+                Button {
+                    composing = false
+                } label: {
+                    // The chevron alone — it reads as "pull down" without
+                    // a caption (owner's call).
+                    Image(systemName: "chevron.compact.down")
+                        .font(.system(size: 24, weight: .semibold))
+                        .foregroundStyle(Theme.inkMuted)
+                    .frame(maxWidth: .infinity, minHeight: 28)
+                    .contentShape(.rect)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Hide keyboard")
+            }
             if draft.count > CoachMessage.characterLimit - 200 {
                 Text("\(draft.count) / \(CoachMessage.characterLimit)")
                     .font(Theme.label)
@@ -113,6 +135,9 @@ struct CoachView: View {
                 Button {
                     coach.send(draft)
                     draft = ""
+                    // The reply takes a moment and the point is to read it;
+                    // a keyboard left up covers half of where it will land.
+                    composing = false
                 } label: {
                     Image(systemName: "arrow.up.circle.fill")
                         .font(.system(size: 32))
@@ -126,6 +151,16 @@ struct CoachView: View {
         .padding(.vertical, 8)
         .background(Theme.panel)
         .overlay(alignment: .top) { Rectangle().fill(Theme.hairline).frame(height: 1) }
+        #if DEBUG
+        .onAppear {
+            // `-focusCoachComposer`: the keyboard and its bar, for a screenshot.
+            guard ProcessInfo.processInfo.arguments.contains("-focusCoachComposer") else { return }
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(900))
+                composing = true
+            }
+        }
+        #endif
     }
 }
 
