@@ -335,11 +335,12 @@ struct CoachClientTests {
         let reply = try await CoachClient(transport: transport).send(
             messageID: "m-1", text: "Hi", history: [],
             memory: [.init(id: "p-1", category: "constraints", text: "Bad shoulder.", source: "lifter")],
-            today: "2026-10-14", accessToken: "a", credentials: fakeCredentials
+            today: "2026-10-14", timeZone: "America/Los_Angeles", accessToken: "a", credentials: fakeCredentials
         )
         #expect(reply.memory == [.init(op: "add", id: "p-2", category: "goals", text: "Total 1500.")])
         let payload = body(try #require(transport.sent.first))
         #expect(payload["today"] as? String == "2026-10-14")
+        #expect(payload["timeZone"] as? String == "America/Los_Angeles")
         #expect((payload["memory"] as? [[String: String]]) ==
             [["id": "p-1", "category": "constraints", "text": "Bad shoulder.", "source": "lifter"]])
     }

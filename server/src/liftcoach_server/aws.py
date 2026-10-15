@@ -371,10 +371,18 @@ def build_coach_dependencies(replies_table: str, model_id: str, region: str) -> 
     from .coach import BedrockCoach
     from .handlers import CoachDeps
 
+    import os
+
+    from .log_source import S3SnapshotSource
+
+    # The log tools need the bucket; without it (a function deployed before
+    # its infrastructure) the coach still answers, just without the log.
+    bucket = os.environ.get("SNAPSHOT_BUCKET")
     return CoachDeps(
         accounts=CognitoAccounts(),
         store=DynamoReplyStore(replies_table),
         model=BedrockCoach(model_id=model_id, region=region),
+        snapshots=S3SnapshotSource(bucket) if bucket else None,
     )
 
 

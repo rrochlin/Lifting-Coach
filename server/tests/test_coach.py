@@ -49,16 +49,19 @@ class FakeModel:
         self.tool_calls = tool_calls or []
         self.calls: list[list[dict[str, str]]] = []
         self.profiles: list[str] = []
+        self.toolboxes: list[coach.Toolbox] = []
+        self.results: list[tuple[str, bool]] = []
 
     def answer(self, system: str, profile_text: str, messages: list[dict[str, str]],
-               editor: profile.ProfileEditor) -> ModelAnswer:
+               toolbox: coach.Toolbox) -> ModelAnswer:
         self.calls.append(messages)
         self.profiles.append(profile_text)
         if self.fails:
             self.fails -= 1
             raise ModelUnavailable("throttled")
+        self.toolboxes.append(toolbox)
         for name, args in self.tool_calls:
-            editor.run(name, args)
+            self.results.append(toolbox.run(name, args))
         return ModelAnswer(text=self.reply, refused=self.refused, usage={"input": 10, "output": 5})
 
 
@@ -238,7 +241,9 @@ def bedrock(messages: FakeMessages) -> BedrockCoach:
 
 def run(messages: FakeMessages, entries: list[profile.Entry] | None = None) -> tuple[ModelAnswer, profile.ProfileEditor]:
     editor = profile.ProfileEditor(entries=list(entries or []))
-    answer = bedrock(messages).answer("system text", "profile text", [{"role": "user", "content": "hi"}], editor)
+    answer = bedrock(messages).answer(
+        "system text", "profile text", [{"role": "user", "content": "hi"}], coach.Toolbox(editor=editor)
+    )
     return answer, editor
 
 
@@ -354,8 +359,9 @@ def test_the_system_prompt_states_the_rules_the_coach_must_keep() -> None:
     assert "never say or imply that you have" in prompt  # Tenet 1: advise, don't act
     assert "not reps in reserve" in prompt  # Tenet 3
     assert "achieved max" in prompt and "goal max" in prompt and "theoretical max" in prompt  # Tenet 6
-    assert "can't see the lifter's training log" in prompt  # Tenet 10, until 2.3
-    assert "the only thing your tools can change" in prompt  # §13.7: the narrow write path
+    assert "never invent numbers" in prompt  # Tenet 10
+    assert "say how current it is" in prompt  # Tenet 10: the log is a backup
+    assert "the only thing your tools can change; the log tools only read" in prompt  # §13.7, §14
 
 
 def test_the_coach_is_told_the_lifters_date(world: handlers.CoachDeps) -> None:
@@ -368,3 +374,12 @@ def test_the_coach_is_told_the_lifters_date(world: handlers.CoachDeps) -> None:
 def test_a_missing_or_malformed_date_falls_back_to_the_servers(world: handlers.CoachDeps, today: Any) -> None:
     handlers.coach_reply({"accessToken": "token", "messageId": MESSAGE, "text": "hi", "today": today})
     assert world.model.profiles[-1].startswith("Today is ")
+
+
+def test_text_written_before_a_tool_call_is_kept() -> None:
+    """Found reading a real log: the coach wrote the first half of its answer,
+    called a tool, and finished — and only the second half reached the phone."""
+    first = tool_use(("remember", {"category": "constraints", "text": "Mid-back strain, Oct 13."}))
+    first.content.insert(1, SimpleNamespace(type="text", text="Your squat is moving well."))
+    answer, _ = run(FakeMessages(first, response("The back is the priority now.")))
+    assert answer.text == "Your squat is moving well.\n\nThe back is the priority now."

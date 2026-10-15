@@ -57,6 +57,8 @@ public actor CoachOutbox {
     public struct Context: Equatable, Sendable {
         public var memory: [CoachMemoryEntry]
         public var today: String
+        /// So dates read from the log are shown in the lifter's own days.
+        public var timeZone: String = TimeZone.current.identifier
     }
 
     public typealias Send = @Sendable (_ id: String, _ text: String, _ history: [Turn], _ context: Context) async throws -> Reply

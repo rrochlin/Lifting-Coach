@@ -67,6 +67,10 @@ struct CoachView: View {
         .onAppear {
             coach.isVisible = true
             coach.deliver()
+            // The coach reads the log from the backup; opening the tab is
+            // the moment to make that backup current. Free when nothing
+            // changed (`SnapshotSync` checks its flag first).
+            environment.snapshotSyncIfNeeded(.openingCoachChat)
         }
         .onDisappear { coach.isVisible = false }
     }
@@ -117,7 +121,7 @@ struct CoachView: View {
                 .font(Theme.heading)
                 .foregroundStyle(Theme.ink)
             Text(coach.memory.isEmpty
-                 ? "Programming, technique, recovery, how to read a hard session. The coach learns your goals and history as you talk, and can't see your log yet — so tell it the numbers that matter."
+                 ? "Programming, technique, recovery, how a block is going. The coach can read your training log, and learns your goals and history as you talk."
                  : "A fresh conversation. The coach still knows your profile — tap the card icon to see what's in it.")
                 .font(Theme.caption)
                 .foregroundStyle(Theme.inkMuted)
@@ -332,7 +336,7 @@ struct CoachConsentView: View {
                 Text("Talk to your coach")
                     .font(.system(size: 26, weight: .semibold))
                     .foregroundStyle(Theme.ink)
-                Text("Your messages are answered by Claude, an AI model from Anthropic, run through Amazon Web Services. The coach keeps notes about you — your goals, experience and constraints — which you can see and change at any time. Conversations and notes are saved on this phone and backed up with your training log.")
+                Text("Your messages are answered by Claude, an AI model from Anthropic, run through Amazon Web Services. The coach reads your training log to answer, and keeps notes about you — your goals, experience and constraints — which you can see and change at any time. Conversations and notes are saved on this phone and backed up with your training log.")
                     .font(Theme.caption)
                     .foregroundStyle(Theme.inkMuted)
                 Text("The coach gives advice. It never changes your plan or your log.")

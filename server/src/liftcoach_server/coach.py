@@ -27,7 +27,7 @@ import time
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-from . import profile
+from . import log_tools, profile
 from .accounts import Accounts, InvalidToken
 from .errors import ServiceError
 
@@ -56,8 +56,8 @@ How this app works, and the rules you keep:
 - RPE in this app is exertion: how hard the set was, 1 to 10, in half steps. It is not reps in reserve. Never translate an RPE into "reps left in the tank", and don't use RIR. If the lifter asks how many reps they had left, explain in a sentence that RPE here records how hard the set felt rather than a rep count, then answer the question underneath it in terms of effort.
 - Load and effort are separate axes of a prescription. "5 × 3 at 80%" and "5 × 3 at RPE 8" are different instructions; don't merge them.
 - There are three different maxes and they are never interchangeable: an achieved max (the heaviest weight the lifter actually lifted), a goal max (the number a program is written against), and a theoretical max (an estimate). Say which one you mean.
-- You can't see the lifter's training log yet. Never invent their numbers, sessions or history. If an answer depends on data you don't have, say so and ask for it. A plain "I don't know" is better than a confident guess.
-- You keep a profile of this lifter — their goals, experience, constraints and preferences — shown below, and you can change it with the remember, revise and forget tools. Update it when you learn something durable that will change how you coach them, so you don't have to ask again. You don't need to announce it; the app shows the lifter what you noted. The profile is the only thing your tools can change.
+- You can read the lifter's training log with the log tools — training_overview first, then exercise_history, recent_workouts, maxes and the rest. Use them whenever an answer depends on what they've actually done, rather than asking for numbers the log already has. The log is a backup that may be a little behind; when recency matters, say how current it is. Never invent numbers, sessions or history the tools didn't show you. A plain "I don't know" is better than a confident guess.
+- You keep a profile of this lifter — their goals, experience, constraints and preferences — shown below, and you can change it with the remember, revise and forget tools. Update it when you learn something durable that will change how you coach them, so you don't have to ask again. You don't need to announce it; the app shows the lifter what you noted. The profile is the only thing your tools can change; the log tools only read.
 
 Keep replies short enough to read between sets: lead with the answer, then the reasoning if it's needed. Use plain text. A short list is fine; headings are not."""
 
@@ -103,12 +103,30 @@ class ModelAnswer:
     usage: dict[str, int] | None = None
 
 
+@dataclass
+class Toolbox:
+    """Everything the coach can call in one turn: the profile tools, which
+    record changes for the phone, and the log tools, which only read."""
+
+    editor: profile.ProfileEditor
+    log: log_tools.LogReader | None = None
+
+    @property
+    def tools(self) -> list[dict[str, Any]]:
+        return profile.TOOLS + (log_tools.TOOLS if self.log is not None else [])
+
+    def run(self, name: str, tool_input: Any) -> tuple[str, bool]:
+        if self.log is not None and name in log_tools.NAMES:
+            return self.log.run(name, tool_input)
+        return self.editor.run(name, tool_input)
+
+
 class CoachModel(Protocol):
     def answer(
         self, system: str, profile_text: str, messages: list[dict[str, str]],
-        editor: profile.ProfileEditor,
+        toolbox: Toolbox,
     ) -> ModelAnswer:
-        """Runs the turn, calling `editor.run` for each profile tool call.
+        """Runs the turn, calling `toolbox.run` for each tool call.
         Raises `ModelUnavailable` for anything a retry might fix."""
         ...
 
@@ -207,6 +225,8 @@ def answer(
     model: CoachModel,
     memory: Any = None,
     today: Any = None,
+    snapshots: Any = None,
+    time_zone: Any = None,
     now: float | None = None,
 ) -> Answered:
     """Answers one message, at most once. See the module docstring.
@@ -235,7 +255,16 @@ def answer(
     # The date goes with the profile, not in the cached rules: without it "a
     # meet next June" was recorded as the June already past.
     context = f"{_today_line(today, now)}\n\n{profile.render(entries)}"
-    result = model.answer(SYSTEM_PROMPT, context, conversation(history, text), editor)
+    log = None
+    if snapshots is not None:
+        # Fetched only if the coach asks, for this verified subject only.
+        log = log_tools.LogReader(lambda: snapshots.fetch(subject), str(time_zone or "") or None)
+    toolbox = Toolbox(editor=editor, log=log)
+    try:
+        result = model.answer(SYSTEM_PROMPT, context, conversation(history, text), toolbox)
+    finally:
+        if log is not None:
+            log.close()
     current = time.time() if now is None else now
     reply = Reply(
         # Derived from the message's own id, so the phone can tell which
@@ -281,18 +310,22 @@ class BedrockCoach:
         return self._client
 
     #: Tool rounds per turn. A turn that is still calling tools after this
-    #: is answered with whatever text it has, rather than looping.
-    MAX_TOOL_ROUNDS = 4
+    #: is answered with whatever text it has, rather than looping. Reading a
+    #: log takes a few: an overview, then a lift's history or two.
+    MAX_TOOL_ROUNDS = 6
 
     def answer(
         self, system: str, profile_text: str, messages: list[dict[str, str]],
-        editor: profile.ProfileEditor,
+        toolbox: Toolbox,
     ) -> ModelAnswer:
         import anthropic
 
         turn: list[dict[str, Any]] = [dict(m) for m in messages]
         usage = {"input": 0, "output": 0, "cacheRead": 0}
-        text = ""
+        # Text from every round, not just the last: the coach often writes
+        # the first half of its answer, calls a tool, and carries on — keeping
+        # only the final round's text cut replies off mid-thought.
+        texts: list[str] = []
         refused = False
         for _ in range(self.MAX_TOOL_ROUNDS + 1):
             try:
@@ -308,7 +341,7 @@ class BedrockCoach:
                         {"type": "text", "text": system, "cache_control": {"type": "ephemeral"}},
                         {"type": "text", "text": profile_text},
                     ],
-                    tools=profile.TOOLS,
+                    tools=toolbox.tools,
                     messages=turn,
                 )
             except anthropic.BadRequestError as error:
@@ -319,7 +352,9 @@ class BedrockCoach:
             usage["input"] += int(response.usage.input_tokens or 0)
             usage["output"] += int(response.usage.output_tokens or 0)
             usage["cacheRead"] += int(getattr(response.usage, "cache_read_input_tokens", 0) or 0)
-            text = "".join(block.text for block in response.content if block.type == "text")
+            round_text = "".join(block.text for block in response.content if block.type == "text").strip()
+            if round_text:
+                texts.append(round_text)
             refused = response.stop_reason == "refusal"
 
             calls = [block for block in response.content if block.type == "tool_use"]
@@ -331,9 +366,9 @@ class BedrockCoach:
             turn.append({"role": "assistant", "content": response.content})
             results = []
             for call in calls:
-                result, is_error = editor.run(call.name, call.input)
+                result, is_error = toolbox.run(call.name, call.input)
                 results.append({"type": "tool_result", "tool_use_id": call.id, "content": result,
                                 "is_error": is_error})
             turn.append({"role": "user", "content": results})
 
-        return ModelAnswer(text=text, refused=refused, usage=usage)
+        return ModelAnswer(text="\n\n".join(texts), refused=refused, usage=usage)

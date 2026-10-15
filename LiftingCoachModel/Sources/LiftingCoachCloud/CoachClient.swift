@@ -79,7 +79,7 @@ public struct CoachClient: Sendable {
 
     public func send(
         messageID: String, text: String, history: [Turn],
-        memory: [MemoryEntry] = [], today: String = "",
+        memory: [MemoryEntry] = [], today: String = "", timeZone: String = "",
         accessToken: String, credentials: AWSCredentials
     ) async throws -> Reply {
         let body = try JSONSerialization.data(withJSONObject: [
@@ -89,6 +89,7 @@ public struct CoachClient: Sendable {
             "history": history.map { ["role": $0.role, "text": $0.text] },
             "memory": memory.map { ["id": $0.id, "category": $0.category, "text": $0.text, "source": $0.source] },
             "today": today,
+            "timeZone": timeZone,
         ] as [String: Any])
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
