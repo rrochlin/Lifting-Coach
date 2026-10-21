@@ -502,6 +502,26 @@ struct WorkoutSessionEditingTests {
         #expect(sets.last?.reps == 5)
     }
 
+    @Test("Another warmup goes after the warmups already there, not in front of them")
+    func laterWarmupLandsAtTheFootOfTheWarmups() {
+        var session = self.session()
+        let exerciseID = session.exerciseGroups[0][0].id
+
+        // The ramp so far: 45, then 135 — both logged.
+        let first = session.addWarmupSet(toExerciseWith: exerciseID)!
+        session.completeSet(id: first, reps: 5, weight: Measurement(value: 45, unit: .pounds), at: noon)
+        let second = session.addWarmupSet(toExerciseWith: exerciseID)!
+        session.completeSet(id: second, reps: 3, weight: Measurement(value: 135, unit: .pounds), at: noon)
+        let third = session.addWarmupSet(toExerciseWith: exerciseID)!
+
+        let sets = session.exerciseGroups[0][0].sets ?? []
+        // The next step of the ramp, in order — and still above the prescription.
+        #expect(sets.map(\.id).prefix(3) == [first, second, third])
+        #expect(sets.count == 4)
+        #expect(sets.last?.type == .working)
+        #expect(sets.last?.reps == 5)
+    }
+
     @Test("A warmup set is never an achieved max")
     func warmupSetDoesNotRecordMax() {
         var session = self.session()
