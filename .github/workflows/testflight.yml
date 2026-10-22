@@ -6,11 +6,19 @@
 # manual. Adapted from remodel-tracker's workflow, which shares the
 # certificate.
 #
-# **Run on demand, never on push.** Every upload decides its marketing version
-# (testflight.sh refuses one App Store Connect already holds unless told it's
-# another build of that release), so an automatic run on each merge would
-# either fail or ship versions nobody chose. Actions → TestFlight → Run
-# workflow, and pick which it is.
+# **Runs on every merge to main that changes the app, once CI has passed.**
+# Every upload decides its marketing version, and on a merge project.yml is
+# the decision (`testflight.sh --auto-version`): a merge that bumped
+# MARKETING_VERSION ships a new release, any other ships another build of the
+# current one. So the version is still chosen by a person — in the PR that
+# bumps it — and nothing ships a version nobody picked.
+#
+# Triggered by CI completing rather than by the push itself, so a red main
+# never reaches a phone. A merge that touches nothing the binary is built from
+# (notes, server/, scripts/) is skipped: it would upload an identical app under
+# a new build number.
+#
+# Actions → TestFlight → Run workflow still works, to ship a build by hand.
 #
 # Secrets (made 2026-10-04 from ~/.appstoreconnect/; the certificate and the
 # profile both expire 2027-10-04):
@@ -20,6 +28,10 @@
 name: TestFlight
 
 on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
     inputs:
       release:
@@ -39,12 +51,51 @@ permissions:
   contents: read
 
 jobs:
+  # On Ubuntu, so deciding to skip costs 1x minutes rather than a macOS runner.
+  decide:
+    runs-on: ubuntu-latest
+    # A push to main that CI passed. CI's own `pull_request` runs never count,
+    # and neither does a red one.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
+    outputs:
+      ship: ${{ steps.paths.outputs.ship }}
+      sha: ${{ steps.paths.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 2
+      - id: paths
+        run: |
+          set -euo pipefail
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" = workflow_dispatch ]; then
+            echo "ship=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          # A squash merge is one commit; a merge commit's first parent is main
+          # before the merge. Either way HEAD^..HEAD is what the merge changed.
+          changed=$(git diff --name-only HEAD^ HEAD)
+          echo "$changed"
+          if echo "$changed" | grep -qE '^(Sources/|LiftingCoachModel/Sources/|LiftingCoachModel/Package\.(swift|resolved)$|project\.yml$|Tools/testflight\.sh$|Tools/asc-latest-build\.py$|\.github/workflows/testflight\.yml$)'; then
+            echo "ship=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Nothing the app is built from changed; no TestFlight build."
+            echo "ship=false" >> "$GITHUB_OUTPUT"
+          fi
+
   upload:
+    needs: decide
+    if: needs.decide.outputs.ship == 'true'
     runs-on: macos-26
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
+          # The commit CI passed, not whatever main has moved to since.
+          ref: ${{ needs.decide.outputs.sha }}
           fetch-depth: 0 # the build number is the commit count
 
       - name: Select Xcode 26
@@ -95,7 +146,9 @@ jobs:
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
           RELEASE: ${{ inputs.release }}
         run: |
-          if [[ "$RELEASE" == another* ]]; then
+          if [[ "${{ github.event_name }}" == workflow_run ]]; then
+            Tools/testflight.sh --upload --auto-version
+          elif [[ "$RELEASE" == another* ]]; then
             Tools/testflight.sh --upload --same-version
           else
             Tools/testflight.sh --upload
