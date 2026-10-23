@@ -453,12 +453,15 @@ public struct WorkoutSession: Equatable, Sendable {
         return newID
     }
 
-    /// Prepends a warmup set to an exercise — the ramp-up that gets you to the
-    /// first programmed set.
+    /// Adds a warmup set at the foot of the exercise's warmups — the ramp-up
+    /// that gets you to the first programmed set.
     ///
     /// A program prescribes working sets; how a lifter gets to 315 is theirs to
     /// decide on the day, and it belongs *above* the prescription rather than
-    /// appended after it. Typed `.warmup` because that's what the button that
+    /// appended after it. Above the prescription but *below* the warmups
+    /// already there: a ramp ascends, so the set added after 45, 135, 225 is
+    /// the next step up, not another 45 in front of them (#24). The warmup
+    /// block is the leading run of `.warmup` sets; with none, this goes first. Typed `.warmup` because that's what the button that
     /// calls this says it makes, and the type is load-bearing: a heavy last
     /// ramp-up single is not a maximal effort, and `AchievedMaxUpdate` is right
     /// to ignore it.
@@ -478,7 +481,10 @@ public struct WorkoutSession: Equatable, Sendable {
                 restOverride: exercise.sets?.first?.restOverride
             )
             newID = new.id
-            exercise.sets = [new] + (exercise.sets ?? [])
+            var sets = exercise.sets ?? []
+            let foot = sets.firstIndex { $0.type != .warmup } ?? sets.endIndex
+            sets.insert(new, at: foot)
+            exercise.sets = sets
         }
         return newID
     }
