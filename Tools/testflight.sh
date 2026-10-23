@@ -5,6 +5,7 @@
 #   Tools/testflight.sh                           # archive + export, stop before upload
 #   Tools/testflight.sh --upload                  # and upload — a new marketing version
 #   Tools/testflight.sh --upload --same-version   # another build of the current one
+#   Tools/testflight.sh --upload --auto-version   # whichever project.yml says (CI on main)
 #
 # Needs, once:
 #   - The app registered in App Store Connect against com.rrochlin.LiftingCoach.
@@ -47,6 +48,12 @@
 #     the version sat at 0.1.0, because nothing ever asked; this is the asking.
 #   - Higher is a new release and goes through.
 #
+# --auto-version is how the merge-to-main deploy answers that question without
+# a person at the keyboard: project.yml *is* the answer. A merge that bumped
+# MARKETING_VERSION ships a new release; one that didn't ships another build of
+# the current one. Lower is still refused. The decision hasn't moved — it's
+# still made in the PR that bumps the version — only who reads it.
+#
 # Semantic versions, decided by what a lifter would notice: the minor for new
 # features or behaviour (0.2.0 was cloud backup and Sign in with Apple), the
 # patch for fixes only, 1.0.0 for the App Store launch. Bump it in project.yml
@@ -69,10 +76,12 @@ BUILD_NUMBER=${BUILD_NUMBER:-$(git rev-list --count HEAD)}
 COMMIT=$(git rev-parse --short HEAD)
 UPLOAD=false
 SAME_VERSION=false
+AUTO_VERSION=false
 for arg in "$@"; do
     case "$arg" in
         --upload) UPLOAD=true ;;
         --same-version) SAME_VERSION=true ;;
+        --auto-version) AUTO_VERSION=true ;;
         *) echo "error: unknown argument $arg" >&2; exit 2 ;;
     esac
 done
@@ -121,6 +130,10 @@ if $UPLOAD; then
     if [[ "$VERSION" != "$HIGHEST" ]]; then
         echo "error: version $VERSION is below $SHIPPED, already in App Store Connect." >&2
         exit 1
+    fi
+    if [[ "$VERSION" == "$SHIPPED" ]] && $AUTO_VERSION; then
+        echo "==> MARKETING_VERSION unchanged; another build of $VERSION"
+        SAME_VERSION=true
     fi
     if [[ "$VERSION" == "$SHIPPED" ]] && ! $SAME_VERSION; then
         echo "error: $VERSION is already in App Store Connect." >&2

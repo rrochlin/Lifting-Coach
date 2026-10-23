@@ -552,11 +552,16 @@ asking.
 `latest-stable` because a toolchain that moves under you turns an unrelated push
 into the run that mysteriously breaks — raise it deliberately.
 
-**`.github/workflows/testflight.yml` uploads to TestFlight, on demand.**
-Actions → TestFlight → Run workflow, choosing *new version* or *another build of
-the current version* (which passes `--same-version`). It never runs on push,
-because every upload decides its version. It runs the same `Tools/testflight.sh`
-as the Mac, on `macos-26`.
+**`.github/workflows/testflight.yml` uploads to TestFlight on every merge to
+`main` that changes the app**, once CI has passed on that commit (`workflow_run`,
+so a red main never ships). Every upload still decides its version, and on a
+merge `project.yml` is the decision — `testflight.sh --auto-version`: a merge
+that bumped `MARKETING_VERSION` is a new release, any other is another build of
+the current one. **So bumping the version in the PR is how a release is cut**;
+forgetting to just ships another build of the old one. A merge touching only
+notes, `server/`, `scripts/` or tests is skipped. Actions → TestFlight → Run
+workflow still ships by hand. It runs the same `Tools/testflight.sh` as the
+Mac, on `macos-26`.
 
 **Release signing is manual, and that's what made CI possible.** The team's one
 Apple Distribution certificate (ASC id `CUSD344557`, made 2026-10-04 by the
