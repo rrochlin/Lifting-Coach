@@ -15,12 +15,55 @@ struct RootView: View {
     /// state and there is exactly one owner. Cleared by the tracker once it has
     /// taken it, so switching tabs later can't start the same day twice.
     @State private var pendingStart: PlannedWorkout?
+    /// A request to end the open workout, handed over the same way — see
+    /// `PendingWorkoutEnd`.
+    @State private var pendingEnd: PendingWorkoutEnd?
+    /// The workout that's started and not ended, if any. Drives the Workout
+    /// tab's LIVE badge and the idle question (#32): an accidental start used
+    /// to be visible only on Home's card, and a forgotten one stayed open
+    /// indefinitely.
+    @State private var openWorkout: Workout?
+    /// When the lifter last answered "keep going", per workout. In memory on
+    /// purpose: after a relaunch the question may be asked once more, which is
+    /// cheaper than a forgotten workout nobody is ever asked about.
+    @State private var idleAcknowledged: [UUID: Date] = [:]
+    @State private var isAskingIfIdle = false
     @Environment(AppEnvironment.self) private var environment
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         tabs
             .tint(Theme.signal)
             .task { await environment.refreshCloud() }
+            // Once a minute is plenty for a twenty-minute question, and the
+            // tracker reports its own changes in between (`onSessionChanged`).
+            .task {
+                while !Task.isCancelled {
+                    refreshOpenWorkout()
+                    try? await Task.sleep(for: .seconds(60))
+                }
+            }
+            .onChange(of: selection) { _, _ in refreshOpenWorkout() }
+            .onChange(of: scenePhase) { _, phase in
+                switch phase {
+                case .active:
+                    // Back on screen, so the in-app prompt does the asking.
+                    OpenWorkoutNotifier.cancel()
+                    refreshOpenWorkout()
+                case .background:
+                    scheduleIdleNotification()
+                default:
+                    break
+                }
+            }
+            .themedChoice(
+                isPresented: $isAskingIfIdle,
+                title: "Still working out?",
+                message: openWorkout.map(idleMessage),
+                choices: idleChoices,
+                dismissLabel: "Keep Going",
+                onDismiss: acknowledgeIdle
+            )
             .fullScreenCover(isPresented: signInPromptShown) { SignInPrompt() }
             .onAppear {
                 // The tab bar is the one surface UIKit still paints, and its
@@ -64,12 +107,26 @@ struct RootView: View {
                     },
                     // Resuming hands over nothing: the session is already on
                     // disk and the tracker picks it up itself.
-                    onResumeWorkout: { selection = .workout }
+                    onResumeWorkout: { selection = .workout },
+                    // Home asked first, so both requests go together; the
+                    // tracker ends the old workout before starting the new one.
+                    onReplaceWorkout: { planned, end in
+                        pendingEnd = end
+                        pendingStart = planned
+                        selection = .workout
+                    }
                 )
             }
             Tab("Workout", systemImage: "figure.strengthtraining.traditional", value: RootTab.workout) {
-                WorkoutTrackerView(pendingStart: $pendingStart)
+                WorkoutTrackerView(
+                    pendingStart: $pendingStart,
+                    pendingEnd: $pendingEnd,
+                    onSessionChanged: refreshOpenWorkout
+                )
             }
+            // A workout is open. The tab is where it lives, so the tab says so
+            // from anywhere in the app.
+            .badge(openWorkout == nil ? nil : Text("LIVE"))
             Tab("Plan", systemImage: "calendar.badge.clock", value: RootTab.plan) {
                 WorkoutPlannerView()
             }
@@ -82,6 +139,79 @@ struct RootView: View {
             // Replies that landed while you were elsewhere.
             .badge(environment.coach.unread)
         }
+    }
+}
+
+// MARK: - The open workout
+
+extension RootView {
+    private func refreshOpenWorkout() {
+        openWorkout = try? environment.workouts.fetchInProgress()
+        guard let workout = openWorkout else {
+            isAskingIfIdle = false
+            return
+        }
+        // Not over a DEBUG screenshot run: `-initialTab` launches are for
+        // looking at a screen, as with the sign-in prompt above.
+        guard LaunchArguments.value(for: "-initialTab") == nil else { return }
+        if OpenWorkout.isIdle(workout, at: Date(), acknowledgedAt: idleAcknowledged[workout.id]) {
+            isAskingIfIdle = true
+        }
+    }
+
+    private func acknowledgeIdle() {
+        guard let workout = openWorkout else { return }
+        idleAcknowledged[workout.id] = Date()
+    }
+
+    private func idleMessage(_ workout: Workout) -> String {
+        let name = workout.notes ?? "This workout"
+        let logged = OpenWorkout.loggedSetCount(of: workout)
+        guard logged > 0, let last = OpenWorkout.lastActivity(of: workout) else {
+            let started = workout.startTime.map { " at \(Self.clock($0))" } ?? ""
+            return "\(name) was started\(started) and nothing has been logged."
+        }
+        return "\(name) has \(logged) set\(logged == 1 ? "" : "s") logged, the last at \(Self.clock(last))."
+    }
+
+    /// Finish ends it at the last logged set rather than now, and says so on
+    /// the button: a workout forgotten overnight must not read back as an
+    /// eleven-hour session. Offered only with something logged — finishing an
+    /// empty workout records nothing worth keeping.
+    private var idleChoices: [ThemedChoiceDialog.Choice] {
+        guard let workout = openWorkout else { return [] }
+        var choices: [ThemedChoiceDialog.Choice] = []
+        if OpenWorkout.loggedSetCount(of: workout) > 0,
+           let last = OpenWorkout.lastActivity(of: workout) {
+            choices.append(.init(label: "Finish at \(Self.clock(last))") {
+                pendingEnd = .finish(workoutID: workout.id, at: last)
+                selection = .workout
+            })
+        }
+        choices.append(.init(label: "Discard", role: .destructive) {
+            // An answer, even if the tracker's own confirm is then cancelled —
+            // otherwise this would be back a minute later.
+            idleAcknowledged[workout.id] = Date()
+            pendingEnd = .discard(workoutID: workout.id)
+            selection = .workout
+        })
+        return choices
+    }
+
+    private func scheduleIdleNotification() {
+        guard let workout = try? environment.workouts.fetchInProgress(),
+              let deadline = OpenWorkout.idleDeadline(
+                of: workout, acknowledgedAt: idleAcknowledged[workout.id])
+        else { return }
+        OpenWorkoutNotifier.schedule(at: deadline, startedAt: workout.startTime)
+    }
+
+    /// "6:42 PM" today, "Tue 6:42 PM" otherwise — a forgotten workout is
+    /// usually from another day, and the day is the part that explains it.
+    static func clock(_ date: Date) -> String {
+        Calendar.current.isDateInToday(date)
+            ? date.formatted(date: .omitted, time: .shortened)
+            : date.formatted(.dateTime.weekday(.abbreviated).hour().minute())
     }
 }
 

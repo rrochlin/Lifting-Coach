@@ -336,6 +336,101 @@ struct ThemedConfirmDialog: View {
     }
 }
 
+/// `ThemedConfirmDialog` with more than one way forward.
+///
+/// For the questions that genuinely have three answers — "is this workout still
+/// going?" is keep going, finish, or throw away — where a confirm/cancel pair
+/// would force one of them behind a second screen. Choices stack full-width,
+/// because three labels like FINISH & START TODAY'S don't fit on one row.
+/// Tapping the backdrop is the dismiss action, never one of the choices.
+struct ThemedChoiceDialog: View {
+    struct Choice: Identifiable {
+        let label: String
+        var role: ButtonRole?
+        let action: () -> Void
+        var id: String { label }
+    }
+
+    let title: String
+    var message: String?
+    let choices: [Choice]
+    var dismissLabel: String = "Not now"
+    let onDismiss: () -> Void
+
+    var body: some View {
+        ZStack {
+            Theme.void.opacity(0.72)
+                .ignoresSafeArea()
+                .onTapGesture(perform: onDismiss)
+
+            Panel(accent: Theme.live.opacity(0.55)) {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(title.uppercased())
+                        .font(Theme.heading)
+                        .foregroundStyle(Theme.ink)
+                    if let message {
+                        Text(message)
+                            .font(Theme.body)
+                            .foregroundStyle(Theme.inkMuted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    VStack(alignment: .leading, spacing: 14) {
+                        ForEach(choices) { choice in
+                            Button(choice.label, action: choice.action)
+                                .foregroundStyle(choice.role == .destructive ? Theme.alert : Theme.signal)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .contentShape(.rect)
+                        }
+                        Button(dismissLabel, action: onDismiss)
+                            .foregroundStyle(Theme.inkMuted)
+                    }
+                    .font(Theme.label)
+                    .tracking(1.2)
+                    .buttonStyle(.plain)
+                    .padding(.top, 4)
+                }
+            }
+            .padding(.horizontal, 32)
+        }
+    }
+}
+
+extension View {
+    /// Presents a `ThemedChoiceDialog` while `isPresented` is true. Every
+    /// choice closes the dialog before its action runs, like `themedConfirm`.
+    func themedChoice(
+        isPresented: Binding<Bool>,
+        title: String,
+        message: String? = nil,
+        choices: [ThemedChoiceDialog.Choice],
+        dismissLabel: String = "Not now",
+        onDismiss: @escaping () -> Void = {}
+    ) -> some View {
+        overlay {
+            if isPresented.wrappedValue {
+                ThemedChoiceDialog(
+                    title: title,
+                    message: message,
+                    choices: choices.map { choice in
+                        .init(label: choice.label, role: choice.role) {
+                            isPresented.wrappedValue = false
+                            choice.action()
+                        }
+                    },
+                    dismissLabel: dismissLabel,
+                    onDismiss: {
+                        isPresented.wrappedValue = false
+                        onDismiss()
+                    }
+                )
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                .zIndex(1)
+            }
+        }
+        .animation(.easeOut(duration: 0.16), value: isPresented.wrappedValue)
+    }
+}
+
 extension View {
     /// Presents a `ThemedConfirmDialog` as an overlay when `isPresented` is
     /// true — the themed stand-in for `.confirmationDialog`.

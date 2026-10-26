@@ -9,6 +9,13 @@ struct WorkoutTrackerView: View {
     /// A day Home asked to start. Consumed once and cleared — see
     /// `consumePendingStart`.
     @Binding var pendingStart: PlannedWorkout?
+    /// A request to end the open workout, from the idle prompt or from Home.
+    /// Consumed before `pendingStart`, so "finish it and start today's" ends
+    /// the old one first — see `consumePending`.
+    @Binding var pendingEnd: PendingWorkoutEnd?
+    /// Told when a workout starts, ends, or logs a set, so the tab bar's LIVE
+    /// badge and the idle check don't wait for their next poll.
+    var onSessionChanged: () -> Void = {}
 
     @Environment(AppEnvironment.self) private var environment
     @State private var model: TrackerModel?
@@ -70,7 +77,7 @@ struct WorkoutTrackerView: View {
                 #endif
             }
             loadWeek()
-            consumePendingStart()
+            consumePending()
             #if DEBUG
             // One-shot. `.task` re-runs every time this tab is selected, so
             // without the latch the picker re-opened on every return from Home
@@ -89,7 +96,10 @@ struct WorkoutTrackerView: View {
         }
         // Home may hand over a day while this tab is already built, in which
         // case `.task` has long since run.
-        .onChange(of: pendingStart?.id) { _, _ in consumePendingStart() }
+        .onChange(of: pendingStart?.id) { _, _ in consumePending() }
+        .onChange(of: pendingEnd) { _, _ in consumePending() }
+        .onChange(of: model?.session?.workout.id) { _, _ in onSessionChanged() }
+        .onChange(of: model?.session?.progress.completed) { _, _ in onSessionChanged() }
         .sheet(isPresented: $isPickingExercise) {
             ExercisePicker(
                 initialQuery: debugSearchQuery,
@@ -323,6 +333,41 @@ struct WorkoutTrackerView: View {
                 }
             }
         model?.start(from: planned, block: block, user: environment.currentUser)
+    }
+
+    /// Ending first, then starting: a request to replace a forgotten workout
+    /// arrives as both at once, and the start would otherwise be dropped by
+    /// the guard below because the old session is still live.
+    private func consumePending() {
+        consumePendingEnd()
+        consumePendingStart()
+    }
+
+    /// Acts on a request to end the open workout — only if it's the workout
+    /// the request names. A stale request (the lifter already finished it, or
+    /// it's from before a restore) is dropped rather than ending whatever
+    /// happens to be open now.
+    ///
+    /// Finishing goes straight through: the question was the confirmation, and
+    /// the summary overlay shows what was kept. Discarding with sets logged
+    /// still opens the tracker's own discard confirm, which names how many sets
+    /// it will delete — a prompt that appeared on its own is not enough
+    /// authority to destroy logged work (Core Tenets §8).
+    private func consumePendingEnd() {
+        guard let request = pendingEnd else { return }
+        pendingEnd = nil
+        guard let model, let session = model.session,
+              session.workout.id == request.workoutID else { return }
+        switch request {
+        case .finish(_, let date):
+            model.finish(at: date)
+        case .discard:
+            if session.progress.completed == 0 {
+                model.discard()
+            } else {
+                isConfirmingDiscard = true
+            }
+        }
     }
 
     /// Takes the day Home handed over, if there is one, and starts it.
@@ -2197,6 +2242,6 @@ private struct AchievedMaxBanner: View {
 // MARK: - Rest timer
 
 #Preview {
-    WorkoutTrackerView(pendingStart: .constant(nil))
+    WorkoutTrackerView(pendingStart: .constant(nil), pendingEnd: .constant(nil))
         .environment(AppEnvironment.preview())
 }
