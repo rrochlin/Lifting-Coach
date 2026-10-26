@@ -105,16 +105,16 @@ struct RootView: View {
                         pendingStart = planned
                         selection = .workout
                     },
+                    // Resuming hands over nothing: the session is already on
+                    // disk and the tracker picks it up itself.
+                    onResumeWorkout: { selection = .workout },
                     // Home asked first, so both requests go together; the
                     // tracker ends the old workout before starting the new one.
                     onReplaceWorkout: { planned, end in
                         pendingEnd = end
                         pendingStart = planned
                         selection = .workout
-                    },
-                    // Resuming hands over nothing: the session is already on
-                    // disk and the tracker picks it up itself.
-                    onResumeWorkout: { selection = .workout }
+                    }
                 )
             }
             Tab("Workout", systemImage: "figure.strengthtraining.traditional", value: RootTab.workout) {
