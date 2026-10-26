@@ -29,6 +29,12 @@ struct HomeView: View {
     /// into a session that's already running.
     var onResumeWorkout: () -> Void = {}
 
+    /// Starts a day *after* ending the workout that's still open — the answer
+    /// to "a workout is still open" when the lifter picks finish or discard.
+    /// Before #32 the tap was dropped silently, and an accidental start from
+    /// days ago carried on being the open workout.
+    var onReplaceWorkout: (PlannedWorkout, PendingWorkoutEnd) -> Void = { _, _ in }
+
     @State private var plan = WorkoutPlan()
     /// The workout currently on the clock, if any. Read straight from the
     /// store rather than from the tracker's model: the Workout tab owns session
@@ -40,6 +46,8 @@ struct HomeView: View {
     @State private var adherence: Adherence?
     @State private var loadError: String?
     @State private var isLoggingBodyWeight = false
+    /// The day the lifter tapped while another workout was still open.
+    @State private var startBlockedBy: PlannedWorkout?
 
     /// Squat / bench / deadlift, per Homepage.md — identified by their vendored
     /// catalog slugs rather than hardcoded ids. Maxes are recorded against the
@@ -90,6 +98,16 @@ struct HomeView: View {
             didOpenLaunchProfile = true
             isShowingProfile = true
         }
+        .themedChoice(
+            isPresented: Binding(
+                get: { startBlockedBy != nil },
+                set: { if !$0 { startBlockedBy = nil } }
+            ),
+            title: "A workout is still open",
+            message: inProgress.map(openWorkoutMessage),
+            choices: replaceChoices,
+            dismissLabel: "Cancel"
+        )
         .sheet(isPresented: $isLoggingBodyWeight) {
             LogBodyWeightSheet(unit: environment.weightUnit) { weight in
                 logBodyWeight(weight)
@@ -133,9 +151,17 @@ struct HomeView: View {
                                 // screens can't disagree about the same workout.
                                 if let started = workout.startTime {
                                     Text("·").font(Theme.label)
-                                    Text(started, style: .timer)
-                                        .font(Theme.label)
-                                        .monospacedDigit()
+                                    // A timer reading 31:04:12 says "something
+                                    // is wrong" without saying what; the start
+                                    // says it was Tuesday's (#32).
+                                    if Date().timeIntervalSince(started) > 12 * 3600 {
+                                        Text("SINCE \(RootView.clock(started).uppercased())")
+                                            .font(Theme.label)
+                                    } else {
+                                        Text(started, style: .timer)
+                                            .font(Theme.label)
+                                            .monospacedDigit()
+                                    }
                                 }
                             }
                             .foregroundStyle(Theme.live)
@@ -154,6 +180,48 @@ struct HomeView: View {
             .buttonStyle(.plain)
             .panelRow()
         }
+    }
+
+    /// Starts the day, unless a workout is already open — then asks.
+    ///
+    /// Re-read from the store rather than trusting `inProgress`, which was
+    /// loaded when Home last appeared and may be a workout already finished.
+    private func requestStart(_ planned: PlannedWorkout) {
+        inProgress = try? environment.workouts.fetchInProgress()
+        if inProgress == nil {
+            onStartWorkout(planned)
+        } else {
+            startBlockedBy = planned
+        }
+    }
+
+    private func openWorkoutMessage(_ workout: Workout) -> String {
+        let name = workout.notes ?? "A workout"
+        let started = workout.startTime.map { " from \(RootView.clock($0))" } ?? ""
+        let logged = OpenWorkout.loggedSetCount(of: workout)
+        let sets = logged == 0 ? "nothing logged" : "\(logged) set\(logged == 1 ? "" : "s") logged"
+        return "\(name)\(started) is still open, with \(sets)."
+    }
+
+    /// Resume, or end the old one and start this one. Ending means finishing
+    /// when there's something to keep — at its last logged set, not now — and
+    /// discarding when there's nothing, so no choice here can throw logged work
+    /// away without the tracker asking again.
+    private var replaceChoices: [ThemedChoiceDialog.Choice] {
+        guard let planned = startBlockedBy, let open = inProgress else { return [] }
+        var choices: [ThemedChoiceDialog.Choice] = [
+            .init(label: "Resume it", action: onResumeWorkout),
+        ]
+        if OpenWorkout.loggedSetCount(of: open) > 0, let last = OpenWorkout.lastActivity(of: open) {
+            choices.append(.init(label: "Finish it & start today's") {
+                onReplaceWorkout(planned, .finish(workoutID: open.id, at: last))
+            })
+        } else {
+            choices.append(.init(label: "Discard it & start today's", role: .destructive) {
+                onReplaceWorkout(planned, .discard(workoutID: open.id))
+            })
+        }
+        return choices
     }
 
     private func loggedSummary(_ workout: Workout) -> String {
@@ -180,7 +248,7 @@ struct HomeView: View {
             .panelRow()
         } else {
             ForEach(todaysPlan) { workout in
-                Button { onStartWorkout(workout) } label: {
+                Button { requestStart(workout) } label: {
                     Panel(accent: Theme.signal.opacity(0.45)) {
                         HStack(alignment: .center, spacing: 10) {
                             VStack(alignment: .leading, spacing: 7) {

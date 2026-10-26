@@ -97,8 +97,9 @@ final class RestNotifier {
         // demotes this to `.active` rather than failing, so a build signed by a
         // personal team still works, just quietly.
         //
-        // Nothing else in the app posts a notification, so there is no risk of
-        // this level spreading to alerts that haven't earned it.
+        // Nothing else in the app posts at this level — the open-workout
+        // reminder (`OpenWorkoutNotifier`) is deliberately ordinary — so there
+        // is no risk of it spreading to alerts that haven't earned it.
         content.interruptionLevel = .timeSensitive
 
         center.add(
